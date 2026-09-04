@@ -5,7 +5,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tuempresa.appteransp",
@@ -46,9 +48,9 @@
       "supabaseUrl": "https://tgmfopfekwlucofjlssn.supabase.co",
       "supabaseAnonKey": "sb_publishable_L7jSGgTTTQm9WfGKPRIH8Q_Rx8ZPznb",
       "eas": {
-        "projectId": "277d792e-2c1c-4551-a74d-53dbd93742d0"
+        "projectId": "3c0c2511-252f-4887-9f1b-a555de4591cb"
       }
     },
-    "owner": "pcsar"
+    "owner": "itday2day.es"
   }
 }
