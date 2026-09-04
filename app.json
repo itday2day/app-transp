@@ -42,7 +42,9 @@
           "locationWhenInUsePermission": "Necesitamos tu ubicación para registrar el inicio y cierre de tu jornada."
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-secure-store",
+      "expo-sqlite"
     ],
     "extra": {
       "supabaseUrl": "https://tgmfopfekwlucofjlssn.supabase.co",
