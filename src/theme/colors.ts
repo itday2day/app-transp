@@ -1,0 +1,14 @@
+export const colores = {
+  primario: "#0B5FFF",
+  primarioOscuro: "#0842B0",
+  exito: "#1D9A5B",
+  advertencia: "#E0A100",
+  peligro: "#D64545",
+  fondo: "#F5F7FA",
+  superficie: "#FFFFFF",
+  textoPrincipal: "#1A1F29",
+  textoSecundario: "#5B6472",
+  borde: "#DDE2E8",
+  deshabilitado: "#B7BEC7",
+  offline: "#F0A400",
+};

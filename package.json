@@ -1,0 +1,52 @@
+{
+  "name": "app-transp",
+  "version": "1.0.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src",
+    "format": "prettier --write \"src/**/*.{ts,tsx,json}\" \"*.{js,json,md}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,json}\" \"*.{js,json,md}\""
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "@react-navigation/bottom-tabs": "^7",
+    "@react-navigation/native": "^7",
+    "@react-navigation/native-stack": "^7",
+    "@supabase/supabase-js": "^2.45.0",
+    "expo": "~57.0.14",
+    "expo-constants": "~57.0.10",
+    "expo-dev-client": "~57.0.13",
+    "expo-font": "~57.0.1",
+    "expo-image-manipulator": "~57.0.11",
+    "expo-image-picker": "~57.0.11",
+    "expo-location": "~57.0.11",
+    "expo-network": "~57.0.1",
+    "expo-secure-store": "~57.0.1",
+    "expo-sqlite": "~57.0.1",
+    "expo-status-bar": "~57.0.1",
+    "i18next": "^26.4.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-i18next": "^17.0.12",
+    "react-native": "0.86.2",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-web": "^0.21.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@types/react": "~19.2.4",
+    "babel-plugin-module-resolver": "^5.0.2",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "^57.0.2",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "typescript": "~6.0.3"
+  }
+}

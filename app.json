@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Control de Jornada",
+    "slug": "control-de-jornada",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tuempresa.appteransp",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Necesitamos acceso a la cámara para que puedas tomar la foto del tacómetro y de la ruta al iniciar o cerrar tu jornada.",
+        "NSPhotoLibraryUsageDescription": "Necesitamos acceso a tus fotos para adjuntar el respaldo del tacómetro si prefieres elegir una imagen existente.",
+        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para registrar el punto de inicio y cierre de tu jornada de trabajo."
+      }
+    },
+    "android": {
+      "package": "com.tuempresa.appteransp",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0B5FFF"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Necesitamos tu ubicación para registrar el inicio y cierre de tu jornada."
+        }
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "supabaseUrl": "https://tgmfopfekwlucofjlssn.supabase.co",
+      "supabaseAnonKey": "sb_publishable_L7jSGgTTTQm9WfGKPRIH8Q_Rx8ZPznb",
+      "eas": {
+        "projectId": "277d792e-2c1c-4551-a74d-53dbd93742d0"
+      }
+    },
+    "owner": "pcsar"
+  }
+}

@@ -1,0 +1,206 @@
+{
+  "comun": {
+    "cancelar": "Cancelar"
+  },
+  "selectorIdioma": {
+    "etiquetaEs": "Español",
+    "etiquetaEn": "English",
+    "hint": "Cambia el idioma de toda la aplicación"
+  },
+  "login": {
+    "titulo": "Control de Jornada",
+    "subtitulo": "Inicia sesión con tu número de empleado",
+    "numeroEmpleadoEtiqueta": "Número de empleado",
+    "numeroEmpleadoPlaceholder": "Ej. 4821",
+    "contrasenaEtiqueta": "Contraseña",
+    "contrasenaPlaceholder": "Tu contraseña",
+    "errorCredenciales": "Número de empleado o contraseña incorrectos.",
+    "errorConexion": "No pudimos conectar con el servidor. Verifica tu conexión e intenta de nuevo.",
+    "botonIngresar": "Ingresar",
+    "enlaceRegistro": "¿No tienes cuenta? Crea una nueva",
+    "ayudaContrasena": "¿Olvidaste tu contraseña? Contacta a tu supervisor de flota."
+  },
+  "navegacion": {
+    "tabCheckIn": "Check-in",
+    "tabHistorial": "Historial",
+    "salir": "Salir",
+    "tituloDetalleJornada": "Detalle de jornada"
+  },
+  "checkIn": {
+    "titulo": "Inicio de jornada",
+    "chofer": "Chofer: {{nombre}}",
+    "rutasActivas": "Rutas activas ({{cantidad}})",
+    "subtituloFormulario": "Completa los datos antes de salir a ruta.",
+    "botonNuevaRuta": "+ Iniciar nueva ruta",
+    "botonPrimeraRuta": "+ Iniciar ruta",
+    "errorUbicacionTitulo": "No pudimos obtener tu ubicación",
+    "errorUbicacionMensaje": "El check-in necesita registrar tu ubicación actual. Intenta de nuevo.",
+    "exitoTitulo": "Jornada iniciada",
+    "exitoMensaje": "Tu check-in quedó registrado. ¡Buen viaje!",
+    "errorRegistroTitulo": "No pudimos registrar el check-in",
+    "errorGenerico": "Ocurrió un error inesperado. Intenta de nuevo."
+  },
+  "checkInForm": {
+    "empresaEtiqueta": "Nombre de empresa",
+    "empresaPlaceholder": "Selecciona una empresa",
+    "rutaEtiqueta": "Ruta",
+    "rutaPlaceholderManual": "Escribe la ruta",
+    "rutaPlaceholderLista": "Selecciona una ruta",
+    "rutaDeshabilitada": "Primero selecciona una empresa",
+    "elegirDeLaLista": "Elegir de la lista",
+    "agregarRutaManual": "Agregar nueva ruta manualmente...",
+    "kmInicialEtiqueta": "Kilometraje inicial",
+    "kmInicialPlaceholder": "Ej. 152340",
+    "combustibleEtiqueta": "Nivel de combustible",
+    "fotoTablero": "Foto del tablero (odómetro)",
+    "fotoTableroAyuda": "Sirve de respaldo del kilometraje inicial.",
+    "fotoHojaRuta": "Foto de la hoja de ruta (opcional)",
+    "fotoHojaRutaAyuda": "Respaldo general de la información de la faena. Aparece en el reporte si la agregas.",
+    "incidenciasEtiqueta": "Incidencias",
+    "incidenciasPlaceholder": "Novedades de la faena (opcional)",
+    "botonEnviar": "Registrar check-in"
+  },
+  "checkOutForm": {
+    "kmFinalEtiqueta": "Kilometraje final",
+    "kmFinalPlaceholder": "Debe ser mayor o igual a {{km}}",
+    "kmFinalError": "El kilometraje final no puede ser menor al inicial ({{km}} km).",
+    "combustibleEtiqueta": "Nivel de combustible",
+    "fotoTacometro": "Foto del tacómetro",
+    "fotoTacometroAyuda": "Sirve de respaldo del kilometraje final.",
+    "notaUbicacion": "Al confirmar, se capturará tu ubicación GPS actual automáticamente como punto de cierre.",
+    "botonEnviar": "Registrar check-out",
+    "errorUbicacionTitulo": "No pudimos obtener tu ubicación",
+    "errorUbicacionMensaje": "El check-out necesita registrar tu ubicación actual. Intenta de nuevo.",
+    "exitoTitulo": "Jornada cerrada",
+    "exitoMensaje": "Tu check-out quedó registrado. ¡Buen descanso!",
+    "exitoMensajeOffline": "Tu check-out se guardó en el dispositivo y se enviará automáticamente al recuperar conexión.",
+    "errorRegistroTitulo": "No pudimos registrar el check-out"
+  },
+  "incidencias": {
+    "pregunta": "¿Tuviste alguna incidencia durante la jornada?",
+    "no": "No",
+    "si": "Sí",
+    "tipoEtiqueta": "Tipo de incidencia",
+    "tipoAveria": "Avería vehículo",
+    "tipoTrafico": "Tráfico/Retraso",
+    "tipoClienteAusente": "Cliente ausente",
+    "tipoOtro": "Otro",
+    "detalleEtiqueta": "Detalle de la incidencia",
+    "detalleOpcional": " (opcional)",
+    "detallePlaceholder": "Describe qué ocurrió",
+    "detalleError": "El detalle es obligatorio para el tipo \"Otro\".",
+    "fotosEtiqueta": "Fotos de respaldo (opcional)",
+    "fotosAyuda": "Puedes adjuntar una o más fotos como evidencia.",
+    "fotoAgregar": "Agregar foto",
+    "fotoEliminar": "Eliminar foto"
+  },
+  "detalleJornada": {
+    "seccionCheckIn": "Check-in",
+    "fechaHora": "Fecha y hora",
+    "empresa": "Empresa",
+    "ruta": "Ruta",
+    "incidencias": "Incidencias",
+    "kmInicial": "Kilometraje inicial",
+    "combustible": "Combustible",
+    "ubicacion": "Ubicación",
+    "verEnMapa": "Ver en mapa",
+    "ubicacionNoRegistrada": "Ubicación no registrada",
+    "seccionCheckOut": "Check-out",
+    "kmFinal": "Kilometraje final",
+    "incidencia": "Incidencia",
+    "sinIncidencias": "Sin incidencias reportadas.",
+    "jornadaEnCurso": "Esta jornada sigue en curso.",
+    "botonCheckOut": "Check-out",
+    "estadoEnvio": "Estado de envío:",
+    "sincPendiente": "Pendiente de enviar al servidor",
+    "sincEnviando": "Enviando…",
+    "sincEnviado": "Enviado correctamente",
+    "sincError": "Hubo un error al enviar, se reintentará automáticamente"
+  },
+  "tarjetaJornada": {
+    "enCurso": "En curso",
+    "cerrada": "Cerrada",
+    "syncPendiente": "Pendiente de enviar",
+    "syncEnviando": "Enviando…",
+    "syncEnviado": "Enviado",
+    "syncError": "Error al enviar"
+  },
+  "selectorMatricula": {
+    "etiqueta": "Matrícula",
+    "placeholderManual": "Ej. 1234ABC",
+    "placeholderLista": "Selecciona una matrícula",
+    "opcionManual": "Otra matrícula (entrada manual)"
+  },
+  "capturaFoto": {
+    "tocaParaTomar": "Toca para tomar la foto",
+    "procesando": "Procesando foto…",
+    "tomarOtra": "Tomar otra foto",
+    "permisoTitulo": "Permiso de cámara requerido",
+    "permisoMensaje": "Activa el acceso a la cámara en Ajustes para poder adjuntar la foto."
+  },
+  "historial": {
+    "vacioTitulo": "Aún no tienes registros",
+    "vacioTexto": "Cuando hagas tu primer check-in, aparecerá aquí."
+  },
+  "bannerConexion": {
+    "sincronizando": "Sincronizando registros pendientes…",
+    "sinConexion": "Sin conexión. Tus registros se guardan en el dispositivo y se enviarán al recuperar señal."
+  },
+  "selectorFecha": {
+    "dia": "Día",
+    "mes": "Mes",
+    "anio": "Año",
+    "fechaSeleccionada": "Fecha seleccionada: {{fecha}}",
+    "errorEdadMinima": "Debes ser mayor de edad ({{edad}} años) para registrarte.",
+    "meses": [
+      "Enero",
+      "Febrero",
+      "Marzo",
+      "Abril",
+      "Mayo",
+      "Junio",
+      "Julio",
+      "Agosto",
+      "Septiembre",
+      "Octubre",
+      "Noviembre",
+      "Diciembre"
+    ]
+  },
+  "selectorPais": {
+    "buscarPlaceholder": "Buscar país...",
+    "sinResultados": "No se encontraron países con ese nombre."
+  },
+  "selectorDesplegable": {
+    "sinOpciones": "No hay opciones cargadas para esta selección."
+  },
+  "registro": {
+    "titulo": "Crear cuenta",
+    "subtitulo": "Completa tus datos para registrarte como chofer.",
+    "numeroEmpleadoEtiqueta": "Número de empleado",
+    "numeroEmpleadoPlaceholder": "Ej. 4821",
+    "nombreEtiqueta": "Nombre(s)",
+    "nombrePlaceholder": "Ej. Juan",
+    "apellidosEtiqueta": "Apellidos",
+    "apellidosPlaceholder": "Ej. Pérez López",
+    "dniEtiqueta": "DNI",
+    "dniPlaceholder": "Documento nacional de identidad",
+    "dniError": "El DNI debe tener entre 5 y 20 caracteres alfanuméricos.",
+    "sexoEtiqueta": "Sexo",
+    "fechaNacimientoEtiqueta": "Fecha de nacimiento",
+    "nacionalidadEtiqueta": "Nacionalidad",
+    "nacionalidadPlaceholder": "Selecciona tu país",
+    "contrasenaEtiqueta": "Contraseña",
+    "contrasenaPlaceholder": "Mínimo 6 caracteres",
+    "confirmarContrasenaEtiqueta": "Confirmar contraseña",
+    "confirmarContrasenaPlaceholder": "Repite tu contraseña",
+    "contrasenasNoCoinciden": "Las contraseñas no coinciden.",
+    "botonCrear": "Crear cuenta",
+    "botonVolver": "Volver a iniciar sesión",
+    "exitoTitulo": "Cuenta creada",
+    "exitoMensaje": "Ya puedes iniciar sesión con tu número de empleado y contraseña.",
+    "errorNumeroDuplicado": "Ese número de empleado ya tiene una cuenta registrada.",
+    "errorLimite": "Se registraron demasiadas cuentas en poco tiempo. Espera unos minutos y vuelve a intentarlo.",
+    "errorGenerico": "No pudimos crear la cuenta. Verifica tu conexión e intenta de nuevo."
+  }
+}

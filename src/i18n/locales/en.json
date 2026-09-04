@@ -1,0 +1,206 @@
+{
+  "comun": {
+    "cancelar": "Cancel"
+  },
+  "selectorIdioma": {
+    "etiquetaEs": "Spanish",
+    "etiquetaEn": "English",
+    "hint": "Changes the language for the whole app"
+  },
+  "login": {
+    "titulo": "Shift Control",
+    "subtitulo": "Sign in with your employee number",
+    "numeroEmpleadoEtiqueta": "Employee number",
+    "numeroEmpleadoPlaceholder": "E.g. 4821",
+    "contrasenaEtiqueta": "Password",
+    "contrasenaPlaceholder": "Your password",
+    "errorCredenciales": "Incorrect employee number or password.",
+    "errorConexion": "We couldn't connect to the server. Check your connection and try again.",
+    "botonIngresar": "Log in",
+    "enlaceRegistro": "Don't have an account? Create one",
+    "ayudaContrasena": "Forgot your password? Contact your fleet supervisor."
+  },
+  "navegacion": {
+    "tabCheckIn": "Check-in",
+    "tabHistorial": "History",
+    "salir": "Log out",
+    "tituloDetalleJornada": "Shift details"
+  },
+  "checkIn": {
+    "titulo": "Start shift",
+    "chofer": "Driver: {{nombre}}",
+    "rutasActivas": "Active routes ({{cantidad}})",
+    "subtituloFormulario": "Fill in the details before heading out.",
+    "botonNuevaRuta": "+ Start new route",
+    "botonPrimeraRuta": "+ Start route",
+    "errorUbicacionTitulo": "We couldn't get your location",
+    "errorUbicacionMensaje": "Check-in needs to record your current location. Please try again.",
+    "exitoTitulo": "Shift started",
+    "exitoMensaje": "Your check-in was recorded. Have a good trip!",
+    "errorRegistroTitulo": "We couldn't record the check-in",
+    "errorGenerico": "An unexpected error occurred. Please try again."
+  },
+  "checkInForm": {
+    "empresaEtiqueta": "Company name",
+    "empresaPlaceholder": "Select a company",
+    "rutaEtiqueta": "Route",
+    "rutaPlaceholderManual": "Type the route",
+    "rutaPlaceholderLista": "Select a route",
+    "rutaDeshabilitada": "Select a company first",
+    "elegirDeLaLista": "Choose from the list",
+    "agregarRutaManual": "Add a new route manually...",
+    "kmInicialEtiqueta": "Starting mileage",
+    "kmInicialPlaceholder": "E.g. 152340",
+    "combustibleEtiqueta": "Fuel level",
+    "fotoTablero": "Dashboard photo (odometer)",
+    "fotoTableroAyuda": "Backs up the starting mileage.",
+    "fotoHojaRuta": "Route sheet photo (optional)",
+    "fotoHojaRutaAyuda": "General backup of the shift's information. Shown in the report if you add it.",
+    "incidenciasEtiqueta": "Notes",
+    "incidenciasPlaceholder": "Shift notes (optional)",
+    "botonEnviar": "Submit check-in"
+  },
+  "checkOutForm": {
+    "kmFinalEtiqueta": "Final mileage",
+    "kmFinalPlaceholder": "Must be at least {{km}}",
+    "kmFinalError": "Final mileage can't be less than the starting mileage ({{km}} km).",
+    "combustibleEtiqueta": "Fuel level",
+    "fotoTacometro": "Odometer photo",
+    "fotoTacometroAyuda": "Backs up the final mileage.",
+    "notaUbicacion": "When you confirm, your current GPS location will be captured automatically as the closing point.",
+    "botonEnviar": "Submit check-out",
+    "errorUbicacionTitulo": "We couldn't get your location",
+    "errorUbicacionMensaje": "Check-out needs to record your current location. Please try again.",
+    "exitoTitulo": "Shift closed",
+    "exitoMensaje": "Your check-out was recorded. Rest well!",
+    "exitoMensajeOffline": "Your check-out was saved on the device and will be sent automatically once you're back online.",
+    "errorRegistroTitulo": "We couldn't record the check-out"
+  },
+  "incidencias": {
+    "pregunta": "Did you have any incident during the shift?",
+    "no": "No",
+    "si": "Yes",
+    "tipoEtiqueta": "Incident type",
+    "tipoAveria": "Vehicle breakdown",
+    "tipoTrafico": "Traffic/Delay",
+    "tipoClienteAusente": "Customer absent",
+    "tipoOtro": "Other",
+    "detalleEtiqueta": "Incident details",
+    "detalleOpcional": " (optional)",
+    "detallePlaceholder": "Describe what happened",
+    "detalleError": "Details are required for the \"Other\" type.",
+    "fotosEtiqueta": "Backup photos (optional)",
+    "fotosAyuda": "You can attach one or more photos as evidence.",
+    "fotoAgregar": "Add photo",
+    "fotoEliminar": "Remove photo"
+  },
+  "detalleJornada": {
+    "seccionCheckIn": "Check-in",
+    "fechaHora": "Date and time",
+    "empresa": "Company",
+    "ruta": "Route",
+    "incidencias": "Notes",
+    "kmInicial": "Starting mileage",
+    "combustible": "Fuel",
+    "ubicacion": "Location",
+    "verEnMapa": "View on map",
+    "ubicacionNoRegistrada": "Location not recorded",
+    "seccionCheckOut": "Check-out",
+    "kmFinal": "Final mileage",
+    "incidencia": "Incident",
+    "sinIncidencias": "No incidents reported.",
+    "jornadaEnCurso": "This shift is still in progress.",
+    "botonCheckOut": "Check-out",
+    "estadoEnvio": "Sync status:",
+    "sincPendiente": "Pending upload to server",
+    "sincEnviando": "Uploading…",
+    "sincEnviado": "Uploaded successfully",
+    "sincError": "There was an upload error, it will retry automatically"
+  },
+  "tarjetaJornada": {
+    "enCurso": "In progress",
+    "cerrada": "Closed",
+    "syncPendiente": "Pending upload",
+    "syncEnviando": "Uploading…",
+    "syncEnviado": "Uploaded",
+    "syncError": "Upload error"
+  },
+  "selectorMatricula": {
+    "etiqueta": "License Plate",
+    "placeholderManual": "E.g. 1234ABC",
+    "placeholderLista": "Select a license plate",
+    "opcionManual": "Other license plate (manual entry)"
+  },
+  "capturaFoto": {
+    "tocaParaTomar": "Tap to take the photo",
+    "procesando": "Processing photo…",
+    "tomarOtra": "Take another photo",
+    "permisoTitulo": "Camera permission required",
+    "permisoMensaje": "Enable camera access in Settings to attach the photo."
+  },
+  "historial": {
+    "vacioTitulo": "You don't have any records yet",
+    "vacioTexto": "Once you do your first check-in, it will show up here."
+  },
+  "bannerConexion": {
+    "sincronizando": "Syncing pending records…",
+    "sinConexion": "No connection. Your records are saved on the device and will be sent once you're back online."
+  },
+  "selectorFecha": {
+    "dia": "Day",
+    "mes": "Month",
+    "anio": "Year",
+    "fechaSeleccionada": "Selected date: {{fecha}}",
+    "errorEdadMinima": "You must be at least {{edad}} years old to register.",
+    "meses": [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December"
+    ]
+  },
+  "selectorPais": {
+    "buscarPlaceholder": "Search country...",
+    "sinResultados": "No countries found with that name."
+  },
+  "selectorDesplegable": {
+    "sinOpciones": "No options available for this selection."
+  },
+  "registro": {
+    "titulo": "Create account",
+    "subtitulo": "Fill in your details to register as a driver.",
+    "numeroEmpleadoEtiqueta": "Employee number",
+    "numeroEmpleadoPlaceholder": "E.g. 4821",
+    "nombreEtiqueta": "First name(s)",
+    "nombrePlaceholder": "E.g. John",
+    "apellidosEtiqueta": "Last name",
+    "apellidosPlaceholder": "E.g. Smith Doe",
+    "dniEtiqueta": "National ID",
+    "dniPlaceholder": "National identity document",
+    "dniError": "The ID must be 5 to 20 alphanumeric characters.",
+    "sexoEtiqueta": "Sex",
+    "fechaNacimientoEtiqueta": "Date of birth",
+    "nacionalidadEtiqueta": "Nationality",
+    "nacionalidadPlaceholder": "Select your country",
+    "contrasenaEtiqueta": "Password",
+    "contrasenaPlaceholder": "Minimum 6 characters",
+    "confirmarContrasenaEtiqueta": "Confirm password",
+    "confirmarContrasenaPlaceholder": "Repeat your password",
+    "contrasenasNoCoinciden": "Passwords don't match.",
+    "botonCrear": "Create account",
+    "botonVolver": "Back to sign in",
+    "exitoTitulo": "Account created",
+    "exitoMensaje": "You can now sign in with your employee number and password.",
+    "errorNumeroDuplicado": "That employee number already has an account.",
+    "errorLimite": "Too many accounts were created in a short time. Wait a few minutes and try again.",
+    "errorGenerico": "We couldn't create the account. Check your connection and try again."
+  }
+}
