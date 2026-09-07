@@ -218,32 +218,90 @@ async function generarLibroExcel(jornadas) {
   return libro.xlsx.writeBuffer();
 }
 
-async function generarYEnviarReporte({ correo, rangoInicio, rangoFin, jornadas }) {
-  const buffer = await generarLibroExcel(jornadas);
+function construirHtmlCorreo(rangoInicio, rangoFin, cantidadJornadas) {
+  return `
+    <div style="font-family: Arial, sans-serif; color: #1A1F29;">
+      <h2 style="color: #0B5FFF;">Tu reporte está listo</h2>
+      <p>Adjunto encontrarás el reporte de jornadas del <strong>${rangoInicio}</strong> al <strong>${rangoFin}</strong>.</p>
+      <p>Total de jornadas incluidas: <strong>${cantidadJornadas}</strong>.</p>
+    </div>
+  `;
+}
+
+const NOMBRE_ARCHIVO_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+// Render bloquea el tráfico saliente a los puertos SMTP (25/465/587) en
+// servicios del plan free (ver changelog de Render, sept. 2025) — eso incluye
+// tanto un SMTP real como el fallback de Ethereal de abajo, que también habla
+// SMTP puro. Por eso el envío en producción pasa por la API HTTPS de Resend
+// (puerto 443, no bloqueado) cuando está configurada; el camino de
+// nodemailer/Ethereal se conserva solo para desarrollo local, donde SMTP sí
+// funciona sin restricciones.
+//
+// ⚠️ Sin un dominio propio verificado en Resend, el remitente queda fijo en
+// resend.dev y Resend solo entrega a la MISMA casilla con la que se creó la
+// cuenta (403 para cualquier otro destinatario) — el campo "Correo de
+// destino" del Dashboard solo funciona si coincide con esa casilla. Verificar
+// un dominio propio (registros DNS) levanta esa restricción.
+async function enviarPorResend({ correo, rangoInicio, rangoFin, jornadas, buffer }) {
+  const payload = {
+    from: process.env.RESEND_FROM_EMAIL || "Control de Jornada <onboarding@resend.dev>",
+    to: [correo],
+    subject: `Reporte de jornadas (${rangoInicio} a ${rangoFin})`,
+    html: construirHtmlCorreo(rangoInicio, rangoFin, jornadas.length),
+    attachments: [
+      {
+        content: buffer.toString("base64"),
+        filename: `reporte-jornadas-${rangoInicio}-a-${rangoFin}.xlsx`,
+      },
+    ],
+  };
+
+  const respuesta = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!respuesta.ok) {
+    const detalle = await respuesta.text().catch(() => "");
+    throw new Error(`Resend respondió ${respuesta.status} ${respuesta.statusText}: ${detalle}`);
+  }
+}
+
+async function enviarPorSmtp({ correo, rangoInicio, rangoFin, jornadas, buffer }) {
   const transportador = await obtenerTransportador();
 
   const info = await transportador.sendMail({
     from: '"Control de Jornada" <reportes@app-transp.local>',
     to: correo,
     subject: `Reporte de jornadas (${rangoInicio} a ${rangoFin})`,
-    html: `
-      <div style="font-family: Arial, sans-serif; color: #1A1F29;">
-        <h2 style="color: #0B5FFF;">Tu reporte está listo</h2>
-        <p>Adjunto encontrarás el reporte de jornadas del <strong>${rangoInicio}</strong> al <strong>${rangoFin}</strong>.</p>
-        <p>Total de jornadas incluidas: <strong>${jornadas.length}</strong>.</p>
-      </div>
-    `,
+    html: construirHtmlCorreo(rangoInicio, rangoFin, jornadas.length),
     attachments: [
       {
         filename: `reporte-jornadas-${rangoInicio}-a-${rangoFin}.xlsx`,
         content: buffer,
-        contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        contentType: NOMBRE_ARCHIVO_XLSX,
       },
     ],
   });
 
   const previewUrl = nodemailer.getTestMessageUrl(info);
   return previewUrl ? { previewUrl } : {};
+}
+
+async function generarYEnviarReporte({ correo, rangoInicio, rangoFin, jornadas }) {
+  const buffer = await generarLibroExcel(jornadas);
+
+  if (process.env.RESEND_API_KEY) {
+    await enviarPorResend({ correo, rangoInicio, rangoFin, jornadas, buffer });
+    return {};
+  }
+
+  return enviarPorSmtp({ correo, rangoInicio, rangoFin, jornadas, buffer });
 }
 
 module.exports = { generarYEnviarReporte };

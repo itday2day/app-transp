@@ -1,6 +1,6 @@
 # Contexto del proyecto — app-transp
 
-_Última actualización: 2026-09-04._
+_Última actualización: 2026-09-07._
 
 Documento de referencia técnica para cualquier IA (o persona) que retome trabajo en este
 repositorio. Refleja el **estado real del código**, no el plan original — donde la implementación
@@ -108,10 +108,24 @@ ubicación en la app de mapas nativa.
 - ⚠️ **El Dashboard web NO tiene esto** — `jornada-detalle-dialog.tsx` no muestra lat/lng ni enlaces
   de mapa en ningún lado todavía. Solo la app móvil y el Excel lo tienen.
 
-**Envío de reportes**: ⚠️ no se usa Resend. `server/mock/reportes.js` genera el `.xlsx` (ExcelJS)
-y lo envía con `nodemailer` — usa SMTP real solo si existen las env vars
-`SMTP_HOST`/`SMTP_USER`/`SMTP_PASS`; si no, cae a una cuenta de prueba Ethereal (sin credenciales,
-genera un link de previsualización). Las columnas de foto son solo hipervínculo a la imagen en el
+**Envío de reportes**: `server/mock/reportes.js` genera el `.xlsx` (ExcelJS) y lo envía por dos
+caminos posibles. ⚠️ **Corrección (2026-09-07)**: Render bloquea el tráfico saliente a los puertos
+SMTP (25/465/587) en servicios del plan `free` (changelog de Render, sept. 2025) — eso rompía tanto
+un SMTP real como el fallback de Ethereal en producción (ambos hablan SMTP puro), con
+`Error: Connection timeout`. Por eso:
+
+- Si está configurada `RESEND_API_KEY`, se envía vía la **API HTTPS de Resend**
+  (`POST https://api.resend.com/emails`, puerto 443 — no bloqueado). Es el camino que usa
+  producción. ⚠️ **Sin dominio propio verificado en Resend** (no se configuró — la empresa no tenía
+  uno disponible), el remitente queda fijo en `onboarding@resend.dev` y Resend solo entrega al mismo
+  correo con el que se creó la cuenta — cualquier otro destinatario en el campo "Correo de destino"
+  del Dashboard devuelve 403. Verificar un dominio propio (registros DNS) levantaría esa
+  restricción; `RESEND_FROM_EMAIL` permite fijar un remitente propio una vez que eso pase.
+- Si no, cae al camino anterior con `nodemailer`: SMTP real si existen `SMTP_HOST`/`SMTP_USER`/
+  `SMTP_PASS`, o si no, una cuenta de prueba Ethereal (sin credenciales, genera un link de
+  previsualización). Este camino solo se usa en desarrollo local, donde SMTP no está bloqueado.
+
+Las columnas de foto son solo hipervínculo a la imagen en el
 bucket público de Supabase Storage — ya no se incrustan miniaturas (se quitó a propósito: evitaba
 tener que descargar cada foto al generar el reporte). Incluye 3 columnas fijas "Foto Incidencia
 1/2/3" (⚠️ tope de 3 — Excel no soporta varios hipervínculos en una sola celda; si una incidencia
@@ -124,6 +138,18 @@ es una función exclusiva del Dashboard web; `/reports/export-excel` ahora solo 
 `dashboard/app/api/reportes/exportar/route.ts`. El resto de rutas del mock (`/auth/*`, `/jornadas`,
 `/tracking/*`) quedaron en el código pero **ya no las usa nadie** — es deuda técnica pendiente de
 limpiar si se confirma que no hace falta conservarlas de referencia.
+
+**Despliegue (`render.yaml`, raíz del repo)**: blueprint de Render con dos Web Services aislados,
+en estado pre-deploy (sin URL `.onrender.com` registrada todavía en este documento).
+
+- `app-transp-dashboard` — `rootDir: dashboard`, `npm install && npm run build` / `npm run start`.
+- `app-transp-mock-server` — `rootDir: server/mock`, `npm install` / `npm start`.
+
+Todas las variables sensibles (`SUPABASE_SERVICE_ROLE_KEY`, `DASHBOARD_ADMIN_PASSWORD`,
+`SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`) están marcadas `sync: false` — no viajan en el
+blueprint, se cargan a mano en el dashboard de Render. `MOCK_SERVER_URL` (env var del servicio
+dashboard) es la URL con la que `dashboard/app/api/reportes/exportar/route.ts` llama al mock server;
+en local apunta a `http://localhost:4000`.
 
 ## 3. Módulo móvil (raíz del repo)
 
@@ -174,6 +200,15 @@ diferencia de tacómetro/ruta, no rastrea qué foto individual ya se subió en u
 que mensajes largos (detalle de incidencia, observaciones de check-in) se desbordaran del
 contenedor. Se agregó `FilaTexto` (etiqueta arriba, texto a ancho completo abajo, en columna) para
 esos dos casos específicos — `Fila` se mantiene para los pares corto "etiqueta: valor" normales.
+
+**Fix de renderizado — foto de ruta opcional** (`DetalleJornadaScreen.tsx`, sección de check-in):
+la fila de fotos renderizaba `fotoTacometroInicialUri` y `fotoRutaUri` como dos `<Image>`
+incondicionales lado a lado. Como `fotoRutaUri` es opcional (§ arriba, "Fotos de respaldo en
+incidencias" y el tipo `Jornada` en `src/types/index.ts`), cuando el chofer no cargaba la foto de
+ruta se mostraba un recuadro vacío junto a la foto del tacómetro, inconsistente con el patrón ya
+usado más abajo para `fotoTacometroFinalUri` (renderizado condicional). Corregido envolviendo el
+`<Image>` de `fotoRutaUri` en `jornada.fotoRutaUri ? (...) : null`, igual que su análogo de
+check-out.
 
 **i18n**: `i18next`/`react-i18next`, español por defecto, selector visual de banderas 🇪🇸/🇬🇧
 (componente `LanguageSelector`, único punto de cambio de idioma, vive solo en `LoginScreen`).
