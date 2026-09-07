@@ -13,7 +13,13 @@ const { generarYEnviarReporte } = require("./reportes");
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Límite por defecto de express.json() es 100kb — muy poco para
+// /reports/export-excel, que recibe el arreglo completo de jornadas (hasta
+// 5000, ver MAX_JORNADAS_POR_REPORTE en el Dashboard) con URLs de fotos y
+// texto de incidencias embebidos. Con datos reales, ~40 jornadas ya superaban
+// ese límite y el body-parser respondía 413 con el body vacío (sin JSON), lo
+// que el Dashboard no podía distinguir de un rechazo genérico.
+app.use(express.json({ limit: "20mb" }));
 
 // ── WebSocket de solo lectura para el Dashboard (posiciones en tiempo real) ─
 // Clientes de solo lectura (el Dashboard web); no hay autenticación en el

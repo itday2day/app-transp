@@ -153,13 +153,32 @@ export async function POST(request: Request) {
     );
   }
 
-  const cuerpoMock: unknown = await respuestaMock.json().catch(() => null);
+  // Se lee como texto primero (nunca falla) y solo después se intenta
+  // parsear como JSON: si el mock server rechaza la petición antes de llegar
+  // al handler (ej. 413 de express.json() por payload grande, ver
+  // server/mock/index.js), el body es HTML/texto plano o está vacío, y
+  // response.json() directo tira su propia excepción sin dejar rastro de qué
+  // devolvió realmente el servidor.
+  const textoMock = await respuestaMock.text();
+  let cuerpoMock: unknown = null;
+  try {
+    cuerpoMock = textoMock ? JSON.parse(textoMock) : null;
+  } catch {
+    cuerpoMock = null;
+  }
 
   if (!respuestaMock.ok) {
+    console.error(
+      `[reportes/exportar] El mock server respondió ${respuestaMock.status} ${respuestaMock.statusText} en ${mockServerUrl}/reports/export-excel. Body:`,
+      textoMock || "(vacío)"
+    );
+
     const mensaje =
       cuerpoMock && typeof cuerpoMock === "object" && "mensaje" in cuerpoMock
         ? String((cuerpoMock as { mensaje: unknown }).mensaje)
-        : "El servidor de reportes rechazó la solicitud.";
+        : respuestaMock.status === 413
+          ? "El reporte es demasiado grande para enviarse (rango de fechas con demasiadas jornadas). Probá acortar el rango."
+          : "El servidor de reportes rechazó la solicitud.";
     return NextResponse.json({ mensaje }, { status: respuestaMock.status });
   }
 
