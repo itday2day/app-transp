@@ -6,24 +6,35 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
 import { daysAgoIsoDate, todayIsoDate } from "@/lib/utils";
-import type { ExportarReporteRequest, ExportarReporteResponse } from "@/lib/types";
+import type { FiltrosJornadas } from "@/lib/hooks/use-jornadas";
+import type { EstadoJornada, ExportarReporteRequest, ExportarReporteResponse } from "@/lib/types";
 
 interface ExportarReporteDialogProps {
   open: boolean;
   onClose: () => void;
-  empresaSugerida?: string;
+  filtros: FiltrosJornadas;
 }
 
-export function ExportarReporteDialog({
-  open,
-  onClose,
-  empresaSugerida,
-}: ExportarReporteDialogProps) {
+// Los valores se inicializan a partir de los filtros activos en la tabla de
+// Jornadas, para que "Exportar" mande por defecto exactamente lo que el
+// admin está viendo — no un rango fijo de "última semana" desconectado de la
+// vista. Quedan editables por si se quiere un reporte con un alcance
+// distinto al filtro actual.
+//
+// El padre (JornadasPage) le pasa un `key` que cambia cada vez que se abre
+// el diálogo, forzando un remount: es lo que hace que estos useState se
+// re-inicialicen con los filtros vigentes en ESE momento — sin eso, como
+// Dialog solo oculta su contenido en vez de desmontarlo, los campos se
+// quedarían pegados a los filtros de la primera vez que se abrió.
+export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReporteDialogProps) {
   const [correo, setCorreo] = useState("");
-  const [rangoInicio, setRangoInicio] = useState(daysAgoIsoDate(7));
-  const [rangoFin, setRangoFin] = useState(todayIsoDate());
-  const [empresa, setEmpresa] = useState(empresaSugerida ?? "");
+  const [rangoInicio, setRangoInicio] = useState(filtros.desde || daysAgoIsoDate(7));
+  const [rangoFin, setRangoFin] = useState(filtros.hasta || todayIsoDate());
+  const [empresa, setEmpresa] = useState(filtros.empresa);
+  const [chofer, setChofer] = useState(filtros.chofer);
+  const [estado, setEstado] = useState<FiltrosJornadas["estado"]>(filtros.estado);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ExportarReporteResponse | null>(null);
@@ -51,6 +62,8 @@ export function ExportarReporteDialog({
     try {
       const body: ExportarReporteRequest = { correo, rangoInicio, rangoFin };
       if (empresa.trim()) body.empresa = empresa.trim();
+      if (chofer.trim()) body.chofer = chofer.trim();
+      if (estado) body.estado = estado as EstadoJornada;
 
       const respuesta = await fetch("/api/reportes/exportar", {
         method: "POST",
@@ -113,14 +126,38 @@ export function ExportarReporteDialog({
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="exp-empresa">Empresa (opcional)</Label>
+            <Input
+              id="exp-empresa"
+              placeholder="Todas"
+              value={empresa}
+              onChange={(e) => setEmpresa(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="exp-chofer">Chofer (opcional)</Label>
+            <Input
+              id="exp-chofer"
+              placeholder="Todos"
+              value={chofer}
+              onChange={(e) => setChofer(e.target.value)}
+            />
+          </div>
+        </div>
+
         <div>
-          <Label htmlFor="exp-empresa">Empresa (opcional)</Label>
-          <Input
-            id="exp-empresa"
-            placeholder="Todas"
-            value={empresa}
-            onChange={(e) => setEmpresa(e.target.value)}
-          />
+          <Label htmlFor="exp-estado">Estado</Label>
+          <Select
+            id="exp-estado"
+            value={estado}
+            onChange={(e) => setEstado(e.target.value as FiltrosJornadas["estado"])}
+          >
+            <option value="">Todos</option>
+            <option value="abierta">Abierta</option>
+            <option value="cerrada">Cerrada</option>
+          </Select>
         </div>
 
         {error && (

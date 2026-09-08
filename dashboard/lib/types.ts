@@ -81,6 +81,7 @@ export interface ExportarReporteRequest {
   rangoInicio: string; // YYYY-MM-DD
   rangoFin: string; // YYYY-MM-DD
   empresa?: string;
+  chofer?: string;
   estado?: EstadoJornada;
 }
 

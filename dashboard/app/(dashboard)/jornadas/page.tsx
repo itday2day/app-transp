@@ -15,14 +15,24 @@ export default function JornadasPage() {
   const [filtros, setFiltros] = useState(FILTROS_INICIALES);
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState<JornadaRow | null>(null);
   const [exportarAbierto, setExportarAbierto] = useState(false);
+  // Se incrementa cada vez que se abre el diálogo y se usa como `key` de
+  // ExportarReporteDialog para forzar un remount — así sus campos siempre
+  // arrancan sincronizados con los filtros vigentes en ese momento (ver
+  // comentario en exportar-reporte-dialog.tsx).
+  const [exportarContador, setExportarContador] = useState(0);
 
   const { data, isLoading, isFetching, isError } = useJornadas(filtros);
+
+  function abrirExportar() {
+    setExportarContador((c) => c + 1);
+    setExportarAbierto(true);
+  }
 
   return (
     <div className="flex flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-lg font-semibold">Jornadas</h1>
-        <Button onClick={() => setExportarAbierto(true)}>
+        <Button onClick={abrirExportar}>
           <Download className="h-4 w-4" />
           Exportar
         </Button>
@@ -55,9 +65,10 @@ export default function JornadasPage() {
       />
 
       <ExportarReporteDialog
+        key={exportarContador}
         open={exportarAbierto}
         onClose={() => setExportarAbierto(false)}
-        empresaSugerida={filtros.empresa}
+        filtros={filtros}
       />
     </div>
   );

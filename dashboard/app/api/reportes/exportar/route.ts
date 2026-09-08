@@ -13,6 +13,7 @@ interface CuerpoPeticion {
   rangoInicio?: unknown;
   rangoFin?: unknown;
   empresa?: unknown;
+  chofer?: unknown;
   estado?: unknown;
 }
 
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: "Cuerpo de la petición inválido." }, { status: 400 });
   }
 
-  const { correo, rangoInicio, rangoFin, empresa, estado } = body;
+  const { correo, rangoInicio, rangoFin, empresa, chofer, estado } = body;
 
   if (typeof correo !== "string" || !correo.includes("@")) {
     return NextResponse.json({ mensaje: "Falta un correo de destino válido." }, { status: 400 });
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
   const estadoFiltro: EstadoJornada | undefined =
     estado === "abierta" || estado === "cerrada" ? estado : undefined;
   const empresaFiltro = typeof empresa === "string" && empresa.trim() ? empresa.trim() : undefined;
+  const choferFiltro = typeof chofer === "string" && chofer.trim() ? chofer.trim() : undefined;
 
   const supabase = crearClienteSupabaseAdmin();
 
@@ -123,6 +125,7 @@ export async function POST(request: Request) {
     .limit(MAX_JORNADAS_POR_REPORTE);
 
   if (empresaFiltro) query = query.ilike("empresa", `%${empresaFiltro}%`);
+  if (choferFiltro) query = query.ilike("chofer_nombre", `%${choferFiltro}%`);
   if (estadoFiltro) query = query.eq("estado", estadoFiltro);
 
   const { data, error } = await query.returns<JornadaRowConChofer[]>();
