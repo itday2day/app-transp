@@ -42,6 +42,11 @@ export interface JornadaRow {
 
   estado: EstadoJornada;
   created_at: string;
+
+  fue_editado: boolean;
+  editado_por: string | null;
+  editado_en: string | null;
+  motivo_edicion: string | null;
 }
 
 /** Fila cruda de la vista public.ultimas_posiciones. */
@@ -88,4 +93,26 @@ export interface ExportarReporteRequest {
 export interface ExportarReporteResponse {
   mensaje: string;
   previewUrl?: string;
+}
+
+/** Campos de una jornada corregibles desde EditarJornadaDialog. */
+export interface CamposEditablesJornada {
+  empresa?: string;
+  matricula?: string;
+  ruta?: string;
+  kmInicial?: number;
+  kmFinal?: number;
+  combustibleInicial?: number;
+  combustibleFinal?: number;
+}
+
+export interface EditarJornadaRequest extends CamposEditablesJornada {
+  id: string;
+  editadoPor: string;
+  motivoEdicion: string;
+}
+
+export interface EditarJornadaResponse {
+  mensaje: string;
+  jornada: JornadaRow;
 }

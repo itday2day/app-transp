@@ -2,7 +2,9 @@
 
 import { Download } from "lucide-react";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { EditarJornadaDialog } from "@/components/jornadas/editar-jornada-dialog";
 import { ExportarReporteDialog } from "@/components/jornadas/exportar-reporte-dialog";
 import { FiltrosJornadasForm } from "@/components/jornadas/filtros-jornadas";
 import { JornadaDetalleDialog } from "@/components/jornadas/jornada-detalle-dialog";
@@ -12,8 +14,10 @@ import { FILTROS_INICIALES, useJornadas } from "@/lib/hooks/use-jornadas";
 import type { JornadaRow } from "@/lib/types";
 
 export default function JornadasPage() {
+  const queryClient = useQueryClient();
   const [filtros, setFiltros] = useState(FILTROS_INICIALES);
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState<JornadaRow | null>(null);
+  const [jornadaAEditar, setJornadaAEditar] = useState<JornadaRow | null>(null);
   const [exportarAbierto, setExportarAbierto] = useState(false);
   // Se incrementa cada vez que se abre el diálogo y se usa como `key` de
   // ExportarReporteDialog para forzar un remount — así sus campos siempre
@@ -62,7 +66,22 @@ export default function JornadasPage() {
       <JornadaDetalleDialog
         jornada={jornadaSeleccionada}
         onClose={() => setJornadaSeleccionada(null)}
+        onEditar={(jornada) => {
+          setJornadaSeleccionada(null);
+          setJornadaAEditar(jornada);
+        }}
       />
+
+      {jornadaAEditar && (
+        <EditarJornadaDialog
+          key={jornadaAEditar.id}
+          jornada={jornadaAEditar}
+          onClose={() => setJornadaAEditar(null)}
+          onGuardado={() => {
+            queryClient.invalidateQueries({ queryKey: ["jornadas"] });
+          }}
+        />
+      )}
 
       <ExportarReporteDialog
         key={exportarContador}

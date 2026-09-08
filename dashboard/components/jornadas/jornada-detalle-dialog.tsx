@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle, ImageOff } from "lucide-react";
+import { AlertTriangle, ImageOff, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { formatFechaHora } from "@/lib/utils";
 import type { JornadaRow } from "@/lib/types";
@@ -9,6 +10,7 @@ import type { JornadaRow } from "@/lib/types";
 interface JornadaDetalleDialogProps {
   jornada: JornadaRow | null;
   onClose: () => void;
+  onEditar: (jornada: JornadaRow) => void;
 }
 
 function Dato({ label, valor }: { label: string; valor: string | number | null | undefined }) {
@@ -41,11 +43,35 @@ function Foto({ titulo, url }: { titulo: string; url: string | null }) {
   );
 }
 
-export function JornadaDetalleDialog({ jornada, onClose }: JornadaDetalleDialogProps) {
+export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDetalleDialogProps) {
   return (
     <Dialog open={jornada != null} onClose={onClose} title="Detalle de jornada">
       {jornada && (
         <div className="flex flex-col gap-6">
+          <div className="flex items-center justify-between">
+            {jornada.fue_editado ? (
+              <Badge variant="warning">
+                <Pencil className="h-3 w-3" />
+                Editado por {jornada.editado_por} el {formatFechaHora(jornada.editado_en)}
+              </Badge>
+            ) : (
+              <span />
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onEditar(jornada)}
+              className="shrink-0"
+            >
+              <Pencil className="h-4 w-4" />
+              Corregir
+            </Button>
+          </div>
+
+          {jornada.fue_editado && jornada.motivo_edicion && (
+            <p className="-mt-4 text-xs text-muted-foreground">Motivo: {jornada.motivo_edicion}</p>
+          )}
+
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
             <Dato label="Chofer" valor={jornada.chofer_nombre} />
             <Dato label="Empresa" valor={jornada.empresa} />

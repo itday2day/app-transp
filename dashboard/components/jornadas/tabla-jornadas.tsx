@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn, formatFechaHora } from "@/lib/utils";
 import type { JornadaRow } from "@/lib/types";
 
@@ -20,6 +21,7 @@ const COLUMNAS = [
   "Check-out",
   "Estado",
   "Incidencia",
+  "",
 ];
 
 export function TablaJornadas({ jornadas, cargando, onSeleccionar }: TablaJornadasProps) {
@@ -68,6 +70,33 @@ export function TablaJornadas({ jornadas, cargando, onSeleccionar }: TablaJornad
                   </Badge>
                 ) : (
                   <span className="text-muted-foreground">—</span>
+                )}
+              </td>
+              <td className="px-3 py-2">
+                {jornada.fue_editado && (
+                  <Tooltip
+                    contenido={
+                      <div className="flex flex-col gap-0.5">
+                        <p>
+                          <span className="font-semibold">Editado por:</span>{" "}
+                          {jornada.editado_por ?? "—"}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Cuándo:</span>{" "}
+                          {formatFechaHora(jornada.editado_en)}
+                        </p>
+                        <p>
+                          <span className="font-semibold">Motivo:</span>{" "}
+                          {jornada.motivo_edicion ?? "—"}
+                        </p>
+                      </div>
+                    }
+                  >
+                    <Badge variant="warning" onClick={(e) => e.stopPropagation()}>
+                      <Pencil className="h-3 w-3" />
+                      Editado
+                    </Badge>
+                  </Tooltip>
                 )}
               </td>
             </tr>
