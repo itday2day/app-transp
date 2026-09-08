@@ -17,27 +17,30 @@ interface ExportarReporteDialogProps {
   filtros: FiltrosJornadas;
 }
 
-// Los valores se inicializan a partir de los filtros activos en la tabla de
-// Jornadas, para que "Exportar" mande por defecto exactamente lo que el
-// admin está viendo — no un rango fijo de "última semana" desconectado de la
-// vista. Quedan editables por si se quiere un reporte con un alcance
-// distinto al filtro actual.
+// El modal es una vista de confirmación de solo lectura: los filtros
+// (fechas, empresa, chofer, estado) NO son editables acá — son los mismos
+// que están activos en la tabla de Jornadas en ese momento, se muestran
+// deshabilitados y se envían intactos. El único campo editable es el correo
+// de destino, que no tiene equivalente en la tabla. Si se quiere exportar un
+// alcance distinto, se cambian los filtros de la tabla y se reabre el modal.
+//
+// Cuando no hay rango de fechas filtrado en la tabla (desde/hasta vacíos),
+// se usa "últimos 7 días" como default — la API exige un rango, así que algo
+// hay que mandar — y ese default también se muestra deshabilitado.
 //
 // El padre (JornadasPage) le pasa un `key` que cambia cada vez que se abre
-// el diálogo, forzando un remount: es lo que hace que estos useState se
-// re-inicialicen con los filtros vigentes en ESE momento — sin eso, como
-// Dialog solo oculta su contenido en vez de desmontarlo, los campos se
-// quedarían pegados a los filtros de la primera vez que se abrió.
+// el diálogo, forzando un remount: así el campo de correo (y cualquier error
+// o resultado de un envío anterior) arranca limpio cada vez, en vez de
+// arrastrar lo que quedó de la última vez que se abrió — Dialog solo oculta
+// su contenido en vez de desmontarlo.
 export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReporteDialogProps) {
   const [correo, setCorreo] = useState("");
-  const [rangoInicio, setRangoInicio] = useState(filtros.desde || daysAgoIsoDate(7));
-  const [rangoFin, setRangoFin] = useState(filtros.hasta || todayIsoDate());
-  const [empresa, setEmpresa] = useState(filtros.empresa);
-  const [chofer, setChofer] = useState(filtros.chofer);
-  const [estado, setEstado] = useState<FiltrosJornadas["estado"]>(filtros.estado);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ExportarReporteResponse | null>(null);
+
+  const rangoInicio = filtros.desde || daysAgoIsoDate(7);
+  const rangoFin = filtros.hasta || todayIsoDate();
 
   function cerrarYLimpiar() {
     setError(null);
@@ -53,17 +56,13 @@ export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReport
       setError("Ingresa un correo válido.");
       return;
     }
-    if (!rangoInicio || !rangoFin) {
-      setError("Selecciona el rango de fechas.");
-      return;
-    }
 
     setEnviando(true);
     try {
       const body: ExportarReporteRequest = { correo, rangoInicio, rangoFin };
-      if (empresa.trim()) body.empresa = empresa.trim();
-      if (chofer.trim()) body.chofer = chofer.trim();
-      if (estado) body.estado = estado as EstadoJornada;
+      if (filtros.empresa.trim()) body.empresa = filtros.empresa.trim();
+      if (filtros.chofer.trim()) body.chofer = filtros.chofer.trim();
+      if (filtros.estado) body.estado = filtros.estado as EstadoJornada;
 
       const respuesta = await fetch("/api/reportes/exportar", {
         method: "POST",
@@ -105,6 +104,11 @@ export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReport
           />
         </div>
 
+        <p className="text-xs text-muted-foreground">
+          Estos filtros son los mismos que están activos en la tabla de Jornadas — cambialos ahí y
+          volvé a abrir este modal si querés otro alcance.
+        </p>
+
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label htmlFor="exp-desde">Desde</Label>
@@ -112,7 +116,9 @@ export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReport
               id="exp-desde"
               type="date"
               value={rangoInicio}
-              onChange={(e) => setRangoInicio(e.target.value)}
+              disabled
+              readOnly
+              className="bg-muted text-muted-foreground disabled:cursor-not-allowed disabled:opacity-100"
             />
           </div>
           <div>
@@ -121,28 +127,34 @@ export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReport
               id="exp-hasta"
               type="date"
               value={rangoFin}
-              onChange={(e) => setRangoFin(e.target.value)}
+              disabled
+              readOnly
+              className="bg-muted text-muted-foreground disabled:cursor-not-allowed disabled:opacity-100"
             />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label htmlFor="exp-empresa">Empresa (opcional)</Label>
+            <Label htmlFor="exp-empresa">Empresa</Label>
             <Input
               id="exp-empresa"
               placeholder="Todas"
-              value={empresa}
-              onChange={(e) => setEmpresa(e.target.value)}
+              value={filtros.empresa}
+              disabled
+              readOnly
+              className="bg-muted text-muted-foreground disabled:cursor-not-allowed disabled:opacity-100"
             />
           </div>
           <div>
-            <Label htmlFor="exp-chofer">Chofer (opcional)</Label>
+            <Label htmlFor="exp-chofer">Chofer</Label>
             <Input
               id="exp-chofer"
               placeholder="Todos"
-              value={chofer}
-              onChange={(e) => setChofer(e.target.value)}
+              value={filtros.chofer}
+              disabled
+              readOnly
+              className="bg-muted text-muted-foreground disabled:cursor-not-allowed disabled:opacity-100"
             />
           </div>
         </div>
@@ -151,8 +163,9 @@ export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReport
           <Label htmlFor="exp-estado">Estado</Label>
           <Select
             id="exp-estado"
-            value={estado}
-            onChange={(e) => setEstado(e.target.value as FiltrosJornadas["estado"])}
+            value={filtros.estado}
+            disabled
+            className="bg-muted text-muted-foreground disabled:cursor-not-allowed disabled:opacity-100"
           >
             <option value="">Todos</option>
             <option value="abierta">Abierta</option>
