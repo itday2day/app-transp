@@ -3,6 +3,7 @@ export const colores = {
   primarioOscuro: "#0842B0",
   exito: "#1D9A5B",
   advertencia: "#E0A100",
+  advertenciaFondo: "#FFF3D6",
   peligro: "#D64545",
   fondo: "#F5F7FA",
   superficie: "#FFFFFF",

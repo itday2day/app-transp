@@ -88,7 +88,7 @@ const estilos = StyleSheet.create({
     paddingVertical: 2,
   },
   insigniaAbierta: {
-    backgroundColor: "#FFF3D6",
+    backgroundColor: colores.advertenciaFondo,
   },
   textoInsignia: {
     ...tipografia.ayuda,

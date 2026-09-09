@@ -175,7 +175,9 @@ export default function DetalleJornadaScreen() {
           />
           <View style={estilos.filaFotos}>
             <Image source={{ uri: jornada.fotoTacometroInicialUri }} style={estilos.foto} />
-            <Image source={{ uri: jornada.fotoRutaUri }} style={estilos.foto} />
+            {jornada.fotoRutaUri ? (
+              <Image source={{ uri: jornada.fotoRutaUri }} style={estilos.foto} />
+            ) : null}
           </View>
         </View>
 
