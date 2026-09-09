@@ -1,151 +1,169 @@
-# Control de Jornada — App de Check-in/Check-out para Choferes
+# app-transp — Control de Jornadas y Flotas
 
-App móvil + web (Expo / React Native + `react-native-web`) para que los choferes registren el
-inicio y cierre de su jornada: matrícula, kilometraje, combustible, fotos de respaldo y
-ubicación GPS. Funciona offline y sincroniza automáticamente al recuperar señal.
+Sistema de control de jornadas para choferes, compuesto por **tres proyectos independientes**
+que comparten el mismo backend (Supabase):
 
-## 1. Stack técnico
+| Proyecto             | Carpeta           | Stack                                           | Quién lo usa                        |
+| -------------------- | ----------------- | ----------------------------------------------- | ----------------------------------- |
+| App móvil            | raíz de este repo | Expo (~57) + React Native + TypeScript          | Choferes (check-in/check-out)       |
+| Dashboard web        | `dashboard/`      | Next.js 16 (App Router) + TypeScript + Tailwind | Administrador de flota              |
+| Servidor de reportes | `server/mock/`    | Node + Express                                  | Genera y envía el Excel de jornadas |
 
-| Capa                 | Elección                                         | Motivo                                                                                                                 |
-| -------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| UI                   | React Native + Expo (SDK 51), `react-native-web` | Un solo código para iOS, Android y Web                                                                                 |
-| Navegación           | `@react-navigation` (stack + tabs)               | Estándar de facto en Expo                                                                                              |
-| Cámara               | `expo-image-picker` (modo cámara)                | Más simple que `expo-camera` para "una foto y listo"; cambia fácil si se necesita cámara embebida                      |
-| Compresión           | `expo-image-manipulator`                         | Redimensiona a 1280px y comprime a calidad 0.6 antes de guardar/subir                                                  |
-| GPS                  | `expo-location`                                  | Permisos explícitos, mensajes en español en `app.json`                                                                 |
-| Persistencia offline | `expo-sqlite`                                    | Datos estructurados y con relaciones (a diferencia de AsyncStorage, ideal para colas de sincronización con reintentos) |
-| Token de sesión      | `expo-secure-store`                              | Cifrado en Keychain/Keystore — nunca AsyncStorage para credenciales                                                    |
-| Detección de red     | `expo-network`                                   | Dispara sincronización automática al reconectar                                                                        |
-| Backend (referencia) | Node/Express + PostgreSQL + bcrypt + JWT         | Ver `server/`                                                                                                          |
+Documentación técnica exhaustiva (decisiones de arquitectura, desviaciones respecto a
+especificaciones anteriores, deuda técnica conocida): **[`contexto_proyecto.md`](contexto_proyecto.md)**.
+Este README es una guía de arranque rápido; para el detalle, ese es el documento de referencia.
 
-## 2. Estructura de carpetas
+## 1. Arquitectura
 
 ```
-app_transp_project/
-├── App.tsx                        # Entry point: providers + navegación
-├── app.json                       # Config Expo, permisos con textos en español
-├── src/
-│   ├── theme/                     # colors.ts, typography.ts, spacing.ts
-│   ├── types/                     # Modelos: Usuario, Jornada, NivelCombustible...
-│   ├── db/
-│   │   ├── database.ts            # Apertura/migración de SQLite
-│   │   └── jornadasRepo.ts        # CRUD local de jornadas (check-in/check-out)
-│   ├── services/
-│   │   ├── api.ts                 # fetch + token (SecureStore)
-│   │   ├── authService.ts         # login/logout contra backend
-│   │   ├── imageService.ts        # compresión de fotos
-│   │   ├── locationService.ts     # permisos + captura de GPS
-│   │   └── syncService.ts         # sube jornadas pendientes (multipart)
-│   ├── context/
-│   │   ├── AuthContext.tsx        # sesión del chofer
-│   │   └── NetworkContext.tsx     # online/offline + auto-sync
-│   ├── hooks/
-│   │   ├── useUbicacion.ts
-│   │   └── useJornadasAbiertas.ts # viajes en curso del chofer (puede haber varios)
-│   ├── components/                # Botón, Campo, SelectorCombustible, CapturaFoto...
-│   ├── navigation/                # RootNavigator (stack + tabs)
-│   └── screens/
-│       ├── LoginScreen.tsx
-│       ├── CheckInScreen.tsx
-│       ├── CheckOutScreen.tsx
-│       ├── HistorialScreen.tsx
-│       └── DetalleJornadaScreen.tsx
-└── server/                        # Especificación técnica de backend (referencia)
-    └── src/
-        ├── db/schema.sql
-        └── routes/auth.example.ts
+┌─────────────────┐        ┌──────────────────────┐
+│   App móvil      │        │   Dashboard web        │
+│   (Expo)          │        │   (Next.js)             │
+│                    │        │                          │
+│  SQLite local ──┐  │        │  Route Handlers ──┐     │
+│  (offline-first)│  │        │  (service_role key)│     │
+└──────────────────┼──┘        └─────────────────────┼──┘
+                    │                                  │
+                    ▼                                  ▼
+            ┌───────────────────────────────────────────┐
+            │              Supabase                       │
+            │  PostgreSQL + PostGIS + Auth + Storage       │
+            │  (choferes, jornadas, ubicaciones_tracking)  │
+            └───────────────────────────────────────────┘
+                                                          │
+                                    ┌─────────────────────┘
+                                    ▼
+                          ┌──────────────────────┐
+                          │  server/mock (Express) │
+                          │  POST /reports/         │
+                          │  export-excel            │
+                          │  → ExcelJS + Resend API  │
+                          └──────────────────────┘
 ```
 
-**Por qué esta división:** `services/` no sabe nada de React (se puede probar con Jest sin
-renderizar nada); `db/` es la única capa que toca SQLite; las pantallas solo orquestan hooks y
-componentes. Así, cambiar de SQLite a otra solución offline, o de Expo Camera a otra librería,
-se hace en un archivo, no en cinco pantallas.
+- La app móvil escribe **directo a Supabase** (Auth + tablas + Storage) — no pasa por ningún
+  backend intermedio.
+- El Dashboard lee/escribe Supabase del lado del servidor con la `service_role key` (bypassa
+  RLS: necesita ver la flota completa, no solo un chofer).
+- `server/mock` es el único servicio que sigue corriendo del viejo backend Express — hoy solo
+  para generar el reporte Excel y enviarlo por correo. Todo lo demás (auth, tracking, CRUD de
+  jornadas) migró a Supabase.
 
-## 3. Flujo de usuario
+## 2. Puesta en marcha (desarrollo local)
 
-```
-Login (número de empleado + contraseña)
-   │
-   ▼
-Tab "Check-in" → lista de "Rutas activas" (si hay) + botón "+ Iniciar nueva ruta"
-   │              empresa, ruta, matrícula, km inicial, combustible,
-   │              foto tablero, foto hoja de ruta, incidencias (opcional) → GPS → Guardar
-   │
-   └─ Un chofer puede tener varios viajes abiertos en paralelo (rutas concurrentes)
+Necesitás Node 20+ y una cuenta de [Supabase](https://supabase.com) (o acceso al proyecto real
+del equipo).
 
-Tab "Check-out" → 0 activos: aviso · 1 activo: se cierra directo · 2+: elegir cuál cerrar
-             km final (≥ km inicial), combustible,
-             foto tacómetro → GPS automático → Guardar
-
-Tab "Historial" → lista de jornadas (más reciente primero)
-   → tocar una tarjeta → Detalle con fotos, km, ubicación y estado de envío
-```
-
-Un chofer puede tener varias jornadas con `estado = 'abierta'` al mismo tiempo (ver
-`useJornadasAbiertas`) — a propósito no hay un índice único que lo impida en `schema.sql`.
-
-## 4. Pautas de diseño para un flujo natural en español
-
-- **Trato de "tú" consistente**, nunca mezclar con "usted": _"Toca para tomar la foto"_, no
-  _"Presione para capturar imagen"_.
-- **Verbos de acción al frente en los botones**: "Registrar check-in", no "Enviar" o "Confirmar"
-  a secas — el chofer debe saber qué está confirmando sin leer el resto de la pantalla.
-- **Mensajes de error explican qué hacer, no solo qué falló**: _"El kilometraje final no puede
-  ser menor al inicial (152 340 km)"_, en vez de "Valor inválido".
-- **Terminología del gremio, no términos genéricos de formulario**: "matrícula",
-  "tacómetro", "combustible" — son las palabras que un chofer mexicano/latinoamericano usa a
-  diario, evitar anglicismos tipo "vehicle ID" o "fuel level".
-- **Permisos explicados antes de pedirse**: los textos de `NSLocationWhenInUseUsageDescription`
-  y el mensaje de `expo-image-picker` dicen _para qué_ se necesita el permiso, no solo que se
-  necesita — reduce el rechazo de permisos en campo.
-- **Nunca bloquear silenciosamente**: si falta GPS o cámara, el botón de guardar se deshabilita
-  con una razón visible, no un error después de que el chofer ya llenó todo el formulario.
-- **El estado offline es visible pero no alarmante**: el banner usa un tono ámbar informativo
-  ("tus registros se guardan y se enviarán al recuperar señal"), no rojo de error — perder
-  señal en carretera es la normalidad, no una falla.
-- **Fechas y horas en formato local `es-MX`** (`day/mon/año · hh:mm`), nunca ISO crudo en
-  pantalla.
-
-## 5. Offline-first y sincronización
-
-1. Check-in y check-out **siempre se guardan primero en SQLite local** (`jornadasRepo.ts`) —
-   nunca se espera respuesta del servidor para confirmar al chofer.
-2. Cada jornada nace con `sincronizacion = 'pendiente'` y un `id` UUID generado en el
-   dispositivo, que viaja al servidor como `id_cliente` para que reintentar un envío nunca
-   duplique el registro (idempotencia).
-3. `NetworkContext` revisa la conexión cada 15s y al volver del segundo plano; si hay señal,
-   dispara `sincronizarPendientes()`.
-4. `syncService` sube cada jornada pendiente por separado (multipart, con las fotos ya
-   comprimidas) y marca `sincronizado` / `error` según el resultado; los errores reintentan
-   hasta 5 veces antes de requerir intervención manual.
-5. El chofer puede forzar una sincronización deslizando para refrescar en "Historial".
-
-## 6. Seguridad de autenticación
-
-- El cliente **nunca** guarda ni compara contraseñas: las envía una vez, por HTTPS, al hacer
-  login.
-- El servidor guarda solo `bcrypt.hash(contrasena, 12)` (ver `server/src/routes/auth.example.ts`)
-  — jamás texto plano, ni siquiera en el MVP.
-- El servidor responde con un JWT de vida corta (12h); el cliente lo guarda en
-  `expo-secure-store` (Keychain/Keystore cifrado), no en AsyncStorage.
-- El mensaje de error de login es idéntico si el usuario no existe o si la contraseña es
-  incorrecta, para no revelar qué números de empleado son válidos.
-
-## 7. Puesta en marcha
+### 2.1. App móvil (raíz del repo)
 
 ```bash
 npm install
-cp .env.example .env    # ajusta EXPO_PUBLIC_API_URL
-npm run start           # abre Expo Dev Tools; presiona "w" para probar en web
+cp .env.example .env    # completá EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY
+npm run start           # abre Expo Dev Tools; "w" para web, o escaneá el QR con Expo Go
 ```
 
-El backend en `server/` es una **especificación de referencia**, no un servidor completo:
-incluye el esquema SQL y un router de ejemplo para copiar el patrón de autenticación segura
-en el framework que uses (Express, NestJS, Django, etc.).
+### 2.2. Dashboard web
 
-## 8. Próximos pasos sugeridos
+```bash
+cd dashboard
+npm install
+cp .env.example .env.local    # completá las variables (ver tabla abajo)
+npm run dev                    # http://localhost:3000
+```
 
-- Endpoint `POST /jornadas/sincronizar` completo en el backend real (el cliente ya lo asume).
-- Subida de fotos a almacenamiento de objetos (S3/GCS) en vez de servirlas desde el propio API.
-- Pantalla de administrador/flotilla (fuera de alcance de este MVP centrado en el chofer).
-- Tests con Jest + Testing Library para `services/` y `db/` (son las capas sin dependencia de UI).
+### 2.3. Servidor de reportes (`server/mock`)
+
+```bash
+cd server/mock
+npm install
+npm start    # http://localhost:4000
+```
+
+Sin `RESEND_API_KEY` configurada, cae automáticamente a una cuenta de prueba Ethereal (sin
+credenciales, genera un link de previsualización del correo) — alcanza para desarrollo local.
+
+## 3. Variables de entorno
+
+### Raíz (app móvil) — `.env`
+
+| Variable                        | Descripción                                            |
+| ------------------------------- | ------------------------------------------------------ |
+| `EXPO_PUBLIC_SUPABASE_URL`      | URL del proyecto Supabase                              |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Clave anon/publicable (segura de exponer, respeta RLS) |
+
+### `dashboard/.env.local`
+
+| Variable                        | Descripción                                                           |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | URL del proyecto Supabase                                             |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave anon/publicable                                                 |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Clave service_role — **salta RLS**, solo se usa en Route Handlers     |
+| `DASHBOARD_ADMIN_PASSWORD`      | Contraseña única de acceso al Dashboard (no hay cuentas individuales) |
+| `MOCK_SERVER_URL`               | URL de `server/mock` (`http://localhost:4000` en local)               |
+
+### `server/mock` (variables de entorno del proceso, sin archivo `.env` propio en producción)
+
+| Variable                                        | Descripción                                                                                                                        |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                          | Puerto del servidor (Render lo inyecta automáticamente)                                                                            |
+| `RESEND_API_KEY`                                | API key de [Resend](https://resend.com) para enviar el reporte por correo                                                          |
+| `RESEND_FROM_EMAIL`                             | Remitente verificado en Resend (opcional; sin dominio verificado, Resend solo entrega al correo de la cuenta)                      |
+| `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS` | SMTP real, alternativa a Resend — **solo funciona en desarrollo local**: Render bloquea los puertos SMTP salientes en el plan free |
+
+## 4. Despliegue
+
+`render.yaml` define dos Web Services en [Render](https://render.com), desplegados desde
+`github.com/itday2day/app-transp` (rama `master`) con auto-deploy en cada push:
+
+- **`app-transp-dashboard`** — `rootDir: dashboard`
+- **`app-transp-mock-server`** — `rootDir: server/mock`
+
+Todas las variables sensibles están marcadas `sync: false` en `render.yaml`: se cargan a mano en
+cada servicio, Environment, en el dashboard de Render — no viajan en el blueprint ni en el repo.
+
+⚠️ Ambos servicios están en plan `free`: se duermen tras ~15 min sin tráfico (la primera petición
+tras eso puede tardar o devolver 502 mientras despierta) y Render bloquea los puertos SMTP
+salientes (por eso `server/mock` usa la API HTTPS de Resend en producción, no SMTP directo).
+
+## 5. Base de datos
+
+El esquema vive en `supabase/` y se corre en orden en el SQL Editor de un proyecto Supabase
+nuevo — cada archivo `schema_vN_*.sql` es una migración incremental idempotente (segura de
+reintentar):
+
+```
+supabase/schema.sql                          # esquema base: tablas, RLS, Storage, Realtime
+supabase/schema_v2_tracking_auth.sql          # RPC de tracking GPS, políticas extra
+supabase/schema_v3_combustible_porcentaje.sql # combustible: enum de texto -> porcentaje 0-100
+supabase/schema_v4_fotos_incidencia.sql       # fotos de respaldo de una incidencia
+supabase/schema_v5_edicion_jornadas.sql       # auditoría de edición manual desde el Dashboard
+```
+
+## 6. Verificación antes de un cambio
+
+Cada sub-proyecto tiene su propio `tsconfig`/lint/formato, independientes entre sí:
+
+```bash
+# raíz (app móvil)
+npx tsc --noEmit && npm run lint && npm run format:check
+
+# dashboard/
+cd dashboard && npx tsc --noEmit && npm run lint && npm run format:check
+
+# server/mock/
+cd server/mock && npm run lint && npm run format:check
+```
+
+## 7. Qué NO es este repo
+
+`server/src/` (`db/schema.sql`, `routes/auth.example.ts`) es una **especificación de referencia**
+de un backend Node/Express + PostgreSQL "desde cero" que se evaluó al inicio del proyecto y nunca
+se terminó de construir — quedó obsoleta frente al esquema real de `supabase/schema.sql` (usa
+nombres de campo distintos) y **no se mantiene sincronizada**. No es el backend real del sistema;
+no usarla como fuente de verdad.
+
+## 8. Más documentación
+
+- **[`contexto_proyecto.md`](contexto_proyecto.md)** — referencia técnica exhaustiva: decisiones
+  de arquitectura, por qué cada cosa se hizo como se hizo, deuda técnica conocida.
+- **[`dashboard/README.md`](dashboard/README.md)** — guía específica del Dashboard.
