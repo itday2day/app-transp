@@ -1,6 +1,6 @@
 # Contexto del proyecto — app-transp
 
-_Última actualización: 2026-09-07._
+_Última actualización: 2026-09-09._
 
 Documento de referencia técnica para cualquier IA (o persona) que retome trabajo en este
 repositorio. Refleja el **estado real del código**, no el plan original — donde la implementación
@@ -8,14 +8,21 @@ se apartó de una especificación anterior por una razón concreta, queda anotad
 
 ## 1. Visión general y propósito
 
-Sistema de control de jornadas y flotas compuesto por dos aplicaciones independientes que
+Sistema de control de jornadas y flotas compuesto por tres proyectos independientes que
 comparten el mismo backend (Supabase):
 
 - **App móvil** (raíz de este repo): Expo + React Native + TypeScript. La usan los choferes para
   hacer check-in/check-out de sus jornadas: fotos, kilometraje, combustible, GPS e incidencias.
-- **Dashboard web administrativo** (`dashboard/`): Next.js (App Router) + TypeScript + Tailwind.
-  Panel interno para ver la flota en un mapa en vivo, revisar jornadas con sus fotos y exportar
-  reportes.
+- **Dashboard web administrativo** (`dashboard/`): Next.js 16 (App Router) + TypeScript + Tailwind
+  v4. Panel interno para ver la flota en un mapa en vivo, revisar y **corregir** jornadas con
+  auditoría, y exportar reportes en Excel filtrados.
+- **Servidor de reportes** (`server/mock/`): Node + Express, reducido a un único endpoint
+  (`POST /reports/export-excel`) que genera el `.xlsx` y lo envía por correo vía la API de Resend.
+
+**Stack tecnológico de un vistazo**: Next.js (Dashboard) · Node/Express (servidor de reportes) ·
+Supabase (PostgreSQL + PostGIS + Auth + Storage + RLS) · Expo/React Native (móvil) · Render
+(hosting de Dashboard y servidor de reportes) · Resend (envío de correo vía API HTTPS, producción)
+· GitHub (`github.com/itday2day/app-transp`, rama `master`, auto-deploy a Render en cada push).
 
 **Metodología de trabajo**: Spec-Driven Development (SDD) — Fase 1 (especificación técnica,
 aprobación explícita del usuario antes de tocar código) → Fase 2 (implementación) → Fase 3
@@ -34,7 +41,8 @@ app_transp_project/
 │   ├── schema.sql              # Esquema base (tablas, RLS, Storage, Realtime)
 │   ├── schema_v2_tracking_auth.sql  # Migración incremental (RPC tracking, políticas extra)
 │   ├── schema_v3_combustible_porcentaje.sql  # combustible: enum de texto -> porcentaje 0-100
-│   └── schema_v4_fotos_incidencia.sql  # columna fotos_incidencia text[]
+│   ├── schema_v4_fotos_incidencia.sql  # columna fotos_incidencia text[]
+│   └── schema_v5_edicion_jornadas.sql  # auditoría de edición manual (ver §4)
 ├── eslint.config.js / .prettierrc.json   # Lint/formato de la app móvil
 └── tsconfig.json               # Excluye "server" y "dashboard" (cada uno tiene el suyo)
 ```
@@ -50,7 +58,10 @@ Tablas y objetos clave:
 
 - `choferes` — `id` = `auth.users.id`, `numero_empleado`, `nombre`, `apellidos`, `dni`,
   `fecha_nacimiento`, `pais_nacimiento`, `sexo`.
-- `jornadas` — mismos campos que el tipo `Jornada` del móvil, en `snake_case`.
+- `jornadas` — mismos campos que el tipo `Jornada` del móvil, en `snake_case`, más 4 columnas de
+  auditoría agregadas en `schema_v5_edicion_jornadas.sql`: `fue_editado boolean`, `editado_por
+text`, `editado_en timestamptz`, `motivo_edicion text` (ver "Edición de jornadas y auditoría" en
+  §4).
 - `ubicaciones_tracking` — `chofer_id`, `jornada_ids uuid[]`, `ubicacion geography(Point,4326)`,
   `velocidad_kmh`, `timestamp`.
 - vista `ultimas_posiciones` — última posición por chofer, con `lat`/`lng` ya planos (no
@@ -131,30 +142,74 @@ tener que descargar cada foto al generar el reporte). Incluye 3 columnas fijas "
 1/2/3" (⚠️ tope de 3 — Excel no soporta varios hipervínculos en una sola celda; si una incidencia
 tiene más fotos, las adicionales solo se ven, sin límite, en el detalle de jornada del Dashboard) y
 2 columnas de ubicación con hipervínculo a Google Maps (ver arriba). El endpoint `POST /reports/export-excel` es
-**el único que sigue vivo** del mock server tras la migración a Supabase — es _stateless_ (recibe
-el arreglo completo de jornadas en el body). ⚠️ **La exportación de reportes ya no existe en la app
-móvil** (se quitó `ModalExportarReporte.tsx`, `reportesService.ts` y `listarJornadasPorRango()`) —
-es una función exclusiva del Dashboard web; `/reports/export-excel` ahora solo lo llama
-`dashboard/app/api/reportes/exportar/route.ts`. El resto de rutas del mock (`/auth/*`, `/jornadas`,
-`/tracking/*`) quedaron en el código pero **ya no las usa nadie** — es deuda técnica pendiente de
-limpiar si se confirma que no hace falta conservarlas de referencia.
+**el único que existe** en el mock server — `/reports/export-excel` lo llama únicamente
+`dashboard/app/api/reportes/exportar/route.ts`, y es _stateless_ (recibe el arreglo completo de
+jornadas en el body, generado server-side por ese Route Handler, no por el cliente). ⚠️ **La
+exportación de reportes ya no existe en la app móvil** (se quitó `ModalExportarReporte.tsx`,
+`reportesService.ts` y `listarJornadasPorRango()`) — es una función exclusiva del Dashboard web.
+
+⚠️ **Límite de payload** (2026-09-08): `express.json()` en `server/mock/index.js` usaba el límite
+por defecto de 100kb, insuficiente para el arreglo completo de jornadas (hasta 5000,
+`MAX_JORNADAS_POR_REPORTE`) con URLs de fotos y texto de incidencias embebidos — con datos reales,
+~40 jornadas ya lo superaban y el body-parser respondía 413 con body vacío, indistinguible para el
+Dashboard de un rechazo genérico. Subido a 20mb.
+
+**Limpieza de deuda técnica (2026-09-09)**: las rutas legacy del mock server que quedaban del viejo
+backend Express pre-Supabase (`/auth/login`, `/auth/registro`, `/jornadas/sincronizar`, `GET
+/jornadas`, `/tracking/ping`, `/tracking/ultimas-posiciones`, el WebSocket `/ws/tracking`) **se
+eliminaron por completo**, junto con todo lo que quedaba huérfano por su culpa: la función
+`exigirToken()`, los `Map` en memoria, la config de `multer` para subir fotos a disco
+(`CARPETA_UPLOADS`, `/uploads` estático), y las dependencias `multer`/`ws` en `package.json`.
+`server/mock/index.js` pasó de 285 a 47 líneas — solo `express`, `cors`, `express.json({ limit:
+"20mb" })` y `POST /reports/export-excel`.
 
 **Despliegue (`render.yaml`, raíz del repo)**: blueprint de Render con dos Web Services aislados,
-en estado pre-deploy (sin URL `.onrender.com` registrada todavía en este documento).
+**en producción y en uso real** (⚠️ corrección: este documento decía "pre-deploy" hasta el
+2026-09-09; ya está desplegado):
 
-- `app-transp-dashboard` — `rootDir: dashboard`, `npm install && npm run build` / `npm run start`.
-- `app-transp-mock-server` — `rootDir: server/mock`, `npm install` / `npm start`.
+- `app-transp-dashboard` — `rootDir: dashboard`, `npm install && npm run build` / `npm run start`
+  → `https://app-transp-dashboard.onrender.com`.
+- `app-transp-mock-server` — `rootDir: server/mock`, `npm install` / `npm start`
+  → `https://app-transp-mock-server.onrender.com`.
+
+Ambos en plan `free`, con dos limitaciones reales de esa plataforma (no bugs de este código):
+
+- **Cold start**: un servicio sin tráfico ~15 min se duerme; la primera petición que le llega
+  después puede devolver 502 mientras despierta (unos segundos). El segundo intento normalmente
+  funciona. Pasa sobre todo con `app-transp-mock-server`, que solo recibe tráfico al exportar un
+  reporte.
+- **SMTP bloqueado en el plan free** (ver "Envío de reportes" más arriba) — por eso el envío de
+  correo en producción pasa por la API HTTPS de Resend, no por SMTP directo.
 
 Todas las variables sensibles (`SUPABASE_SERVICE_ROLE_KEY`, `DASHBOARD_ADMIN_PASSWORD`,
-`SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`) están marcadas `sync: false` — no viajan en el
-blueprint, se cargan a mano en el dashboard de Render. `MOCK_SERVER_URL` (env var del servicio
-dashboard) es la URL con la que `dashboard/app/api/reportes/exportar/route.ts` llama al mock server;
-en local apunta a `http://localhost:4000`.
+`SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASS`, `RESEND_API_KEY`, `RESEND_FROM_EMAIL`) están
+marcadas `sync: false` — no viajan en el blueprint, se cargan a mano en cada servicio, Environment,
+en el dashboard de Render. `MOCK_SERVER_URL` (env var del servicio dashboard) es la URL con la que
+`dashboard/app/api/reportes/exportar/route.ts` llama al mock server; en local apunta a
+`http://localhost:4000`, en producción a la URL de `app-transp-mock-server` de arriba.
+
+**Alineación corporativa y cuentas**: el proyecto Supabase está confirmado bajo `it@day2day.es`
+(ver arriba). El repo de GitHub es `github.com/itday2day/app-transp`. Dos cosas quedan
+**pendientes de verificar con la cuenta real**, no resueltas del todo:
+
+- ⚠️ **Resend**: se configuró con una API key provista por el usuario, pero no está confirmado que
+  la cuenta de Resend asociada sea `it@day2day.es` — no hay forma de verificarlo desde el código,
+  solo entrando al dashboard de Resend con esa cuenta.
+- ⚠️ **EAS/Expo**: `app.json` tenía `"owner": "itday2day.es"` (formato inválido para ese campo —
+  no es un username/slug de Expo válido) apuntando a un `extra.eas.projectId` fijo
+  (`3c0c2511-252f-4887-9f1b-a555de4591cb`). Se quitó `owner` (2026-09-09) para que se autodetecte
+  al correr `eas login` con la cuenta real, pero el `projectId` sigue siendo el mismo — si ese
+  proyecto EAS no pertenece a la cuenta `it@day2day.es`, un build va a fallar o pedir crear un
+  proyecto nuevo. Falta correr `eas login`/`eas build` con la cuenta real para confirmarlo.
+- `app.json` → `ios.bundleIdentifier` / `android.package`: `com.tuempresa.appteransp` (placeholder
+  genérico, nunca personalizado) → **`com.day2day.apptransp`** (2026-09-09).
 
 ## 3. Módulo móvil (raíz del repo)
 
 Stack: Expo (~57), React Native 0.86, TypeScript estricto, React Navigation (native-stack +
-bottom-tabs).
+bottom-tabs). Identificadores de `app.json` (`ios.bundleIdentifier`/`android.package`):
+`com.day2day.apptransp` (antes un placeholder genérico sin personalizar) — ver "Alineación
+corporativa y cuentas" en §2 para el estado pendiente de verificación de la cuenta EAS.
 
 **Arquitectura de datos — offline-first**: check-in/check-out escriben primero a SQLite local
 (`src/db/`), nunca bloqueados por falta de red, con estado `sincronizacion:
@@ -235,9 +290,10 @@ para tipar ese proyecto, no desde la raíz).
 
 Stack: Next.js App Router, TypeScript, Tailwind CSS v4, componentes UI hechos a mano en
 `components/ui/` (no se corrió el CLI de shadcn — son primitivas propias con
-`cva`/`clsx`/`tailwind-merge`, sin Radix, para mantener el build 100% autocontenido),
-`react-leaflet` (carga dinámica `ssr:false`, obligatoria porque Leaflet necesita `window`),
-TanStack Query, `next-themes` para modo claro/oscuro.
+`cva`/`clsx`/`tailwind-merge`, sin Radix, para mantener el build 100% autocontenido: `Dialog`
+propio con portal + Escape/click-afuera, y `Tooltip` propio con `group-hover`/`group-focus` puro de
+Tailwind, sin JS ni portal), `react-leaflet` (carga dinámica `ssr:false`, obligatoria porque
+Leaflet necesita `window`), TanStack Query, `next-themes` para modo claro/oscuro.
 
 **Auth**: ⚠️ no usa Supabase Auth ni las cuentas de chofer. Login de administrador único por
 contraseña compartida (env var `DASHBOARD_ADMIN_PASSWORD`), cookie firmada con HMAC-SHA256
@@ -254,8 +310,43 @@ protege todas las rutas menos `/login` y `/api/auth/*`.
   modal de detalle (`jornada-detalle-dialog.tsx`) con las 3 fotos de la jornada (tacómetro
   inicial/ruta/final) + galería sin límite de fotos de respaldo de la incidencia
   (`jornada.fotos_incidencia`, mismo bucket `evidencias`). No muestra lat/lng ni enlaces de mapa.
+  Desde ahí también se abre la corrección de la jornada (ver más abajo).
 - Botón exportar → `POST /api/reportes/exportar`, que reenvía a `server/mock`'s
   `/reports/export-excel`.
+- Botón "Corregir" (en el modal de detalle) → `POST /api/jornadas/editar`.
+
+**Exportación de reportes — filtros de solo lectura** (`exportar-reporte-dialog.tsx`): el modal es
+una vista de **confirmación**, no un formulario — los filtros (fechas, empresa, chofer, estado) se
+derivan directo del `filtros` (estado de la tabla de `/jornadas`) en cada render, sin `useState`
+propio, y los inputs quedan `disabled`/`readOnly`. El único campo editable es el correo de destino,
+que no tiene equivalente en la tabla. ⚠️ Antes de esto, el modal tenía estado propio desconectado
+de la tabla: fechas por defecto fijas ("últimos 7 días"), el filtro de chofer no existía en el
+flujo de export en absoluto, y estado no se enviaba aunque el backend ya lo soportaba — se
+corrigió agregando `chofer` a `ExportarReporteRequest` y a la query de
+`api/reportes/exportar/route.ts` (mismo `.ilike("chofer_nombre", ...)` que usa `/api/jornadas`), y
+conectando el modal a los filtros reales. El padre (`jornadas/page.tsx`) le pasa un `key`
+incremental para forzar un remount cada vez que se abre — `Dialog` solo oculta su contenido en vez
+de desmontarlo, así que sin eso el correo/resultado de un envío anterior quedaría pegado.
+
+**Edición de jornadas y auditoría** (`editar-jornada-dialog.tsx` + `POST /api/jornadas/editar`):
+permite corregir empresa, matrícula, ruta, km y combustible (inicial/final) de una jornada desde el
+Dashboard, con un "Motivo de la corrección" obligatorio. Al guardar, marca
+`fue_editado = true`, `editado_en = NOW()` y `motivo_edicion` en la fila (ver columnas en §2). La
+tabla de jornadas y el modal de detalle muestran un `Badge` "Editado" con `Tooltip` (quién, cuándo,
+motivo) cuando `fue_editado === true`. Tras guardar, se invalida la query de TanStack
+(`queryClient.invalidateQueries({ queryKey: ["jornadas"] })`) para refrescar la tabla sin recargar
+la página.
+
+⚠️ **`editado_por` es texto libre, no un ID/email real derivado de la sesión**: el Dashboard no
+tiene cuentas de administrador individuales — es una sola contraseña compartida
+(`DASHBOARD_ADMIN_PASSWORD`), la cookie de sesión (`lib/auth.ts`) es un flag genérico firmado sin
+ningún email/id embebido. Quien edita escribe su propio nombre o correo en el formulario, igual que
+el "Correo de destino" del export — no hay nada que el servidor pueda derivar de la sesión sin
+construir un sistema de cuentas de administrador (fuera de alcance de esta funcionalidad).
+
+**Autenticación de `/api/jornadas/editar`**: no repite el chequeo de sesión — igual que el resto de
+Route Handlers de este Dashboard (`reportes/exportar`, `tracking/ultimas-posiciones`, `jornadas`),
+confía en que `proxy.ts` (middleware) ya protege todo `/api/*` salvo `/api/auth/*`.
 
 Todas las rutas `/api/*` usan `lib/supabase/server.ts` (cliente con el `service_role` key, marcado
 `server-only` — el build falla si se importa por error desde código de cliente). `lib/supabase/client.ts`
@@ -286,18 +377,23 @@ chofer si se decide agregar uno.
 
 ## 6. Deuda técnica y pendientes conocidos
 
-- Rutas legacy del mock server (`/auth/login`, `/auth/registro`, `/jornadas`, `/tracking/ping`,
-  `/tracking/ultimas-posiciones`, el WebSocket `/ws/tracking`) ya no las usa nadie — solo se
-  conservó `/reports/export-excel`. Limpiar si se confirma que no hacen falta de referencia.
 - OSRM/Nominatim no implementados (solo visor de mapa, sin ruteo ni geocodificación).
 - El Dashboard no tiene roles de administrador (tabla `admins`, etc.) — es una sola contraseña
   compartida por env var. Suficiente para el MVP interno actual, no para múltiples administradores
-  con distintos permisos.
+  con distintos permisos. Esto también limita la edición de jornadas: `editado_por` es texto libre
+  que escribe quien edita, no una identidad verificada (ver §4).
 - `server/src/` (`db/schema.sql`, `routes/auth.example.ts`) es documentación de referencia de un
   backend "desde cero" que nunca se llegó a construir — quedó obsoleta frente al Supabase real de
   `supabase/schema.sql` y no se mantuvo sincronizada (usa nombres de campo distintos, ej.
-  `licencia_conducir` en vez de `dni`). No usar como fuente de verdad del esquema.
+  `licencia_conducir` en vez de `dni`). No usar como fuente de verdad del esquema. (Distinto de
+  `server/mock/`, que sí corre en producción — ver §2.)
 - El Dashboard web no tiene enlaces a Google Maps en su propia UI (solo la app móvil y el Excel) —
   ver §2.
 - El reporte Excel muestra como máximo 3 fotos de respaldo por incidencia (columnas fijas); el
   Dashboard sí las muestra todas sin límite en el modal de detalle.
+- Sin dominio propio verificado en Resend, el export solo puede mandar el reporte al mismo correo
+  de la cuenta de Resend (o a las direcciones de testing oficiales) — no a cualquier destinatario
+  que el admin escriba (ver §2).
+- Pendiente confirmar con la cuenta real (`it@day2day.es`) que el `projectId` de EAS en `app.json`
+  y la cuenta de Resend usada realmente pertenezcan a esa cuenta corporativa — ver "Alineación
+  corporativa y cuentas" en §2.
