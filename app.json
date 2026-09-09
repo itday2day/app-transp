@@ -5,12 +5,10 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tuempresa.appteransp",
+      "bundleIdentifier": "com.day2day.apptransp",
       "infoPlist": {
         "NSCameraUsageDescription": "Necesitamos acceso a la cámara para que puedas tomar la foto del tacómetro y de la ruta al iniciar o cerrar tu jornada.",
         "NSPhotoLibraryUsageDescription": "Necesitamos acceso a tus fotos para adjuntar el respaldo del tacómetro si prefieres elegir una imagen existente.",
@@ -18,7 +16,7 @@
       }
     },
     "android": {
-      "package": "com.tuempresa.appteransp",
+      "package": "com.day2day.apptransp",
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
@@ -52,7 +50,6 @@
       "eas": {
         "projectId": "3c0c2511-252f-4887-9f1b-a555de4591cb"
       }
-    },
-    "owner": "itday2day.es"
+    }
   }
 }
