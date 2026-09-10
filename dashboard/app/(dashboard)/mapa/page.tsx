@@ -18,6 +18,8 @@ const MapaFlota = dynamic(() => import("@/components/mapa/mapa-flota"), {
 export default function MapaPage() {
   const { data: posiciones, isLoading, isError } = useUltimasPosiciones();
   const [choferSeleccionado, setChoferSeleccionado] = useState<string | null>(null);
+  // jornada_id cuyo trazado histórico está visible en el mapa — null = ninguna.
+  const [jornadaRutaActiva, setJornadaRutaActiva] = useState<string | null>(null);
 
   const listaPosiciones = posiciones ?? [];
 
@@ -29,7 +31,11 @@ export default function MapaPage() {
             No se pudieron cargar las posiciones. Reintentando…
           </div>
         )}
-        <MapaFlota posiciones={listaPosiciones} choferSeleccionado={choferSeleccionado} />
+        <MapaFlota
+          posiciones={listaPosiciones}
+          choferSeleccionado={choferSeleccionado}
+          jornadaRutaActiva={jornadaRutaActiva}
+        />
       </div>
       <aside className="order-1 h-64 w-full shrink-0 border-b border-border bg-card md:order-2 md:h-full md:w-80 md:border-b-0 md:border-l">
         <PanelChoferes
@@ -37,6 +43,10 @@ export default function MapaPage() {
           cargando={isLoading}
           choferSeleccionado={choferSeleccionado}
           onSeleccionar={setChoferSeleccionado}
+          jornadaRutaActiva={jornadaRutaActiva}
+          onToggleRuta={(jornadaId) =>
+            setJornadaRutaActiva((actual) => (actual === jornadaId ? null : jornadaId))
+          }
         />
       </aside>
     </div>

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import { formatHaceTiempo } from "@/lib/utils";
 import { COLOR_POR_ESTADO, estadoMarcador, ETIQUETA_POR_ESTADO } from "@/lib/mapa-utils";
+import { RutaHistorica } from "@/components/mapa/ruta-historica";
 import type { PosicionChofer } from "@/lib/types";
 
 // Centrado por defecto (Ciudad de México) cuando todavía no hay ningún ping
@@ -64,9 +65,14 @@ function ControladorVista({
 interface MapaFlotaProps {
   posiciones: PosicionChofer[];
   choferSeleccionado?: string | null;
+  jornadaRutaActiva?: string | null;
 }
 
-export default function MapaFlota({ posiciones, choferSeleccionado = null }: MapaFlotaProps) {
+export default function MapaFlota({
+  posiciones,
+  choferSeleccionado = null,
+  jornadaRutaActiva = null,
+}: MapaFlotaProps) {
   const marcadores = useMemo(
     () =>
       posiciones.map((posicion) => ({
@@ -88,6 +94,7 @@ export default function MapaFlota({ posiciones, choferSeleccionado = null }: Map
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <ControladorVista posiciones={posiciones} choferSeleccionado={choferSeleccionado} />
+      {jornadaRutaActiva && <RutaHistorica jornadaId={jornadaRutaActiva} />}
       {marcadores.map(({ posicion, estado }) => (
         <Marker
           key={posicion.choferId}

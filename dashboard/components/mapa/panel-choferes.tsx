@@ -1,6 +1,6 @@
 "use client";
 
-import { Gauge, RadioTower } from "lucide-react";
+import { Gauge, RadioTower, Route } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn, formatHaceTiempo } from "@/lib/utils";
 import { estadoMarcador, ETIQUETA_POR_ESTADO } from "@/lib/mapa-utils";
@@ -17,6 +17,9 @@ interface PanelChoferesProps {
   cargando: boolean;
   choferSeleccionado: string | null;
   onSeleccionar: (choferId: string) => void;
+  /** jornada_id cuyo trazado histórico está visible en el mapa (o null). */
+  jornadaRutaActiva: string | null;
+  onToggleRuta: (jornadaId: string) => void;
 }
 
 export function PanelChoferes({
@@ -24,6 +27,8 @@ export function PanelChoferes({
   cargando,
   choferSeleccionado,
   onSeleccionar,
+  jornadaRutaActiva,
+  onToggleRuta,
 }: PanelChoferesProps) {
   return (
     <div className="flex h-full flex-col">
@@ -48,6 +53,11 @@ export function PanelChoferes({
           {posiciones.map((posicion) => {
             const estado = estadoMarcador(posicion);
             const activo = posicion.choferId === choferSeleccionado;
+            // Una jornada concreta cuyo trazado se puede pedir — si el chofer
+            // tiene varias abiertas en paralelo, se usa la primera (caso raro,
+            // ver §3 de contexto_proyecto.md).
+            const jornadaId = posicion.jornadaIds[0] ?? null;
+            const rutaVisible = jornadaId != null && jornadaId === jornadaRutaActiva;
             return (
               <li key={posicion.choferId}>
                 <button
@@ -78,6 +88,19 @@ export function PanelChoferes({
                     <span>{formatHaceTiempo(posicion.timestamp)}</span>
                   </div>
                 </button>
+                {jornadaId && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleRuta(jornadaId)}
+                    className={cn(
+                      "flex w-full items-center gap-1.5 border-t border-border/60 px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      rutaVisible && "text-primary"
+                    )}
+                  >
+                    <Route className="h-3 w-3" />
+                    {rutaVisible ? "Ocultar ruta" : "Ver ruta"}
+                  </button>
+                )}
               </li>
             );
           })}

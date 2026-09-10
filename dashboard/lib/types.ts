@@ -59,6 +59,29 @@ export interface UltimaPosicionRow {
   timestamp: string;
 }
 
+/** Fila cruda de la vista public.ubicaciones_tracking_planas. */
+export interface UbicacionTrackingPlanaRow {
+  chofer_id: string;
+  jornada_ids: string[];
+  lat: number;
+  lng: number;
+  velocidad_kmh: number | null;
+  timestamp: string;
+}
+
+/** Un ping de GPS de la ruta histórica de una jornada. */
+export interface PuntoRuta {
+  lat: number;
+  lng: number;
+  velocidadKmh: number | null;
+  timestamp: string;
+}
+
+/** Respuesta de GET /api/tracking/ruta-jornada. */
+export interface RutaJornadaResponse {
+  puntos: PuntoRuta[];
+}
+
 /** Respuesta enriquecida de GET /api/tracking/ultimas-posiciones. */
 export interface PosicionChofer {
   choferId: string;
