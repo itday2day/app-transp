@@ -1,6 +1,6 @@
 # Contexto del proyecto — app-transp
 
-_Última actualización: 2026-09-09._
+_Última actualización: 2026-09-10._
 
 Documento de referencia técnica para cualquier IA (o persona) que retome trabajo en este
 repositorio. Refleja el **estado real del código**, no el plan original — donde la implementación
@@ -20,9 +20,10 @@ comparten el mismo backend (Supabase):
   (`POST /reports/export-excel`) que genera el `.xlsx` y lo envía por correo vía la API de Resend.
 
 **Stack tecnológico de un vistazo**: Next.js (Dashboard) · Node/Express (servidor de reportes) ·
-Supabase (PostgreSQL + PostGIS + Auth + Storage + RLS) · Expo/React Native (móvil) · Render
-(hosting de Dashboard y servidor de reportes) · Resend (envío de correo vía API HTTPS, producción)
-· GitHub (`github.com/itday2day/app-transp`, rama `master`, auto-deploy a Render en cada push).
+Supabase (PostgreSQL + PostGIS + Auth + Storage + RLS) · Expo/React Native (móvil) · Leaflet +
+OSRM (mapa en vivo y trazado de rutas, ambos sobre OpenStreetMap, sin API key) · Render (hosting de
+Dashboard y servidor de reportes) · Resend (envío de correo vía API HTTPS, producción) · GitHub
+(`github.com/itday2day/app-transp`, rama `master`, auto-deploy a Render en cada push).
 
 **Metodología de trabajo**: Spec-Driven Development (SDD) — Fase 1 (especificación técnica,
 aprobación explícita del usuario antes de tocar código) → Fase 2 (implementación) → Fase 3
@@ -42,7 +43,8 @@ app_transp_project/
 │   ├── schema_v2_tracking_auth.sql  # Migración incremental (RPC tracking, políticas extra)
 │   ├── schema_v3_combustible_porcentaje.sql  # combustible: enum de texto -> porcentaje 0-100
 │   ├── schema_v4_fotos_incidencia.sql  # columna fotos_incidencia text[]
-│   └── schema_v5_edicion_jornadas.sql  # auditoría de edición manual (ver §4)
+│   ├── schema_v5_edicion_jornadas.sql  # auditoría de edición manual (ver §4)
+│   └── schema_v6_ruta_jornada.sql  # vista para el trazado histórico de rutas (ver §4)
 ├── eslint.config.js / .prettierrc.json   # Lint/formato de la app móvil
 └── tsconfig.json               # Excluye "server" y "dashboard" (cada uno tiene el suyo)
 ```
@@ -101,9 +103,9 @@ restringida a la propia carpeta del chofer, `evidencias/{choferId}/...`, vía po
 no sumar módulos nativos nuevos).
 
 **Mapas**: 100% OpenStreetMap vía `react-leaflet` + `leaflet`, sin API key, para el visor en vivo del
-Dashboard. ⚠️ **Corrección**: OSRM (cálculo de rutas) y Nominatim (geocodificación) **no están
-implementados** — solo se construyó el visor de mapa en vivo con marcadores de posición. Si se
-necesita trazar el trayecto recorrido o convertir coordenadas a direcciones, es trabajo pendiente.
+Dashboard. **Corrección (2026-09-10)**: OSRM (cálculo de rutas) **ya está implementado** — ver
+"Trazado histórico de rutas" en §4. Nominatim (geocodificación, coordenadas → dirección) sigue sin
+implementar, sigue siendo trabajo pendiente si hiciera falta.
 
 **Enlaces a Google/Apple Maps para coordenadas puntuales** (check-in/check-out de una jornada,
 distinto del visor en vivo de arriba): en vez de mostrar lat/lng como texto plano, se abre la
@@ -281,6 +283,42 @@ hablan directo con Supabase. ⚠️ La app móvil **ya no habla con el mock serv
 distinguir 401/409). La exportación de reportes se quitó de la app (era el último uso de
 `EXPO_PUBLIC_API_URL`, también eliminada); es ahora exclusiva del Dashboard web (ver §4).
 
+**Fix — auto-refresh de sesión en segundo plano, iOS (2026-09-10)**: el cliente tenía
+`autoRefreshToken: true` sin conectar al `AppState` de React Native. El timer de refresco de
+`supabase-js` sigue disparando con la app en segundo plano, y en ese momento intenta leer el token
+del Keychain (vía `expo-secure-store`), que en iOS rechaza el acceso con `KeyChainException: User
+interaction is not allowed` porque la app no está activa. `src/lib/supabase.ts` ahora tiene un
+listener de `AppState` que llama `supabase.auth.startAutoRefresh()`/`stopAutoRefresh()` según el
+estado de la app — patrón oficial de Supabase para React Native.
+
+**Robustecimiento del Check-Out (2026-09-10)** — tres fixes encadenados sobre un caso real donde
+una jornada quedaba "Error al enviar" para siempre:
+
+1. `DetalleJornadaScreen.tsx` esperaba (`await`) la captura de GPS **antes** de guardar el
+   check-out; si fallaba (sin señal, GPS apagado, interior de un edificio), bloqueaba el check-out
+   por completo pese a que el chofer ya había llenado todo el formulario. Ahora el check-out se
+   guarda igual (local-first, como el resto del flujo) con `latFinal`/`lngFinal` nulos si hace
+   falta, y avisa con un mensaje distinto (`checkOutForm.exitoMensajeSinUbicacion`).
+2. `syncService.ts` descartaba el error real de `subirJornada()` en un `catch {}` vacío — imposible
+   diagnosticar por qué una jornada puntual no sincronizaba nunca, ni desde la app ni revisando el
+   código. Ahora se loguea con `console.error` (id, matrícula, número de intento).
+3. El hallazgo real detrás del caso: el auto-sync de fondo reintenta cada 15s
+   (`INTERVALO_REVISION_MS` en `NetworkContext.tsx`) con un tope de `MAX_INTENTOS = 5` — se agota en
+   menos de un minuto con la app abierta. Una vez agotado, **no había ninguna forma de reintentar**:
+   el pull-to-refresh de `HistorialScreen` llamaba a la misma `sincronizarPendientes()` que
+   respetaba ese mismo tope, así que una jornada atascada quedaba atascada para siempre, sin ningún
+   camino manual. `sincronizarPendientes(forzarReintento)` y `sincronizarAhora(forzarReintento)`
+   ahora aceptan un flag para ignorar el tope; `HistorialScreen.refrescar()` lo pasa en `true` (es
+   un pedido explícito del chofer de "probá de nuevo"), mientras que el auto-sync de fondo lo sigue
+   respetando (si no, un pull-to-refresh cada tanto convertiría el tope en inútil).
+
+⚠️ **Nota operativa, no de código**: durante el debugging de lo anterior, Metro Bundler se cayó en
+Windows por un error del watcher de archivos (`FallbackWatcher`, el fallback que usa Metro sin
+Watchman instalado) al toparse con un archivo temporal que `npm install` borró a mitad de un
+escaneo dentro de `server/mock/node_modules`. Metro no se reinicia solo tras un crash así — hay que
+matar el proceso y correr `npx expo start` de nuevo. Instalar Watchman evitaría este fallback más
+frágil, pero no se hizo (fuera de alcance).
+
 ## 4. Módulo Dashboard web (`dashboard/`)
 
 Proyecto Next.js **independiente y autocontenido** (su propio `package.json`/`node_modules`),
@@ -348,6 +386,36 @@ construir un sistema de cuentas de administrador (fuera de alcance de esta funci
 Route Handlers de este Dashboard (`reportes/exportar`, `tracking/ultimas-posiciones`, `jornadas`),
 confía en que `proxy.ts` (middleware) ya protege todo `/api/*` salvo `/api/auth/*`.
 
+**Trazado histórico de rutas (2026-09-10)**: en `/mapa`, botón "Ver ruta"/"Ocultar ruta" en el
+panel de choferes activos (`panel-choferes.tsx`) dibuja el trayecto completo de la jornada actual
+de ese chofer, ajustado a las calles.
+
+- `supabase/schema_v6_ruta_jornada.sql` — vista `ubicaciones_tracking_planas`: mismo criterio que
+  `ultimas_posiciones` (aplana `geography` a lat/lng), pero trae **todos** los pings, no solo el
+  último. El filtro por jornada (`jornada_ids @> ARRAY[...]`, vía `.contains()` de supabase-js) y el
+  orden por tiempo se hacen en la query, no en la vista.
+- `dashboard/app/api/tracking/ruta-jornada/route.ts` — `GET ?jornadaId=`, pings ordenados
+  ascendente por `timestamp`.
+- `dashboard/lib/osrm.ts` — cliente de la **API pública y gratuita de OSRM**
+  (`router.project-osrm.org/route/v1/driving`). ⚠️ Es el servidor demo público de OSRM, no un
+  servicio contratado por el proyecto — su política de uso es para pruebas/tráfico liviano, no
+  producción sostenida; puede aplicar rate-limit o caerse sin aviso. Si el trazado por calles se
+  vuelve una función central (no solo una mejora visual ocasional), habría que evaluar una
+  instancia propia o un proveedor pago (Mapbox Directions, Google Roads, etc.). La función recibe y
+  devuelve coordenadas como `[lat, lng]` (consistente con el resto del proyecto — Leaflet,
+  `PosicionChofer`, etc.), manejando la inversión a `[lng, lat]` que exige GeoJSON/OSRM de forma
+  transparente para quien la llama. Muestrea a máximo 100 puntos (límite práctico de largo de URL,
+  no de la API en sí) conservando siempre el primer y el último punto.
+- `dashboard/lib/hooks/use-ruta-jornada.ts` — orquesta: pings crudos → OSRM → si OSRM falla, cae a
+  una línea recta entre los pings en vez de no mostrar nada.
+- `dashboard/components/mapa/ruta-historica.tsx` — `Polyline` (`#2563eb`, grosor 4, opacidad 0.8) +
+  marcadores de inicio/fin. **Sin** su propio `dynamic(..., { ssr: false })`: ya vive detrás del
+  límite ssr:false que envuelve `MapaFlota` completo a nivel de página
+  (`app/(dashboard)/mapa/page.tsx`) — envolverlo de nuevo sería redundante.
+- La "selección de jornada" para ver su ruta usa el chofer seleccionado en el panel de activos
+  (su `jornadaIds[0]`), no un buscador de jornadas pasadas por rango de fechas — eso sería una
+  función más grande (reutilizando los filtros de `/jornadas`), todavía no construida.
+
 Todas las rutas `/api/*` usan `lib/supabase/server.ts` (cliente con el `service_role` key, marcado
 `server-only` — el build falla si se importa por error desde código de cliente). `lib/supabase/client.ts`
 (con el `anon` key) existe pero no se usa todavía — quedaría preparado para un futuro login de
@@ -377,7 +445,14 @@ chofer si se decide agregar uno.
 
 ## 6. Deuda técnica y pendientes conocidos
 
-- OSRM/Nominatim no implementados (solo visor de mapa, sin ruteo ni geocodificación).
+- Nominatim (geocodificación, coordenadas → dirección) no implementado. OSRM (ruteo) sí, desde
+  2026-09-10 (ver §4) — pero corre contra el servidor demo público y gratuito, no una instancia
+  propia (ver la advertencia ⚠️ en esa misma sección).
+- Metro Bundler puede caerse en Windows si algo dentro de `node_modules/` de cualquier
+  sub-proyecto cambia mientras Metro lo tiene bajo watch (ej. correr `npm install` en
+  `server/mock` con la app corriendo) — es el fallback de archivo que usa Metro sin Watchman
+  instalado, no algo propio de este código. Si pasa, hay que matar el proceso y correr
+  `npx expo start` de nuevo; instalar Watchman lo evitaría.
 - El Dashboard no tiene roles de administrador (tabla `admins`, etc.) — es una sola contraseña
   compartida por env var. Suficiente para el MVP interno actual, no para múltiples administradores
   con distintos permisos. Esto también limita la edición de jornadas: `editado_por` es texto libre
