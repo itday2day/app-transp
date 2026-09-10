@@ -496,9 +496,16 @@ chofer si se decide agregar uno.
   que el admin escriba (ver §2).
 - Pendiente confirmar que la cuenta de Resend usada pertenezca a `it@day2day.es` (el `projectId` de
   EAS ya se confirmó, ver "Alineación corporativa y cuentas" en §2).
-- Nunca se generó un build standalone de la app móvil (`eas build`) — todo el desarrollo corrió
-  vía Expo Go / development build sobre Metro Bundler (`npx expo start`), que por diseño necesita
-  el servidor de desarrollo corriendo (no funciona con la PC apagada, aunque el código en sí ya es
-  100% cloud-only — Supabase directo, sin ninguna dependencia de localhost). Session de `eas-cli` ya
-  activa y verificada bajo `it@day2day.es`; falta correr `eas build --profile production` para
-  tener un binario que no dependa de la PC.
+- ✅ **Resuelto (2026-09-10)**: durante toda la sesión previa el desarrollo corrió vía Expo Go /
+  development build sobre Metro Bundler (`npx expo start`), que por diseño necesita el servidor de
+  desarrollo corriendo — de ahí que la app "dejara de funcionar" al apagar la PC (no era un bug: el
+  código en sí ya era 100% cloud-only, Supabase directo, sin ninguna dependencia de localhost;
+  grepeado y confirmado). Se generaron dos builds standalone con EAS Build (`eas-cli` ya autenticado
+  como `it@day2day.es`, confirmado dueño del proyecto):
+  - `eas build --platform android --profile production` → `.aab` (formato de publicación en Google
+    Play, no instalable directo en un dispositivo).
+  - `eas build --platform android --profile preview` → `.apk` instalable directo (se agregó
+    `android.buildType: "apk"` al perfil `preview` en `eas.json`, que no lo tenía). Este es el que
+    sirve para probar la app sin depender de la PC.
+  - Pendiente: iOS necesita su propio build (`eas build --platform ios`), que requiere cuenta de
+    Apple Developer para poder instalarse fuera de Expo Go — no se hizo en esta sesión.
