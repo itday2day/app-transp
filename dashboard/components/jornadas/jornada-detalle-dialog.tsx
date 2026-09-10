@@ -1,9 +1,10 @@
 "use client";
 
-import { AlertTriangle, ImageOff, Pencil } from "lucide-react";
+import { AlertTriangle, ImageOff, MapPin, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { useDireccion } from "@/lib/hooks/use-direccion";
 import { formatFechaHora } from "@/lib/utils";
 import type { JornadaRow } from "@/lib/types";
 
@@ -18,6 +19,49 @@ function Dato({ label, valor }: { label: string; valor: string | number | null |
     <div>
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="text-sm font-medium">{valor ?? "—"}</dd>
+    </div>
+  );
+}
+
+// Mismo formato de URL que ya usa server/mock/reportes.js para el Excel
+// (Google Maps URLs API, no el legado ?q=) — consistencia entre los dos
+// lugares del sistema que enlazan a un punto puntual.
+function urlGoogleMaps(lat: number, lng: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+}
+
+function Ubicacion({
+  etiqueta,
+  lat,
+  lng,
+}: {
+  etiqueta: string;
+  lat: number | null;
+  lng: number | null;
+}) {
+  const { data: direccion, isLoading } = useDireccion(lat, lng);
+
+  return (
+    <div className="col-span-2">
+      <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
+      {lat != null && lng != null ? (
+        <dd className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <a
+            href={urlGoogleMaps(lat, lng)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-medium text-primary underline"
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            Ver en mapa
+          </a>
+          <span className="text-muted-foreground">
+            {isLoading ? "Buscando dirección…" : (direccion ?? "Dirección no disponible")}
+          </span>
+        </dd>
+      ) : (
+        <dd className="text-sm text-muted-foreground">No registrada</dd>
+      )}
     </div>
   );
 }
@@ -89,6 +133,16 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
             <Dato
               label="Combustible final"
               valor={jornada.combustible_final != null ? `${jornada.combustible_final}%` : null}
+            />
+            <Ubicacion
+              etiqueta="Ubicación Check-In"
+              lat={jornada.lat_inicial}
+              lng={jornada.lng_inicial}
+            />
+            <Ubicacion
+              etiqueta="Ubicación Check-Out"
+              lat={jornada.lat_final}
+              lng={jornada.lng_final}
             />
           </dl>
 

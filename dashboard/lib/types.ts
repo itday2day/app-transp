@@ -96,6 +96,11 @@ export interface PosicionChofer {
   tieneIncidencia: boolean;
 }
 
+/** Respuesta de GET /api/geocodificar. */
+export interface GeocodificarResponse {
+  direccion: string | null;
+}
+
 /** Respuesta paginada de GET /api/jornadas. */
 export interface JornadasResponse {
   data: JornadaRow[];

@@ -15,6 +15,13 @@
 
 const OSRM_BASE_URL = "https://router.project-osrm.org/route/v1/driving";
 
+// Sin esto, un servidor demo colgado (no caído — colgado, sin responder)
+// deja el fetch pendiente para siempre y con él la query de TanStack Query en
+// loading eterno, nunca llega al catch que activa el fallback de línea recta
+// en useRutaJornada. Con el timeout, un cuelgue se comporta igual que
+// cualquier otro fallo de OSRM: aborta, tira error, cae al fallback.
+const TIMEOUT_MS = 8000;
+
 // El límite real es el largo de la URL (las coordenadas van en el path, no
 // en el body) — cada par "lng,lat;" ronda 20-24 caracteres con 5 decimales
 // de precisión (~1m de resolución, de sobra para pings de GPS). 100 puntos
@@ -59,7 +66,8 @@ export async function getOSRMRoute(puntosLatLng: [number, number][]): Promise<[n
   const coordenadasUrl = muestreados.map(([lat, lng]) => `${lng},${lat}`).join(";");
 
   const respuesta = await fetch(
-    `${OSRM_BASE_URL}/${coordenadasUrl}?overview=full&geometries=geojson`
+    `${OSRM_BASE_URL}/${coordenadasUrl}?overview=full&geometries=geojson`,
+    { signal: AbortSignal.timeout(TIMEOUT_MS) }
   );
 
   if (!respuesta.ok) {
