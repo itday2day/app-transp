@@ -98,6 +98,18 @@ async function subirJornada(jornada: Jornada): Promise<void> {
 }
 
 /**
+ * true si hay al menos una jornada que `sincronizarPendientes(forzarReintento)`
+ * intentaría subir — mismo criterio de MAX_INTENTOS que esa función, para que
+ * ambas coincidan siempre. Se usa en NetworkContext para no prender el banner
+ * "Sincronizando…" cuando, en la práctica, no hay nada que hacer (ver
+ * comentario ahí: antes parpadeaba cada 15s aunque la app estuviera al día).
+ */
+export async function hayJornadasPendientes(forzarReintento = false): Promise<boolean> {
+  const pendientes = await obtenerPendientesSincronizacion();
+  return pendientes.some((j) => forzarReintento || j.intentosSincronizacion < MAX_INTENTOS);
+}
+
+/**
  * Recorre las jornadas guardadas localmente que aún no llegaron a Supabase
  * y las sube una por una. Diseñado para llamarse cada vez que vuelve la
  * conexión, sin bloquear la interfaz del chofer.

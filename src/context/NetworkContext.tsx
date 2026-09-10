@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import * as Network from "expo-network";
 import { AppState } from "react-native";
-import { sincronizarPendientes } from "@/services/syncService";
+import { hayJornadasPendientes, sincronizarPendientes } from "@/services/syncService";
 
 interface NetworkContextValor {
   conectado: boolean;
@@ -23,15 +23,26 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const sincronizarAhora = useCallback(async (forzarReintento = false) => {
     if (sincronizandoRef.current) return;
     sincronizandoRef.current = true;
-    setSincronizando(true);
     try {
       const estado = await Network.getNetworkStateAsync();
       if (!estado.isConnected || !estado.isInternetReachable) return;
-      await sincronizarPendientes(forzarReintento);
-      setUltimaSincronizacion(new Date());
+
+      // El chequeo corre cada 15s (ver INTERVALO_REVISION_MS) y la enorme
+      // mayoría de las veces no hay nada pendiente — sin este chequeo previo,
+      // el banner "Sincronizando…" de BannerConexion prendía y apagaba en
+      // cada corrida, así la app estuviera al día, dando un parpadeo visible
+      // cada 15s. Ahora solo se enciende cuando de verdad hay algo que subir.
+      if (!(await hayJornadasPendientes(forzarReintento))) return;
+
+      setSincronizando(true);
+      try {
+        await sincronizarPendientes(forzarReintento);
+        setUltimaSincronizacion(new Date());
+      } finally {
+        setSincronizando(false);
+      }
     } finally {
       sincronizandoRef.current = false;
-      setSincronizando(false);
     }
   }, []);
 
