@@ -103,9 +103,10 @@ restringida a la propia carpeta del chofer, `evidencias/{choferId}/...`, vía po
 no sumar módulos nativos nuevos).
 
 **Mapas**: 100% OpenStreetMap vía `react-leaflet` + `leaflet`, sin API key, para el visor en vivo del
-Dashboard. **Corrección (2026-09-10)**: OSRM (cálculo de rutas) **ya está implementado** — ver
-"Trazado histórico de rutas" en §4. Nominatim (geocodificación, coordenadas → dirección) sigue sin
-implementar, sigue siendo trabajo pendiente si hiciera falta.
+Dashboard. **Corrección (2026-09-10)**: tanto OSRM (cálculo de rutas) como Nominatim
+(geocodificación inversa) **ya están implementados** — ver "Trazado histórico de rutas" y
+"Geocodificación inversa" en §4. El ecosistema OSM del proyecto (Leaflet + OSRM + Nominatim, los
+tres sobre OpenStreetMap, sin API key) queda completo.
 
 **Enlaces a Google/Apple Maps para coordenadas puntuales** (check-in/check-out de una jornada,
 distinto del visor en vivo de arriba): en vez de mostrar lat/lng como texto plano, se abre la
@@ -118,8 +119,10 @@ ubicación en la app de mapas nativa.
 - **Reporte Excel** (`server/mock/reportes.js`): columnas "Ubicación Check-In"/"Ubicación Check-Out"
   con hipervínculo a `https://www.google.com/maps/search/?api=1&query=lat,lng` (Google Maps URLs
   API, formato documentado — no el legado `?q=`).
-- ⚠️ **El Dashboard web NO tiene esto** — `jornada-detalle-dialog.tsx` no muestra lat/lng ni enlaces
-  de mapa en ningún lado todavía. Solo la app móvil y el Excel lo tienen.
+- **Dashboard web** (`jornada-detalle-dialog.tsx`, componente `Ubicacion`): mismo enlace de Google
+  Maps que el Excel, más la dirección legible por geocodificación inversa (ver "Geocodificación
+  inversa" en §4). ⚠️ Corrección: este documento decía que el Dashboard no tenía esto — se agregó el
+  2026-09-10, junto con Nominatim.
 
 **Envío de reportes**: `server/mock/reportes.js` genera el `.xlsx` (ExcelJS) y lo envía por dos
 caminos posibles. ⚠️ **Corrección (2026-09-07)**: Render bloquea el tráfico saliente a los puertos
@@ -416,6 +419,29 @@ de ese chofer, ajustado a las calles.
   (su `jornadaIds[0]`), no un buscador de jornadas pasadas por rango de fechas — eso sería una
   función más grande (reutilizando los filtros de `/jornadas`), todavía no construida.
 
+**Geocodificación inversa (2026-09-10)**: en el modal de detalle de jornada (`jornada-detalle-dialog.tsx`,
+componente `Ubicacion`), cada coordenada de check-in/check-out muestra un enlace "Ver en mapa"
+(mismo formato Google Maps URLs API que ya usa el Excel) **más** la dirección legible.
+
+- `dashboard/app/api/geocodificar/route.ts` — `GET ?lat=&lng=` contra la **API pública de
+  Nominatim** (`nominatim.openstreetmap.org/reverse`). ⚠️ A diferencia de OSRM (que sí se llama
+  directo desde el navegador), esta llamada **corre exclusivamente del lado del servidor** — no es
+  una preferencia de diseño, es una restricción real: la política de uso de Nominatim exige
+  identificar la app con un `User-Agent` válido, y los navegadores ignoran silenciosamente
+  cualquier `User-Agent` custom que JavaScript intente fijar en un `fetch()` del lado del cliente.
+  Solo un Route Handler puede cumplir ese requisito (acá: `"app-transp-dashboard (it@day2day.es)"`).
+  Cache en memoria del propio proceso (clave = lat/lng redondeados a 4 decimales, sin expiración —
+  una dirección no cambia), sin sumar Redis ni nada externo; se pierde al reiniciar el proceso,
+  aceptable para el volumen de una herramienta interna. Timeout de 8s vía `AbortSignal.timeout()`;
+  cualquier fallo (timeout, red, JSON inválido) devuelve `{ direccion: null }` en vez de un error —
+  el Dashboard nunca se bloquea esperando una dirección, en el peor caso solo muestra el enlace al
+  mapa sin el texto.
+- `dashboard/lib/hooks/use-direccion.ts` — hook TanStack Query que llama a `/api/geocodificar`
+  (nunca a Nominatim directo), `staleTime` de 1h.
+- `dashboard/lib/osrm.ts` también recibió `AbortSignal.timeout(8000)` en esta misma tanda de
+  trabajo — antes no tenía timeout, así que un servidor demo colgado (no caído, colgado) dejaba la
+  query de TanStack Query esperando para siempre en vez de caer al fallback de línea recta.
+
 Todas las rutas `/api/*` usan `lib/supabase/server.ts` (cliente con el `service_role` key, marcado
 `server-only` — el build falla si se importa por error desde código de cliente). `lib/supabase/client.ts`
 (con el `anon` key) existe pero no se usa todavía — quedaría preparado para un futuro login de
@@ -445,9 +471,9 @@ chofer si se decide agregar uno.
 
 ## 6. Deuda técnica y pendientes conocidos
 
-- Nominatim (geocodificación, coordenadas → dirección) no implementado. OSRM (ruteo) sí, desde
-  2026-09-10 (ver §4) — pero corre contra el servidor demo público y gratuito, no una instancia
-  propia (ver la advertencia ⚠️ en esa misma sección).
+- OSRM y Nominatim, desde 2026-09-10 (ver §4), corren contra sus servidores demo públicos y
+  gratuitos, no instancias propias — ver la advertencia ⚠️ en esa sección. Si el uso crece mucho,
+  evaluar alojar una instancia propia o un proveedor pago.
 - Metro Bundler puede caerse en Windows si algo dentro de `node_modules/` de cualquier
   sub-proyecto cambia mientras Metro lo tiene bajo watch (ej. correr `npm install` en
   `server/mock` con la app corriendo) — es el fallback de archivo que usa Metro sin Watchman
@@ -462,8 +488,6 @@ chofer si se decide agregar uno.
   `supabase/schema.sql` y no se mantuvo sincronizada (usa nombres de campo distintos, ej.
   `licencia_conducir` en vez de `dni`). No usar como fuente de verdad del esquema. (Distinto de
   `server/mock/`, que sí corre en producción — ver §2.)
-- El Dashboard web no tiene enlaces a Google Maps en su propia UI (solo la app móvil y el Excel) —
-  ver §2.
 - El reporte Excel muestra como máximo 3 fotos de respaldo por incidencia (columnas fijas); el
   Dashboard sí las muestra todas sin límite en el modal de detalle.
 - Sin dominio propio verificado en Resend, el export solo puede mandar el reporte al mismo correo
