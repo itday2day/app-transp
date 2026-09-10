@@ -194,18 +194,19 @@ en el dashboard de Render. `MOCK_SERVER_URL` (env var del servicio dashboard) es
 `http://localhost:4000`, en producción a la URL de `app-transp-mock-server` de arriba.
 
 **Alineación corporativa y cuentas**: el proyecto Supabase está confirmado bajo `it@day2day.es`
-(ver arriba). El repo de GitHub es `github.com/itday2day/app-transp`. Dos cosas quedan
-**pendientes de verificar con la cuenta real**, no resueltas del todo:
+(ver arriba). El repo de GitHub es `github.com/itday2day/app-transp`. Una cosa queda pendiente de
+verificar, la otra ya se confirmó:
 
 - ⚠️ **Resend**: se configuró con una API key provista por el usuario, pero no está confirmado que
   la cuenta de Resend asociada sea `it@day2day.es` — no hay forma de verificarlo desde el código,
   solo entrando al dashboard de Resend con esa cuenta.
-- ⚠️ **EAS/Expo**: `app.json` tenía `"owner": "itday2day.es"` (formato inválido para ese campo —
-  no es un username/slug de Expo válido) apuntando a un `extra.eas.projectId` fijo
-  (`3c0c2511-252f-4887-9f1b-a555de4591cb`). Se quitó `owner` (2026-09-09) para que se autodetecte
-  al correr `eas login` con la cuenta real, pero el `projectId` sigue siendo el mismo — si ese
-  proyecto EAS no pertenece a la cuenta `it@day2day.es`, un build va a fallar o pedir crear un
-  proyecto nuevo. Falta correr `eas login`/`eas build` con la cuenta real para confirmarlo.
+- **EAS/Expo — confirmado (2026-09-10)**: la máquina de desarrollo ya tenía sesión activa de
+  `eas-cli` logueada como `it@day2day.es`, con acceso Owner a las cuentas `day2day.es` e
+  `itday2day.es`. `eas project:info` confirma que el proyecto (`extra.eas.projectId` en `app.json`,
+  `3c0c2511-252f-4887-9f1b-a555de4591cb`) es `@itday2day.es/control-de-jornada` — pertenece a la
+  cuenta corporativa correcta. El `"owner": "itday2day.es"` que tenía `app.json` (formato inválido
+  para ese campo, se quitó el 2026-09-09) resulta que sí apuntaba bien, solo con un formato que EAS
+  no reconoce — quitarlo para que se autodetecte fue el camino correcto igual.
 - `app.json` → `ios.bundleIdentifier` / `android.package`: `com.tuempresa.appteransp` (placeholder
   genérico, nunca personalizado) → **`com.day2day.apptransp`** (2026-09-09).
 
@@ -493,6 +494,11 @@ chofer si se decide agregar uno.
 - Sin dominio propio verificado en Resend, el export solo puede mandar el reporte al mismo correo
   de la cuenta de Resend (o a las direcciones de testing oficiales) — no a cualquier destinatario
   que el admin escriba (ver §2).
-- Pendiente confirmar con la cuenta real (`it@day2day.es`) que el `projectId` de EAS en `app.json`
-  y la cuenta de Resend usada realmente pertenezcan a esa cuenta corporativa — ver "Alineación
-  corporativa y cuentas" en §2.
+- Pendiente confirmar que la cuenta de Resend usada pertenezca a `it@day2day.es` (el `projectId` de
+  EAS ya se confirmó, ver "Alineación corporativa y cuentas" en §2).
+- Nunca se generó un build standalone de la app móvil (`eas build`) — todo el desarrollo corrió
+  vía Expo Go / development build sobre Metro Bundler (`npx expo start`), que por diseño necesita
+  el servidor de desarrollo corriendo (no funciona con la PC apagada, aunque el código en sí ya es
+  100% cloud-only — Supabase directo, sin ninguna dependencia de localhost). Session de `eas-cli` ya
+  activa y verificada bajo `it@day2day.es`; falta correr `eas build --profile production` para
+  tener un binario que no dependa de la PC.
