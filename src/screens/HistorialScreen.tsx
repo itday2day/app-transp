@@ -35,7 +35,11 @@ export default function HistorialScreen() {
 
   async function refrescar() {
     setCargando(true);
-    await sincronizarAhora();
+    // forzarReintento: true — el pull-to-refresh es un pedido explícito del
+    // chofer de "probá de nuevo", así que debe poder reintentar una jornada
+    // aunque ya haya agotado los reintentos automáticos de fondo (ver
+    // comentario en sincronizarPendientes).
+    await sincronizarAhora(true);
     await cargar();
   }
 

@@ -69,11 +69,10 @@
     "fotoTacometroAyuda": "Sirve de respaldo del kilometraje final.",
     "notaUbicacion": "Al confirmar, se capturará tu ubicación GPS actual automáticamente como punto de cierre.",
     "botonEnviar": "Registrar check-out",
-    "errorUbicacionTitulo": "No pudimos obtener tu ubicación",
-    "errorUbicacionMensaje": "El check-out necesita registrar tu ubicación actual. Intenta de nuevo.",
     "exitoTitulo": "Jornada cerrada",
     "exitoMensaje": "Tu check-out quedó registrado. ¡Buen descanso!",
     "exitoMensajeOffline": "Tu check-out se guardó en el dispositivo y se enviará automáticamente al recuperar conexión.",
+    "exitoMensajeSinUbicacion": "Tu check-out quedó registrado, pero no pudimos capturar tu ubicación (revisa el GPS).",
     "errorRegistroTitulo": "No pudimos registrar el check-out"
   },
   "incidencias": {

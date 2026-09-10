@@ -111,25 +111,28 @@ export default function DetalleJornadaScreen() {
   async function manejarEnvioCheckOut(valores: ValoresCheckOutForm) {
     if (!jornada) return;
 
+    // No bloquea el check-out si falla la captura de GPS (sin señal, GPS
+    // apagado, interior de un edificio): el chofer ya completó todo el
+    // formulario, y el registro es local-first — mejor guardarlo con
+    // ubicación nula (ver FilaUbicacion, ya maneja "no registrada") que
+    // dejar al chofer sin poder cerrar su jornada hasta que el GPS responda.
     const ubicacion = await capturarUbicacion();
-    if (!ubicacion) {
-      Alert.alert(t("checkOutForm.errorUbicacionTitulo"), t("checkOutForm.errorUbicacionMensaje"));
-      return;
-    }
 
     setEnviando(true);
     try {
       await registrarCheckOut({
         id: jornada.id,
         ...valores,
-        latFinal: ubicacion.lat,
-        lngFinal: ubicacion.lng,
+        latFinal: ubicacion?.lat,
+        lngFinal: ubicacion?.lng,
       });
 
-      Alert.alert(
-        t("checkOutForm.exitoTitulo"),
-        conectado ? t("checkOutForm.exitoMensaje") : t("checkOutForm.exitoMensajeOffline")
-      );
+      const mensajeExito = !conectado
+        ? t("checkOutForm.exitoMensajeOffline")
+        : !ubicacion
+          ? t("checkOutForm.exitoMensajeSinUbicacion")
+          : t("checkOutForm.exitoMensaje");
+      Alert.alert(t("checkOutForm.exitoTitulo"), mensajeExito);
       navigation.goBack();
     } catch (err) {
       Alert.alert(

@@ -69,11 +69,10 @@
     "fotoTacometroAyuda": "Backs up the final mileage.",
     "notaUbicacion": "When you confirm, your current GPS location will be captured automatically as the closing point.",
     "botonEnviar": "Submit check-out",
-    "errorUbicacionTitulo": "We couldn't get your location",
-    "errorUbicacionMensaje": "Check-out needs to record your current location. Please try again.",
     "exitoTitulo": "Shift closed",
     "exitoMensaje": "Your check-out was recorded. Rest well!",
     "exitoMensajeOffline": "Your check-out was saved on the device and will be sent automatically once you're back online.",
+    "exitoMensajeSinUbicacion": "Your check-out was recorded, but we couldn't capture your location (check your GPS).",
     "errorRegistroTitulo": "We couldn't record the check-out"
   },
   "incidencias": {

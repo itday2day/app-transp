@@ -101,21 +101,39 @@ async function subirJornada(jornada: Jornada): Promise<void> {
  * Recorre las jornadas guardadas localmente que aún no llegaron a Supabase
  * y las sube una por una. Diseñado para llamarse cada vez que vuelve la
  * conexión, sin bloquear la interfaz del chofer.
+ *
+ * `forzarReintento` ignora el tope de MAX_INTENTOS — sin esto, una jornada
+ * que agotó sus 5 intentos automáticos (algo que puede pasar en menos de un
+ * minuto, ver INTERVALO_REVISION_MS en NetworkContext) queda atascada para
+ * siempre, sin ninguna forma de reintentarla desde la app. Se usa para el
+ * pull-to-refresh explícito de HistorialScreen — el chofer pidiendo
+ * reintentar a propósito debe poder hacerlo, aunque el auto-sync de fondo ya
+ * se haya rendido con esa jornada.
  */
-export async function sincronizarPendientes(): Promise<{ exitosas: number; fallidas: number }> {
+export async function sincronizarPendientes(
+  forzarReintento = false
+): Promise<{ exitosas: number; fallidas: number }> {
   const pendientes = await obtenerPendientesSincronizacion();
   let exitosas = 0;
   let fallidas = 0;
 
   for (const jornada of pendientes) {
-    if (jornada.intentosSincronizacion >= MAX_INTENTOS) continue;
+    if (!forzarReintento && jornada.intentosSincronizacion >= MAX_INTENTOS) continue;
 
     try {
       await marcarSincronizando(jornada.id);
       await subirJornada(jornada);
       await marcarComoSincronizado(jornada.id);
       exitosas += 1;
-    } catch {
+    } catch (err) {
+      // Antes se descartaba el error sin loguearlo — imposible diagnosticar
+      // por qué una jornada específica no sincronizaba nunca (ni para el
+      // chofer, ni revisando el código). Con matrícula/id en el log se puede
+      // cruzar directo contra la fila real en Supabase.
+      console.error(
+        `sincronizarPendientes: falló la jornada ${jornada.id} (${jornada.matricula}, intento ${jornada.intentosSincronizacion + 1}/${MAX_INTENTOS}):`,
+        err
+      );
       await marcarErrorSincronizacion(jornada.id);
       fallidas += 1;
     }

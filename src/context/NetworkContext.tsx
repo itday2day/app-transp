@@ -7,7 +7,7 @@ interface NetworkContextValor {
   conectado: boolean;
   sincronizando: boolean;
   ultimaSincronizacion: Date | null;
-  sincronizarAhora: () => Promise<void>;
+  sincronizarAhora: (forzarReintento?: boolean) => Promise<void>;
 }
 
 const NetworkContext = createContext<NetworkContextValor | undefined>(undefined);
@@ -20,14 +20,14 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [ultimaSincronizacion, setUltimaSincronizacion] = useState<Date | null>(null);
   const sincronizandoRef = useRef(false);
 
-  const sincronizarAhora = useCallback(async () => {
+  const sincronizarAhora = useCallback(async (forzarReintento = false) => {
     if (sincronizandoRef.current) return;
     sincronizandoRef.current = true;
     setSincronizando(true);
     try {
       const estado = await Network.getNetworkStateAsync();
       if (!estado.isConnected || !estado.isInternetReachable) return;
-      await sincronizarPendientes();
+      await sincronizarPendientes(forzarReintento);
       setUltimaSincronizacion(new Date());
     } finally {
       sincronizandoRef.current = false;
