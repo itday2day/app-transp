@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import Constants from "expo-constants";
+import { AppState } from "react-native";
 import { guardarValor, obtenerValor, borrarValor } from "@/services/almacenamientoSeguro";
 
 const SUPABASE_URL: string =
@@ -24,4 +25,19 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     autoRefreshToken: true,
     detectSessionInUrl: false,
   },
+});
+
+// El timer de autoRefreshToken de supabase-js sigue disparando aunque la app
+// esté en segundo plano si nadie lo para — en iOS eso intenta leer el
+// Keychain (vía SecureStore, ver almacenamientoSeguro.ts) con la app
+// backgrounded, y falla con "KeyChainException: User interaction is not
+// allowed" (SecureStore no puede pedir presencia del usuario/desbloqueo
+// mientras la app no está activa). Patrón oficial de Supabase para React
+// Native: https://supabase.com/docs/reference/javascript/auth-startautorefresh
+AppState.addEventListener("change", (estado) => {
+  if (estado === "active") {
+    supabase.auth.startAutoRefresh();
+  } else {
+    supabase.auth.stopAutoRefresh();
+  }
 });
