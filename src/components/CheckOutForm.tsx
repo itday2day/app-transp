@@ -1,5 +1,5 @@
-import React, { forwardRef, useState } from "react";
-import { View, Text, StyleSheet, TextInput, Keyboard } from "react-native";
+import React, { forwardRef, useState, type RefObject } from "react";
+import { View, Text, StyleSheet, TextInput, Keyboard, ScrollView } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { SelectorCombustible } from "@/components/SelectorCombustible";
@@ -25,6 +25,9 @@ interface Props {
   onEnviar: (valores: ValoresCheckOutForm) => void;
   onCancelar: () => void;
   enviando: boolean;
+  /** ScrollView de DetalleJornadaScreen — se reenvía a IncidenciasForm para
+   * traer su campo de detalle a la vista cuando se enfoca. */
+  scrollViewRef: RefObject<ScrollView | null>;
 }
 
 const INCIDENCIA_INICIAL: IncidenciaData = {
@@ -38,7 +41,7 @@ const INCIDENCIA_INICIAL: IncidenciaData = {
 // es quien coordina el scroll hacia esta sección con el autofoco — ver el
 // useEffect de scroll+foco allá. Este componente ya no se autofoca solo.
 export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
-  { jornada, onEnviar, onCancelar, enviando },
+  { jornada, onEnviar, onCancelar, enviando, scrollViewRef },
   ref
 ) {
   const { t } = useTranslation();
@@ -97,7 +100,7 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
         onCapturada={setFotoTacometro}
       />
 
-      <IncidenciasForm valor={incidencia} onCambiar={setIncidencia} />
+      <IncidenciasForm valor={incidencia} onCambiar={setIncidencia} scrollViewRef={scrollViewRef} />
 
       <Text style={estilos.notaUbicacion}>{t("checkOutForm.notaUbicacion")}</Text>
 

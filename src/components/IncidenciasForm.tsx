@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import React, { useRef, type RefObject } from "react";
+import { View, Text, Pressable, StyleSheet, TextInput, ScrollView, findNodeHandle } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { GaleriaFotosIncidencia } from "@/components/GaleriaFotosIncidencia";
@@ -24,12 +24,34 @@ export const CLAVE_TIPO_INCIDENCIA: Record<TipoIncidencia, ClaveTraduccion> = {
 interface Props {
   valor: IncidenciaData;
   onCambiar: (valor: IncidenciaData) => void;
+  /** ScrollView de la pantalla contenedora (DetalleJornadaScreen) — se usa
+   * para traer el campo de detalle a la vista cuando se enfoca. */
+  scrollViewRef: RefObject<ScrollView | null>;
 }
 
-export function IncidenciasForm({ valor, onCambiar }: Props) {
+export function IncidenciasForm({ valor, onCambiar, scrollViewRef }: Props) {
   const { t } = useTranslation();
   const detalleObligatorio = valor.tipo === "Otro";
   const detalleFaltante = detalleObligatorio && valor.detalle.trim().length === 0;
+  const refDetalle = useRef<TextInput>(null);
+
+  // Este campo aparece recién cuando se elige "Sí" (tuvo incidencia) y crece
+  // el formulario debajo de todo lo demás (km, combustible, foto) — es el más
+  // propenso a quedar tapado por el teclado. measureLayout mide su posición
+  // real respecto al ScrollView, sin depender de en qué nivel de anidamiento
+  // esté (a diferencia de sumar offsets de onLayout a mano).
+  function manejarFocusDetalle() {
+    const scroll = scrollViewRef.current;
+    const nodoScroll = scroll ? findNodeHandle(scroll) : null;
+    if (!scroll || nodoScroll == null) return;
+    refDetalle.current?.measureLayout(
+      nodoScroll,
+      (_left, top) => {
+        scroll.scrollTo({ y: Math.max(0, top - espaciado.md), animated: true });
+      },
+      () => {}
+    );
+  }
 
   function manejarTuvoIncidencia(tuvoIncidencia: boolean) {
     onCambiar({ tuvoIncidencia, tipo: null, detalle: "", fotos: [] });
@@ -95,6 +117,7 @@ export function IncidenciasForm({ valor, onCambiar }: Props) {
           </View>
 
           <CampoTexto
+            ref={refDetalle}
             etiqueta={`${t("incidencias.detalleEtiqueta")}${detalleObligatorio ? "" : t("incidencias.detalleOpcional")}`}
             placeholder={t("incidencias.detallePlaceholder")}
             multiline
@@ -103,6 +126,7 @@ export function IncidenciasForm({ valor, onCambiar }: Props) {
             value={valor.detalle}
             onChangeText={manejarDetalle}
             error={detalleFaltante ? t("incidencias.detalleError") : undefined}
+            onFocus={manejarFocusDetalle}
           />
 
           <GaleriaFotosIncidencia fotos={valor.fotos} onCambiar={manejarFotos} />

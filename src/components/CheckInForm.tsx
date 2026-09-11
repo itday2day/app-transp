@@ -1,5 +1,14 @@
-import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Keyboard } from "react-native";
+import React, { useEffect, useRef, useState, type RefObject } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Keyboard,
+  ScrollView,
+  findNodeHandle,
+} from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { SelectorDesplegable } from "@/components/SelectorDesplegable";
@@ -28,9 +37,12 @@ interface Props {
   onEnviar: (valores: ValoresCheckInForm) => void;
   enviando: boolean;
   matriculasFrecuentes: string[];
+  /** ScrollView de CheckInScreen — se usa para traer el campo de Incidencias
+   * a la vista cuando se enfoca (ver manejarFocusIncidencias más abajo). */
+  scrollViewRef: RefObject<ScrollView | null>;
 }
 
-export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes }: Props) {
+export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollViewRef }: Props) {
   const { t } = useTranslation();
   const [empresa, setEmpresa] = useState<string | null>(null);
   const [matricula, setMatricula] = useState("");
@@ -42,6 +54,28 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes }: Props)
   const [fotoRuta, setFotoRuta] = useState<string | null>(null);
   const [incidencias, setIncidencias] = useState("");
   const refRutaManual = useRef<TextInput>(null);
+  const refIncidencias = useRef<TextInput>(null);
+
+  // Mide la posición real del campo de Incidencias respecto al ScrollView
+  // (no respecto a su padre inmediato — measureLayout resuelve eso sin tener
+  // que acumular offsets a mano por cada nivel de anidamiento) y lo trae a la
+  // vista al enfocarlo, para que el teclado nunca lo tape. Es multilínea y es
+  // el campo más propenso a quedar oculto: el último del formulario.
+  function manejarFocusIncidencias() {
+    const scroll = scrollViewRef.current;
+    // measureLayout exige un HostInstance o el número de nodo nativo —
+    // ScrollView es un componente compuesto, no lo satisface directo;
+    // findNodeHandle resuelve el nodo nativo real que sí sirve como destino.
+    const nodoScroll = scroll ? findNodeHandle(scroll) : null;
+    if (!scroll || nodoScroll == null) return;
+    refIncidencias.current?.measureLayout(
+      nodoScroll,
+      (_left, top) => {
+        scroll.scrollTo({ y: Math.max(0, top - espaciado.md), animated: true });
+      },
+      () => {}
+    );
+  }
 
   const rutasDisponibles = obtenerRutasDeEmpresa(empresa);
 
@@ -184,6 +218,7 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes }: Props)
       {/* Sección 4: observaciones y envío. */}
       <View>
         <CampoTexto
+          ref={refIncidencias}
           etiqueta={t("checkInForm.incidenciasEtiqueta")}
           placeholder={t("checkInForm.incidenciasPlaceholder")}
           multiline
@@ -191,6 +226,7 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes }: Props)
           style={estilos.incidencias}
           value={incidencias}
           onChangeText={setIncidencias}
+          onFocus={manejarFocusIncidencias}
         />
 
         <BotonPrimario

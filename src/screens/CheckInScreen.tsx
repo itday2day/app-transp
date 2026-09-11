@@ -1,5 +1,14 @@
-import React, { useState } from "react";
-import { View, Text, FlatList, ScrollView, StyleSheet, Alert } from "react-native";
+import React, { useRef, useState } from "react";
+import {
+  View,
+  Text,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
@@ -25,6 +34,7 @@ export default function CheckInScreen() {
   const { capturarUbicacion, obteniendo: obteniendoUbicacion } = useUbicacion();
   const [enviando, setEnviando] = useState(false);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const refScroll = useRef<ScrollView>(null);
 
   // Mientras haya al menos una ruta activa y la app esté en primer plano, se
   // envían pings de posición al Dashboard en tiempo real (ver useSeguimientoGPS).
@@ -66,46 +76,54 @@ export default function CheckInScreen() {
   if (cargandoViajes) return null;
 
   return (
-    <ScrollView style={estilos.pantalla} contentContainerStyle={estilos.contenido}>
-      <Text style={estilos.titulo}>{t("checkIn.titulo")}</Text>
-      <Text style={estilos.chofer}>{t("checkIn.chofer", { nombre: usuario?.nombre ?? "" })}</Text>
+    <KeyboardAvoidingView style={estilos.pantalla} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView
+        ref={refScroll}
+        style={estilos.pantalla}
+        contentContainerStyle={estilos.contenido}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={estilos.titulo}>{t("checkIn.titulo")}</Text>
+        <Text style={estilos.chofer}>{t("checkIn.chofer", { nombre: usuario?.nombre ?? "" })}</Text>
 
-      {viajesActivos.length > 0 ? (
-        <View style={estilos.bloqueActivos}>
-          <Text style={estilos.subtitulo}>
-            {t("checkIn.rutasActivas", { cantidad: viajesActivos.length })}
-          </Text>
-          <FlatList
-            data={viajesActivos}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            renderItem={({ item }) => (
-              <TarjetaJornada
-                jornada={item}
-                onPress={() => navigation.navigate("DetalleJornada", { id: item.id })}
-              />
-            )}
-          />
-        </View>
-      ) : null}
+        {viajesActivos.length > 0 ? (
+          <View style={estilos.bloqueActivos}>
+            <Text style={estilos.subtitulo}>
+              {t("checkIn.rutasActivas", { cantidad: viajesActivos.length })}
+            </Text>
+            <FlatList
+              data={viajesActivos}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              renderItem={({ item }) => (
+                <TarjetaJornada
+                  jornada={item}
+                  onPress={() => navigation.navigate("DetalleJornada", { id: item.id })}
+                />
+              )}
+            />
+          </View>
+        ) : null}
 
-      {mostrarFormulario ? (
-        <>
-          <Text style={estilos.subtitulo}>{t("checkIn.subtituloFormulario")}</Text>
-          <CheckInForm
-            onEnviar={manejarEnvioFormulario}
-            enviando={enviando || obteniendoUbicacion}
-            matriculasFrecuentes={matriculasFrecuentes}
+        {mostrarFormulario ? (
+          <>
+            <Text style={estilos.subtitulo}>{t("checkIn.subtituloFormulario")}</Text>
+            <CheckInForm
+              onEnviar={manejarEnvioFormulario}
+              enviando={enviando || obteniendoUbicacion}
+              matriculasFrecuentes={matriculasFrecuentes}
+              scrollViewRef={refScroll}
+            />
+          </>
+        ) : (
+          <BotonPrimario
+            titulo={t(viajesActivos.length > 0 ? "checkIn.botonNuevaRuta" : "checkIn.botonPrimeraRuta")}
+            onPress={() => setMostrarFormulario(true)}
+            estilo={estilos.botonNuevaRuta}
           />
-        </>
-      ) : (
-        <BotonPrimario
-          titulo={t(viajesActivos.length > 0 ? "checkIn.botonNuevaRuta" : "checkIn.botonPrimeraRuta")}
-          onPress={() => setMostrarFormulario(true)}
-          estilo={estilos.botonNuevaRuta}
-        />
-      )}
-    </ScrollView>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -232,6 +232,7 @@ export default function DetalleJornadaScreen() {
                 onEnviar={manejarEnvioCheckOut}
                 onCancelar={() => setMostrarFormularioCheckOut(false)}
                 enviando={enviando || obteniendoUbicacion}
+                scrollViewRef={refScroll}
               />
             ) : (
               <BotonPrimario
