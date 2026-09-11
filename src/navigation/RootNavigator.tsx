@@ -17,6 +17,7 @@ import RegistroScreen from "@/screens/RegistroScreen";
 import CheckInScreen from "@/screens/CheckInScreen";
 import HistorialScreen from "@/screens/HistorialScreen";
 import DetalleJornadaScreen from "@/screens/DetalleJornadaScreen";
+import NuevoCheckInScreen from "@/screens/NuevoCheckInScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabsParamList>();
@@ -73,6 +74,11 @@ export function RootNavigator() {
               name="DetalleJornada"
               component={DetalleJornadaScreen}
               options={{ headerShown: true, title: t("navegacion.tituloDetalleJornada") }}
+            />
+            <Stack.Screen
+              name="NuevoCheckIn"
+              component={NuevoCheckInScreen}
+              options={{ headerShown: true, title: t("navegacion.tituloNuevoCheckIn") }}
             />
           </>
         ) : (

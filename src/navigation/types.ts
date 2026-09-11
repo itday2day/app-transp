@@ -7,6 +7,7 @@ export type RootStackParamList = {
   Registro: undefined;
   Principal: undefined;
   DetalleJornada: { id: string };
+  NuevoCheckIn: undefined;
 };
 
 export type TabsParamList = {

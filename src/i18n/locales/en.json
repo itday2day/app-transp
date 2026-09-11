@@ -24,7 +24,8 @@
     "tabCheckIn": "Check-in",
     "tabHistorial": "History",
     "salir": "Log out",
-    "tituloDetalleJornada": "Shift details"
+    "tituloDetalleJornada": "Shift details",
+    "tituloNuevoCheckIn": "New route"
   },
   "checkIn": {
     "titulo": "Start shift",

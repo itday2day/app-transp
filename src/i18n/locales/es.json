@@ -24,7 +24,8 @@
     "tabCheckIn": "Check-in",
     "tabHistorial": "Historial",
     "salir": "Salir",
-    "tituloDetalleJornada": "Detalle de jornada"
+    "tituloDetalleJornada": "Detalle de jornada",
+    "tituloNuevoCheckIn": "Nueva ruta"
   },
   "checkIn": {
     "titulo": "Inicio de jornada",
