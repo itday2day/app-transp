@@ -1,5 +1,14 @@
 import React, { useRef, type RefObject } from "react";
-import { View, Text, Pressable, StyleSheet, TextInput, ScrollView, findNodeHandle } from "react-native";
+import {
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  ScrollView,
+  findNodeHandle,
+  UIManager,
+} from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { GaleriaFotosIncidencia } from "@/components/GaleriaFotosIncidencia";
@@ -42,14 +51,22 @@ export function IncidenciasForm({ valor, onCambiar, scrollViewRef }: Props) {
   // esté (a diferencia de sumar offsets de onLayout a mano).
   function manejarFocusDetalle() {
     const scroll = scrollViewRef.current;
-    const nodoScroll = scroll ? findNodeHandle(scroll) : null;
-    if (!scroll || nodoScroll == null) return;
-    refDetalle.current?.measureLayout(
+    if (!scroll) return;
+    // Ver el comentario equivalente en CheckInForm.tsx: ref.measureLayout()
+    // no reconoce el ref de CampoTexto como componente nativo.
+    // UIManager.measureLayout() con tags numéricos (findNodeHandle) evita
+    // ese problema.
+    const nodoCampo = findNodeHandle(refDetalle.current);
+    const nodoScroll = findNodeHandle(scroll);
+    if (nodoCampo == null || nodoScroll == null) return;
+
+    UIManager.measureLayout(
+      nodoCampo,
       nodoScroll,
+      () => {},
       (_left, top) => {
         scroll.scrollTo({ y: Math.max(0, top - espaciado.md), animated: true });
-      },
-      () => {}
+      }
     );
   }
 

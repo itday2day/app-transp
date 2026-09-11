@@ -27,7 +27,7 @@ import { Jornada } from "@/types";
 import { DetalleJornadaRouteProp, RootStackNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
-import { espaciado, radios } from "@/theme/spacing";
+import { espaciado, radios, ESPACIO_EXTRA_TECLADO } from "@/theme/spacing";
 
 function Fila({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
@@ -267,7 +267,10 @@ const estilos = StyleSheet.create({
   },
   contenido: {
     padding: espaciado.lg,
-    paddingBottom: espaciado.xl,
+    // El campo "Detalle de incidencia" del check-out crece hacia el final
+    // del formulario — mismo motivo que NuevoCheckInScreen.tsx, ver
+    // ESPACIO_EXTRA_TECLADO.
+    paddingBottom: ESPACIO_EXTRA_TECLADO,
   },
   titulo: {
     ...tipografia.titulo,

@@ -8,6 +8,7 @@ import {
   Keyboard,
   ScrollView,
   findNodeHandle,
+  UIManager,
 } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
@@ -63,17 +64,27 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
   // el campo más propenso a quedar oculto: el último del formulario.
   function manejarFocusIncidencias() {
     const scroll = scrollViewRef.current;
-    // measureLayout exige un HostInstance o el número de nodo nativo —
-    // ScrollView es un componente compuesto, no lo satisface directo;
-    // findNodeHandle resuelve el nodo nativo real que sí sirve como destino.
-    const nodoScroll = scroll ? findNodeHandle(scroll) : null;
-    if (!scroll || nodoScroll == null) return;
-    refIncidencias.current?.measureLayout(
+    if (!scroll) return;
+    // ref.measureLayout() (el método de instancia, oficialmente el
+    // "recomendado") tira "Warning: ref.measureLayout must be called with a
+    // ref to a native component" con el ref de CampoTexto (envuelto con
+    // forwardRef) — no lo reconoce como componente nativo pese a que
+    // reenvía el ref directo al TextInput real. UIManager.measureLayout(),
+    // la función de más bajo nivel, no llama al método sobre la instancia
+    // del ref: solo necesita los tags numéricos de ambos nodos (vía
+    // findNodeHandle), así que no depende de que el ref "sea" reconocido
+    // como nativo — evita el problema por completo.
+    const nodoCampo = findNodeHandle(refIncidencias.current);
+    const nodoScroll = findNodeHandle(scroll);
+    if (nodoCampo == null || nodoScroll == null) return;
+
+    UIManager.measureLayout(
+      nodoCampo,
       nodoScroll,
+      () => {},
       (_left, top) => {
         scroll.scrollTo({ y: Math.max(0, top - espaciado.md), animated: true });
-      },
-      () => {}
+      }
     );
   }
 
