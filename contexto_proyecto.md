@@ -1,6 +1,6 @@
 # Contexto del proyecto — app-transp
 
-_Última actualización: 2026-09-11._
+_Última actualización: 2026-09-12._
 
 Documento de referencia técnica para cualquier IA (o persona) que retome trabajo en este
 repositorio. Refleja el **estado real del código**, no el plan original — donde la implementación
@@ -559,25 +559,17 @@ chofer si se decide agregar uno.
   `server/mock` con la app corriendo) — es el fallback de archivo que usa Metro sin Watchman
   instalado, no algo propio de este código. Si pasa, hay que matar el proceso y correr
   `npx expo start` de nuevo; instalar Watchman lo evitaría.
-- ✅ **Resuelto (2026-09-11)**: el Dashboard ya tiene cuentas individuales de administrador (tabla
-  `admins`, `bcryptjs`, ver §4) en vez de una sola contraseña compartida por env var; `editado_por`
-  ahora es una identidad real derivada de la sesión, no texto libre. Sigue siendo un solo rol
-  (fuera de alcance: niveles de permiso diferenciados). Pendiente de ejecutar en el proyecto
-  Supabase real y en Render (no lo hizo esta sesión, ver instrucciones abajo):
-  1. Correr `supabase/schema_v7_admins.sql` en el SQL Editor.
-  2. Generar el hash de la primera contraseña con
-     `node -e "require('bcryptjs').hash(process.argv[1],10).then(h=>console.log(h))" "LaContraseña"`
-     (desde `dashboard/`, donde ya está instalado `bcryptjs`) e insertar la fila a mano en `admins`
-     desde el SQL Editor (`email` en minúsculas).
-  3. Cargar `DASHBOARD_SESSION_SECRET` (nueva) como env var en Render, plan `free`, servicio
-     `app-transp-dashboard` — cualquier string largo y aleatorio, no necesita relación con ninguna
-     contraseña de admin.
-  4. Deploy del Dashboard con el login nuevo, confirmar que funciona en producción, y **recién
-     entonces** retirar `DASHBOARD_ADMIN_PASSWORD` de las env vars de Render (el código ya no la lee,
-     pero la env var en sí vive en la plataforma, no en el repo).
-  - Fuera de alcance a propósito (no construido): pantalla CRUD de administradores (el alta sigue
-    siendo manual por SQL Editor), recuperación de contraseña por correo, límite de intentos
-    fallidos de login (rate limiting).
+- ✅ **Resuelto y desplegado (2026-09-12)**: el Dashboard ya tiene cuentas individuales de
+  administrador (tabla `admins`, `bcryptjs`, ver §4) en vez de una sola contraseña compartida por
+  env var; `editado_por` ahora es una identidad real derivada de la sesión, no texto libre. Migración
+  completa de punta a punta: `schema_v7_admins.sql` corrido en el proyecto Supabase real, primer
+  admin insertado a mano, `DASHBOARD_SESSION_SECRET` cargada en Render, deploy confirmado en
+  producción (login pide correo/contraseña, badge "Editado" muestra la identidad real, logout
+  funciona), y `DASHBOARD_ADMIN_PASSWORD` **ya retirada** de las env vars de Render — el código no la
+  lee desde antes del deploy, y ahora tampoco existe en la plataforma. Sigue siendo un solo rol
+  (fuera de alcance a propósito: niveles de permiso diferenciados, pantalla CRUD de administradores
+  — el alta sigue siendo manual por SQL Editor —, recuperación de contraseña por correo, límite de
+  intentos fallidos de login).
 - `server/src/` (`db/schema.sql`, `routes/auth.example.ts`) es documentación de referencia de un
   backend "desde cero" que nunca se llegó a construir — quedó obsoleta frente al Supabase real de
   `supabase/schema.sql` y no se mantuvo sincronizada (usa nombres de campo distintos, ej.
