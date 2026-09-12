@@ -479,16 +479,34 @@ de ese chofer, ajustado a las calles.
   orden por tiempo se hacen en la query, no en la vista.
 - `dashboard/app/api/tracking/ruta-jornada/route.ts` — `GET ?jornadaId=`, pings ordenados
   ascendente por `timestamp`.
-- `dashboard/lib/osrm.ts` — cliente de la **API pública y gratuita de OSRM**
-  (`router.project-osrm.org/route/v1/driving`). ⚠️ Es el servidor demo público de OSRM, no un
-  servicio contratado por el proyecto — su política de uso es para pruebas/tráfico liviano, no
-  producción sostenida; puede aplicar rate-limit o caerse sin aviso. Si el trazado por calles se
-  vuelve una función central (no solo una mejora visual ocasional), habría que evaluar una
-  instancia propia o un proveedor pago (Mapbox Directions, Google Roads, etc.). La función recibe y
-  devuelve coordenadas como `[lat, lng]` (consistente con el resto del proyecto — Leaflet,
-  `PosicionChofer`, etc.), manejando la inversión a `[lng, lat]` que exige GeoJSON/OSRM de forma
-  transparente para quien la llama. Muestrea a máximo 100 puntos (límite práctico de largo de URL,
-  no de la API en sí) conservando siempre el primer y el último punto.
+- `dashboard/lib/osrm.ts` — cliente de la **API pública y gratuita de OSRM**. ⚠️ **Corrección
+  (2026-09-12, encontrada durante el piloto con choferes reales)**: este documento decía que se
+  usaba el servicio `/route` (`router.project-osrm.org/route/v1/driving`) — se cambió a **`/match`**
+  (`router.project-osrm.org/match/v1/driving`, Map Matching). `/route` calcula la ruta "óptima" entre
+  los puntos recibidos, tratándolos como paradas deliberadas; con los pings espaciados del GPS
+  best-effort de la app móvil (~20s, sin cola de reintentos, ver `trackingService.ts`), terminaba
+  dibujando el camino más corto/rápido entre esos puntos según OSRM, no necesariamente la calle real
+  que tomó el chofer — confirmado en el piloto: el trazado no coincidía con el recorrido real.
+  `/match` sí ajusta una secuencia de puntos GPS al camino más probable, usando el `timestamp` de
+  cada ping y un radio de tolerancia de precisión (`radiuses`). Como `ubicaciones_tracking` no
+  guarda la precisión real de cada ping (no existe esa columna), se usa un **radio fijo de 25
+  metros** para todos los puntos en vez de sumar tracking de precisión real en esta iteración. Si
+  `/match` devuelve el trayecto partido en varios `matchings` (pasa con un salto de más de 60s entre
+  dos pings, o una transición poco plausible), se concatenan sus geometrías en orden sin lógica
+  especial — `<Polyline>` ya dibuja una línea recta entre cada par de puntos consecutivos del
+  arreglo, así que la concatenación conecta el final de un tramo con el inicio del siguiente con una
+  línea recta de por sí, el mismo criterio que ya usaba (y sigue usando) el archivo como fallback
+  cuando OSRM falla del todo. El resto del diseño no cambió: sigue siendo el servidor demo público de
+  OSRM, no un servicio contratado — su política de uso es para pruebas/tráfico liviano, no producción
+  sostenida; puede aplicar rate-limit o caerse sin aviso, y si el trazado por calles se vuelve una
+  función central (no solo una mejora visual ocasional) habría que evaluar una instancia propia o un
+  proveedor pago (Mapbox Directions, Google Roads, etc.). La función recibe pings con `lat`/`lng`/
+  `timestamp` y devuelve coordenadas como `[lat, lng]` (consistente con el resto del proyecto —
+  Leaflet, `PosicionChofer`, etc.), manejando la inversión a `[lng, lat]` que exige GeoJSON/OSRM de
+  forma transparente para quien la llama. Muestrea a máximo 100 puntos (límite práctico de largo de
+  URL, no de la API en sí) conservando siempre el primer y el último punto — el muestreo preserva
+  ping completo (lat/lng/timestamp), no solo lat/lng, porque `/match` necesita el timestamp de cada
+  coordenada que sobrevive el muestreo.
 - `dashboard/lib/hooks/use-ruta-jornada.ts` — orquesta: pings crudos → OSRM → si OSRM falla, cae a
   una línea recta entre los pings en vez de no mostrar nada.
 - `dashboard/components/mapa/ruta-historica.tsx` — `Polyline` (`#2563eb`, grosor 4, opacidad 0.8) +

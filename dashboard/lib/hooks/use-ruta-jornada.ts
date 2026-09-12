@@ -43,7 +43,7 @@ export function useRutaJornada(jornadaId: string | null) {
       }
 
       try {
-        const trazado = await getOSRMRoute(lineaRecta);
+        const trazado = await getOSRMRoute(puntos);
         return { trazado, puntos, ajustadoACalles: true };
       } catch (err) {
         console.error("OSRM falló, se muestra línea recta entre los pings:", err);

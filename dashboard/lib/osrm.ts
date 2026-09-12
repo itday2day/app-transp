@@ -1,3 +1,5 @@
+import type { PuntoRuta } from "@/lib/types";
+
 // Cliente del lado del navegador para la API pública de OSRM (Open Source
 // Routing Machine) — ajusta una secuencia de pings de GPS a las calles reales
 // en vez de dibujar líneas rectas entre puntos.
@@ -12,8 +14,20 @@
 // Google Roads, etc.). Por eso todo este archivo tiene un fallback: si OSRM
 // falla, quien lo llama debe caer a la línea recta entre los pings crudos
 // (ver useRutaJornada).
+//
+// ⚠️ **Corrección (encontrada en el piloto con choferes reales)**: este
+// archivo usaba el servicio `/route` de OSRM, que calcula la ruta "óptima"
+// entre los puntos que recibe tratándolos como paradas deliberadas — no como
+// una traza de GPS a reconstruir. Con pings espaciados (~20s, GPS
+// best-effort sin cola de reintentos, ver trackingService.ts de la app
+// móvil), `/route` terminaba dibujando el camino que OSRM considera más
+// corto/rápido entre esos puntos, que en el piloto no coincidió con la calle
+// real que tomó el chofer. `/match` (Map Matching) es el servicio de OSRM
+// hecho para este caso: ajusta una secuencia de puntos GPS al camino más
+// probable que el vehículo siguió, usando el horario de cada punto y un
+// margen de error de precisión.
 
-const OSRM_BASE_URL = "https://router.project-osrm.org/route/v1/driving";
+const OSRM_BASE_URL = "https://router.project-osrm.org/match/v1/driving";
 
 // Sin esto, un servidor demo colgado (no caído — colgado, sin responder)
 // deja el fetch pendiente para siempre y con él la query de TanStack Query en
@@ -30,43 +44,61 @@ const TIMEOUT_MS = 8000;
 // el primer y el último punto (para no perder inicio/fin del trayecto).
 const MAX_PUNTOS_OSRM = 100;
 
-function muestrear(coordenadas: [number, number][], max: number): [number, number][] {
-  if (coordenadas.length <= max) return coordenadas;
+// `ubicaciones_tracking`/`ubicaciones_tracking_planas` no guardan la
+// precisión real del GPS de cada ping (no existe esa columna) — se usa un
+// radio fijo generoso para todos los puntos en vez de sumar tracking de
+// precisión real en esta iteración. `/match` lo usa como margen de error
+// tolerado al buscar a qué calle pertenece cada ping.
+const RADIO_GPS_METROS = 25;
 
-  const paso = (coordenadas.length - 1) / (max - 1);
-  const muestreadas: [number, number][] = [];
+function muestrear<T>(items: T[], max: number): T[] {
+  if (items.length <= max) return items;
+
+  const paso = (items.length - 1) / (max - 1);
+  const muestreados: T[] = [];
   for (let i = 0; i < max; i++) {
-    muestreadas.push(coordenadas[Math.round(i * paso)]);
+    muestreados.push(items[Math.round(i * paso)]);
   }
-  return muestreadas;
+  return muestreados;
 }
 
-interface RespuestaOSRM {
+interface MatchingOSRM {
+  geometry: { coordinates: [number, number][] };
+}
+
+interface RespuestaOSRMMatch {
   code: string;
-  routes?: { geometry: { coordinates: [number, number][] } }[];
+  matchings?: MatchingOSRM[];
 }
 
 /**
- * Recibe pings de GPS como `[lat, lng]` (el orden que usa el resto de este
- * proyecto — Leaflet, PosicionChofer, etc.) y devuelve el trazado ajustado a
- * las calles, también como `[lat, lng]`, listo para `<Polyline positions=.../>`.
- * La conversión a `lng,lat` (lo que exige la URL de OSRM) y de vuelta a
+ * Recibe pings de GPS (con `lat`/`lng`/`timestamp`, tal como los devuelve
+ * `/api/tracking/ruta-jornada`) y devuelve el trazado ajustado a las calles
+ * como `[lat, lng]` — el orden que usa el resto de este proyecto (Leaflet,
+ * PosicionChofer, etc.), listo para `<Polyline positions=.../>`. La
+ * conversión a `lng,lat` (lo que exige la URL de OSRM) y de vuelta a
  * `lat,lng` (lo que devuelve el GeoJSON de la respuesta) queda encapsulada
  * acá — quien llama nunca maneja el orden invertido.
  *
- * Tira un error si OSRM no responde o no encuentra ruta — es responsabilidad
- * de quien llama decidir el fallback (ver useRutaJornada).
+ * Tira un error si OSRM no responde o no puede ajustar la ruta — es
+ * responsabilidad de quien llama decidir el fallback (ver useRutaJornada).
  */
-export async function getOSRMRoute(puntosLatLng: [number, number][]): Promise<[number, number][]> {
-  if (puntosLatLng.length < 2) {
+export async function getOSRMRoute(pings: PuntoRuta[]): Promise<[number, number][]> {
+  if (pings.length < 2) {
     throw new Error("Se necesitan al menos 2 puntos para calcular una ruta.");
   }
 
-  const muestreados = muestrear(puntosLatLng, MAX_PUNTOS_OSRM);
-  const coordenadasUrl = muestreados.map(([lat, lng]) => `${lng},${lat}`).join(";");
+  const muestreados = muestrear(pings, MAX_PUNTOS_OSRM);
+  const coordenadasUrl = muestreados.map((p) => `${p.lng},${p.lat}`).join(";");
+  const timestampsUrl = muestreados
+    .map((p) => Math.floor(new Date(p.timestamp).getTime() / 1000))
+    .join(";");
+  const radiusesUrl = muestreados.map(() => RADIO_GPS_METROS).join(";");
 
   const respuesta = await fetch(
-    `${OSRM_BASE_URL}/${coordenadasUrl}?overview=full&geometries=geojson`,
+    `${OSRM_BASE_URL}/${coordenadasUrl}` +
+      `?geometries=geojson&overview=full` +
+      `&timestamps=${timestampsUrl}&radiuses=${radiusesUrl}`,
     { signal: AbortSignal.timeout(TIMEOUT_MS) }
   );
 
@@ -74,12 +106,21 @@ export async function getOSRMRoute(puntosLatLng: [number, number][]): Promise<[n
     throw new Error(`OSRM respondió ${respuesta.status}.`);
   }
 
-  const cuerpo = (await respuesta.json()) as RespuestaOSRM;
+  const cuerpo = (await respuesta.json()) as RespuestaOSRMMatch;
 
-  if (cuerpo.code !== "Ok" || !cuerpo.routes?.[0]) {
-    throw new Error(`OSRM no pudo calcular la ruta (code: ${cuerpo.code}).`);
+  if (cuerpo.code !== "Ok" || !cuerpo.matchings?.length) {
+    throw new Error(`OSRM no pudo ajustar la ruta (code: ${cuerpo.code}).`);
   }
 
-  // GeoJSON siempre es [lng, lat] — acá se invierte a [lat, lng] para Leaflet.
-  return cuerpo.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+  // `/match` puede partir el trayecto en varios `matchings` cuando hay un
+  // salto de más de 60s entre dos pings consecutivos, o una transición poco
+  // plausible entre ellos (cada uno trae su propia geometría). No hace falta
+  // unir los tramos con nada especial: `<Polyline>` ya dibuja una línea recta
+  // entre cada par de puntos consecutivos del arreglo `positions`, así que
+  // concatenar las geometrías en orden conecta el final de un tramo con el
+  // inicio del siguiente exactamente con el mismo criterio que ya usa este
+  // archivo como fallback cuando OSRM falla del todo.
+  return cuerpo.matchings.flatMap((matching) =>
+    matching.geometry.coordinates.map(([lng, lat]): [number, number] => [lat, lng])
+  );
 }
