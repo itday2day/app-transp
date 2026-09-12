@@ -29,7 +29,6 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
   const [combustibleFinal, setCombustibleFinal] = useState(
     jornada.combustible_final != null ? String(jornada.combustible_final) : ""
   );
-  const [editadoPor, setEditadoPor] = useState("");
   const [motivoEdicion, setMotivoEdicion] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,10 +37,6 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
   async function onSubmit() {
     setError(null);
 
-    if (!editadoPor.trim()) {
-      setError("Indicá tu nombre o correo.");
-      return;
-    }
     if (!motivoEdicion.trim()) {
       setError("El motivo de la corrección es obligatorio.");
       return;
@@ -49,7 +44,6 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
 
     const body: EditarJornadaRequest = {
       id: jornada.id,
-      editadoPor: editadoPor.trim(),
       motivoEdicion: motivoEdicion.trim(),
       empresa: empresa.trim(),
       matricula: matricula.trim(),
@@ -156,16 +150,6 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
         </div>
 
         <div className="border-t border-border pt-4">
-          <Label htmlFor="edit-editado-por">Tu nombre o correo</Label>
-          <Input
-            id="edit-editado-por"
-            placeholder="admin@empresa.com"
-            value={editadoPor}
-            onChange={(e) => setEditadoPor(e.target.value)}
-          />
-        </div>
-
-        <div>
           <Label htmlFor="edit-motivo">Motivo de la corrección</Label>
           <textarea
             id="edit-motivo"

@@ -15,10 +15,13 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: DASHBOARD_ADMIN_PASSWORD
+      - key: DASHBOARD_SESSION_SECRET
         sync: false
       - key: MOCK_SERVER_URL
         sync: false
+      # DASHBOARD_ADMIN_PASSWORD quitada (2026-09-11): reemplazada por la
+      # tabla `admins` (contraseña individual por administrador, ver
+      # supabase/schema_v7_admins.sql y contexto_proyecto.md §4).
 
   - type: web
     name: app-transp-mock-server

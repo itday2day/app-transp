@@ -136,11 +136,21 @@ export interface CamposEditablesJornada {
 
 export interface EditarJornadaRequest extends CamposEditablesJornada {
   id: string;
-  editadoPor: string;
   motivoEdicion: string;
 }
 
 export interface EditarJornadaResponse {
   mensaje: string;
   jornada: JornadaRow;
+}
+
+/** Fila cruda de la tabla public.admins (ver supabase/schema_v7_admins.sql). */
+export interface AdminRow {
+  id: string;
+  email: string;
+  nombre: string;
+  password_hash: string;
+  activo: boolean;
+  creado_en: string;
+  ultimo_acceso: string | null;
 }

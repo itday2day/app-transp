@@ -98,7 +98,7 @@ credenciales, genera un link de previsualización del correo) — alcanza para d
 | `NEXT_PUBLIC_SUPABASE_URL`      | URL del proyecto Supabase                                             |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave anon/publicable                                                 |
 | `SUPABASE_SERVICE_ROLE_KEY`     | Clave service_role — **salta RLS**, solo se usa en Route Handlers     |
-| `DASHBOARD_ADMIN_PASSWORD`      | Contraseña única de acceso al Dashboard (no hay cuentas individuales) |
+| `DASHBOARD_SESSION_SECRET`      | Secreto para firmar la cookie de sesión (HMAC-SHA256, ver `lib/auth.ts`) |
 | `MOCK_SERVER_URL`               | URL de `server/mock` (`http://localhost:4000` en local)               |
 
 ### `server/mock` (variables de entorno del proceso, sin archivo `.env` propio en producción)

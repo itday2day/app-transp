@@ -1,6 +1,6 @@
 # Contexto del proyecto — app-transp
 
-_Última actualización: 2026-09-10._
+_Última actualización: 2026-09-11._
 
 Documento de referencia técnica para cualquier IA (o persona) que retome trabajo en este
 repositorio. Refleja el **estado real del código**, no el plan original — donde la implementación
@@ -44,7 +44,8 @@ app_transp_project/
 │   ├── schema_v3_combustible_porcentaje.sql  # combustible: enum de texto -> porcentaje 0-100
 │   ├── schema_v4_fotos_incidencia.sql  # columna fotos_incidencia text[]
 │   ├── schema_v5_edicion_jornadas.sql  # auditoría de edición manual (ver §4)
-│   └── schema_v6_ruta_jornada.sql  # vista para el trazado histórico de rutas (ver §4)
+│   ├── schema_v6_ruta_jornada.sql  # vista para el trazado histórico de rutas (ver §4)
+│   └── schema_v7_admins.sql  # tabla `admins` — cuentas individuales del Dashboard (ver §4)
 ├── eslint.config.js / .prettierrc.json   # Lint/formato de la app móvil
 └── tsconfig.json               # Excluye "server" y "dashboard" (cada uno tiene el suyo)
 ```
@@ -224,12 +225,21 @@ pendiente hacia Supabase (máx. 5 intentos por jornada), disparado por `NetworkC
 conectividad cada 15s). El GPS (`src/services/trackingService.ts`) es distinto: _best-effort_, sin
 cola de reintentos en SQLite — perder un ping no importa, el siguiente llega en 20s.
 
-**Pantallas**: `LoginScreen`, `RegistroScreen`, `CheckInScreen` (+ lista de rutas activas),
-`HistorialScreen` (+ botón exportar), `DetalleJornadaScreen`. No existe una pantalla
-`CheckOutScreen` propia — el check-out se hace desde `DetalleJornadaScreen` (revela `CheckOutForm`
-in situ). Navegación **totalmente tipada, sin `any`** (`src/navigation/types.ts`):
+**Pantallas**: `LoginScreen`, `RegistroScreen`, `CheckInScreen` (solo la lista de rutas activas),
+`NuevoCheckInScreen`, `HistorialScreen` (+ botón exportar), `DetalleJornadaScreen`. No existe una
+pantalla `CheckOutScreen` propia — el check-out se hace desde `DetalleJornadaScreen` (revela
+`CheckOutForm` in situ). Navegación **totalmente tipada, sin `any`** (`src/navigation/types.ts`):
 `RootStackNavigationProp`, `TabsNavigationProp<T>` (composite type — los tabs necesitan navegar a
 rutas del stack raíz, como `DetalleJornada`), `DetalleJornadaRouteProp`.
+
+⚠️ **Corrección (2026-09-11)**: iniciar una ruta nueva **ya no es un formulario inline** dentro de
+`CheckInScreen` (que también muestra la lista de rutas activas) — es su propia pantalla del stack,
+`NuevoCheckInScreen` (ruta `NuevoCheckIn`, sin parámetros), con botón "Atrás" nativo (header, mismo
+patrón que `DetalleJornadaScreen`/`RegistroScreen`) + un botón "Cancelar" explícito al pie (mismo
+patrón que ya usa `CheckOutForm`). Antes, una vez abierto el formulario, no había ninguna forma de
+cancelarlo salvo enviarlo. `useJornadasAbiertas()` (en `CheckInScreen`) ya usaba `useFocusEffect`,
+así que la lista se refresca sola al volver con `goBack()` tras un check-in exitoso, sin necesidad
+de pasar ningún callback de refresco entre pantallas.
 
 **Campos de una jornada** (`src/types/index.ts`): empresa, matrícula, ruta, km inicial/final,
 combustible inicial/final (`NivelCombustible` — porcentaje `number` 0-100, ver más abajo),
@@ -323,6 +333,44 @@ escaneo dentro de `server/mock/node_modules`. Metro no se reinicia solo tras un 
 matar el proceso y correr `npx expo start` de nuevo. Instalar Watchman evitaría este fallback más
 frágil, pero no se hizo (fuera de alcance).
 
+**Fix — banner "Sincronizando…" parpadeando cada 15s (2026-09-10)**: `NetworkContext.tsx` revisa
+si hay algo pendiente de sincronizar cada `INTERVALO_REVISION_MS` (15s), y encendía
+`sincronizando = true` en **cada** corrida, aunque no hubiera absolutamente nada para subir —
+`BannerConexion.tsx` muestra el banner exactamente cuando `sincronizando` está en `true`, así que
+parpadeaba cada 15s incluso con la app 100% al día. `syncService.ts` ahora expone
+`hayJornadasPendientes(forzarReintento)` (mismo criterio de `MAX_INTENTOS` que
+`sincronizarPendientes`, para que nunca queden desalineados), y `sincronizarAhora()` en
+`NetworkContext` lo chequea primero — el banner solo se enciende cuando de verdad hay algo subiendo.
+
+**Manejo de teclado en formularios (2026-09-11)** — SDD completo (spec aprobada antes de
+implementar). `CheckInScreen.tsx` (ahora `NuevoCheckInScreen.tsx`, ver arriba) no tenía
+`KeyboardAvoidingView` ni `keyboardShouldPersistTaps` en absoluto — el gap más severo, ya
+corregido con el mismo patrón (`behavior={Platform.OS === "ios" ? "padding" : "height"}`) que ya
+usaban `RegistroScreen.tsx` y `DetalleJornadaScreen.tsx` (esas dos no se tocaron). Para los campos
+de texto largo al final de un formulario ("Incidencias" en check-in, "Detalle de incidencia" en
+`IncidenciasForm.tsx` dentro de `CheckOutForm.tsx`) se agregó scroll-al-enfocar **preciso** (no
+`scrollToEnd`, medición real de la posición del campo) — encontramos y resolvimos dos bugs reales,
+no uno, confirmados en vivo contra el log de Metro:
+
+1. `ref.measureLayout()` (el método de instancia, oficialmente "el recomendado" por React Native)
+   tira `Warning: ref.measureLayout must be called with a ref to a native component` con el ref de
+   `CampoTexto` (envuelto con `forwardRef`) — no lo reconoce como componente nativo pese a que
+   reenvía el ref directo al `TextInput` real. Se resolvió usando `UIManager.measureLayout()` (la
+   función de más bajo nivel: tags numéricos vía `findNodeHandle` en vez de llamar el método sobre
+   la instancia del ref) — evita el problema por completo, y funciona igual bajo Fabric/New
+   Architecture (rama interna hacia `FabricUIManager.measureLayout`).
+2. **La causa real de que el campo siguiera tapado** pese a que el `scrollTo` corría bien: el campo
+   es el **último elemento del formulario** — sin importar qué tan preciso fuera el cálculo, el
+   `ScrollView` no tenía contenido de sobra debajo como para poder subirlo del todo arriba del
+   teclado (se topaba con el límite de su propio contenido scrolleable). Se agregó
+   `ESPACIO_EXTRA_TECLADO` (300, nuevo en `src/theme/spacing.ts` — no es un token de ritmo visual
+   como el resto de `espaciado`, por eso vive aparte con su propio nombre) como `paddingBottom`
+   extra del `contentContainerStyle` en los dos formularios afectados.
+
+Sin `keyboardVerticalOffset` en ningún lado — las pantallas con header nativo (native-stack) ya
+funcionan sin él, agregar un número fijo sin poder verlo en un dispositivo real sería un valor
+inventado.
+
 ## 4. Módulo Dashboard web (`dashboard/`)
 
 Proyecto Next.js **independiente y autocontenido** (su propio `package.json`/`node_modules`),
@@ -337,10 +385,36 @@ propio con portal + Escape/click-afuera, y `Tooltip` propio con `group-hover`/`g
 Tailwind, sin JS ni portal), `react-leaflet` (carga dinámica `ssr:false`, obligatoria porque
 Leaflet necesita `window`), TanStack Query, `next-themes` para modo claro/oscuro.
 
-**Auth**: ⚠️ no usa Supabase Auth ni las cuentas de chofer. Login de administrador único por
-contraseña compartida (env var `DASHBOARD_ADMIN_PASSWORD`), cookie firmada con HMAC-SHA256
-(`lib/auth.ts`, Web Crypto nativo, sin librería de JWT). `proxy.ts` (el `middleware.ts` de Next 16)
-protege todas las rutas menos `/login` y `/api/auth/*`.
+**Auth**: ⚠️ no usa Supabase Auth ni las cuentas de chofer. **Corrección (2026-09-11)**: dejó de ser
+una sola contraseña compartida — ahora cada administrador tiene su propia cuenta en la tabla
+`admins` (`supabase/schema_v7_admins.sql`: `id uuid`, `email unique`, `nombre`, `password_hash`,
+`activo`, `creado_en`, `ultimo_acceso`; sin RLS, se lee solo desde Route Handlers con el
+`service_role` key, igual que el resto de tablas del Dashboard). Un solo rol — cualquier admin
+autenticado tiene el mismo acceso que antes (mapa, jornadas, exportar, corregir); no hay niveles de
+permiso.
+
+- `POST /api/auth/login` (`app/api/auth/login/route.ts`, runtime Node): recibe `{ email, password
+}`, busca el admin por `email` (comparación exacta en minúsculas — los correos se insertan en
+  minúsculas al dar de alta un admin), valida `activo = true` y `bcryptjs.compare(password,
+  password_hash)`. Mensaje de error genérico ("Correo o contraseña incorrectos.") sin distinguir
+  cuál de los tres falló, para no filtrar qué correos existen. Si es correcto, actualiza
+  `ultimo_acceso = now()` y emite la cookie de sesión.
+- `lib/auth.ts` (Web Crypto nativo, sin librería de JWT — mismo criterio que antes): la cookie
+  firmada (HMAC-SHA256) pasa de un flag genérico a un payload real,
+  `{ adminId, email, nombre, iat }` codificado en base64url + firma hex. El secreto de firma es
+  ahora `DASHBOARD_SESSION_SECRET` (env var nueva) — **no** la contraseña de ningún admin (cada uno
+  tiene la suya, con su propio hash en `admins.password_hash`; ya no hay un único secreto compartido
+  que además sirva para firmar cookies). `obtenerAdminSesion(valorCookie)` valida la firma y
+  devuelve la identidad, o `null`; `esCookieSesionValida()` (la usa `proxy.ts`) es ese mismo chequeo
+  reducido a booleano. A propósito el módulo sigue sin importar `next/headers` ni `bcryptjs`: quien
+  llama (el Route Handler, vía `cookies()`) le pasa el valor crudo de la cookie, para que el archivo
+  siga funcionando igual en runtime Edge (`proxy.ts`) y Node (Route Handlers) — `bcryptjs` (hash de
+  contraseña) solo se usa en el login, que corre en Node.
+- `proxy.ts` no cambió de fondo: sigue validando solo la firma de la cookie (`esCookieSesionValida`),
+  protegiendo todas las rutas menos `/login` y `/api/auth/*`.
+- Logout: `POST /api/auth/logout` + `components/logout-button.tsx` (botón visible en el header del
+  layout del Dashboard) — ya existían antes de esta corrección, sin cambios.
+- `DASHBOARD_ADMIN_PASSWORD` **se quitó** (código y `render.yaml`) una vez migrado a `admins`.
 
 **Rutas**:
 
@@ -379,16 +453,21 @@ motivo) cuando `fue_editado === true`. Tras guardar, se invalida la query de Tan
 (`queryClient.invalidateQueries({ queryKey: ["jornadas"] })`) para refrescar la tabla sin recargar
 la página.
 
-⚠️ **`editado_por` es texto libre, no un ID/email real derivado de la sesión**: el Dashboard no
-tiene cuentas de administrador individuales — es una sola contraseña compartida
-(`DASHBOARD_ADMIN_PASSWORD`), la cookie de sesión (`lib/auth.ts`) es un flag genérico firmado sin
-ningún email/id embebido. Quien edita escribe su propio nombre o correo en el formulario, igual que
-el "Correo de destino" del export — no hay nada que el servidor pueda derivar de la sesión sin
-construir un sistema de cuentas de administrador (fuera de alcance de esta funcionalidad).
+✅ **Corrección (2026-09-11)**: `editado_por` ya no es texto libre que escribe quien edita — ahora
+se deriva de la sesión real (`obtenerAdminSesion()` en `lib/auth.ts`, ver "Auth" arriba), usando el
+`nombre` del admin autenticado (o su `email` si no tuviera nombre cargado). El campo "Tu nombre o
+correo" se quitó de `editar-jornada-dialog.tsx`; `EditarJornadaRequest` ya no lleva `editadoPor` en
+el body. La columna en sí (`jornadas.editado_por text`, `schema_v5_edicion_jornadas.sql`) no cambió
+de tipo — sigue siendo texto plano, no una FK a `admins.id` (habría exigido una migración de datos
+para las filas ya editadas antes de este cambio; el texto real ahora es siempre confiable porque lo
+escribe el servidor, no el formulario).
 
-**Autenticación de `/api/jornadas/editar`**: no repite el chequeo de sesión — igual que el resto de
-Route Handlers de este Dashboard (`reportes/exportar`, `tracking/ultimas-posiciones`, `jornadas`),
-confía en que `proxy.ts` (middleware) ya protege todo `/api/*` salvo `/api/auth/*`.
+**Autenticación de `/api/jornadas/editar`**: no repite el chequeo de *si hay* sesión — igual que el
+resto de Route Handlers de este Dashboard (`reportes/exportar`, `tracking/ultimas-posiciones`,
+`jornadas`), confía en que `proxy.ts` (middleware) ya protege todo `/api/*` salvo `/api/auth/*`. Sí
+lee la cookie para obtener la *identidad* del admin (vía `obtenerAdminSesion()`, no solo el booleano
+`esCookieSesionValida()`) — si por algún motivo la sesión no parsea (cookie corrupta, secreto
+rotado), devuelve 401 en vez de guardar con una identidad vacía.
 
 **Trazado histórico de rutas (2026-09-10)**: en `/mapa`, botón "Ver ruta"/"Ocultar ruta" en el
 panel de choferes activos (`panel-choferes.tsx`) dibuja el trayecto completo de la jornada actual
@@ -480,10 +559,25 @@ chofer si se decide agregar uno.
   `server/mock` con la app corriendo) — es el fallback de archivo que usa Metro sin Watchman
   instalado, no algo propio de este código. Si pasa, hay que matar el proceso y correr
   `npx expo start` de nuevo; instalar Watchman lo evitaría.
-- El Dashboard no tiene roles de administrador (tabla `admins`, etc.) — es una sola contraseña
-  compartida por env var. Suficiente para el MVP interno actual, no para múltiples administradores
-  con distintos permisos. Esto también limita la edición de jornadas: `editado_por` es texto libre
-  que escribe quien edita, no una identidad verificada (ver §4).
+- ✅ **Resuelto (2026-09-11)**: el Dashboard ya tiene cuentas individuales de administrador (tabla
+  `admins`, `bcryptjs`, ver §4) en vez de una sola contraseña compartida por env var; `editado_por`
+  ahora es una identidad real derivada de la sesión, no texto libre. Sigue siendo un solo rol
+  (fuera de alcance: niveles de permiso diferenciados). Pendiente de ejecutar en el proyecto
+  Supabase real y en Render (no lo hizo esta sesión, ver instrucciones abajo):
+  1. Correr `supabase/schema_v7_admins.sql` en el SQL Editor.
+  2. Generar el hash de la primera contraseña con
+     `node -e "require('bcryptjs').hash(process.argv[1],10).then(h=>console.log(h))" "LaContraseña"`
+     (desde `dashboard/`, donde ya está instalado `bcryptjs`) e insertar la fila a mano en `admins`
+     desde el SQL Editor (`email` en minúsculas).
+  3. Cargar `DASHBOARD_SESSION_SECRET` (nueva) como env var en Render, plan `free`, servicio
+     `app-transp-dashboard` — cualquier string largo y aleatorio, no necesita relación con ninguna
+     contraseña de admin.
+  4. Deploy del Dashboard con el login nuevo, confirmar que funciona en producción, y **recién
+     entonces** retirar `DASHBOARD_ADMIN_PASSWORD` de las env vars de Render (el código ya no la lee,
+     pero la env var en sí vive en la plataforma, no en el repo).
+  - Fuera de alcance a propósito (no construido): pantalla CRUD de administradores (el alta sigue
+    siendo manual por SQL Editor), recuperación de contraseña por correo, límite de intentos
+    fallidos de login (rate limiting).
 - `server/src/` (`db/schema.sql`, `routes/auth.example.ts`) es documentación de referencia de un
   backend "desde cero" que nunca se llegó a construir — quedó obsoleta frente al Supabase real de
   `supabase/schema.sql` y no se mantuvo sincronizada (usa nombres de campo distintos, ej.

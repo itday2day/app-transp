@@ -1,6 +1,6 @@
 "use client";
 
-import { Lock, Truck } from "lucide-react";
+import { Lock, Mail, Truck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -22,7 +23,7 @@ export default function LoginPage() {
       const respuesta = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ email, password }),
       });
 
       if (!respuesta.ok) {
@@ -53,13 +54,29 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={onSubmit} className="flex flex-col gap-4">
             <div>
+              <Label htmlFor="email">Correo</Label>
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  autoFocus
+                  required
+                  className="pl-9"
+                  placeholder="admin@empresa.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
               <Label htmlFor="password">Contraseña</Label>
               <div className="relative">
                 <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="password"
                   type="password"
-                  autoFocus
                   required
                   className="pl-9"
                   placeholder="••••••••"

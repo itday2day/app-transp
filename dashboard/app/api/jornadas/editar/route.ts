@@ -1,25 +1,23 @@
+import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { CamposEditablesJornada, JornadaRow } from "@/lib/types";
 
 // POST /api/jornadas/editar
-// Body: { id, editadoPor, motivoEdicion, empresa?, matricula?, ruta?,
-//         kmInicial?, kmFinal?, combustibleInicial?, combustibleFinal? }
+// Body: { id, motivoEdicion, empresa?, matricula?, ruta?, kmInicial?,
+//         kmFinal?, combustibleInicial?, combustibleFinal? }
 //
 // La autenticación de administrador ya la exige `proxy.ts` (middleware) para
 // todo /api/* salvo /api/auth/* — igual que el resto de los Route Handlers
 // de este Dashboard (ver reportes/exportar, tracking/ultimas-posiciones), no
-// se repite el chequeo acá.
-//
-// `editadoPor` es texto libre que escribe quien edita (nombre o correo): el
-// Dashboard no tiene cuentas de administrador individuales (una sola
-// contraseña compartida, ver lib/auth.ts), así que no hay ningún ID/email
-// que derivar de la sesión — ver el comentario ⚠️ en
-// supabase/schema_v5_edicion_jornadas.sql.
+// se repite ese chequeo acá. Lo que sí se lee acá es la identidad del admin
+// ya autenticado (`editado_por` se deriva de la sesión, ver lib/auth.ts —
+// desde que existe la tabla `admins`, ya no es un campo de texto libre que
+// escribe quien edita).
 
 interface CuerpoPeticion {
   id?: unknown;
-  editadoPor?: unknown;
   motivoEdicion?: unknown;
   empresa?: unknown;
   matricula?: unknown;
@@ -39,6 +37,13 @@ function numeroValido(valor: unknown): number | undefined {
 }
 
 export async function POST(request: Request) {
+  const cookieStore = await cookies();
+  const sesion = await obtenerAdminSesion(cookieStore.get(NOMBRE_COOKIE_SESION)?.value);
+  if (!sesion) {
+    return NextResponse.json({ mensaje: "Sesión inválida o expirada." }, { status: 401 });
+  }
+  const editadoPor = sesion.nombre || sesion.email;
+
   let body: CuerpoPeticion;
   try {
     body = (await request.json()) as CuerpoPeticion;
@@ -47,17 +52,10 @@ export async function POST(request: Request) {
   }
 
   const id = stringNoVacio(body.id);
-  const editadoPor = stringNoVacio(body.editadoPor);
   const motivoEdicion = stringNoVacio(body.motivoEdicion);
 
   if (!id) {
     return NextResponse.json({ mensaje: "Falta el id de la jornada." }, { status: 400 });
-  }
-  if (!editadoPor) {
-    return NextResponse.json(
-      { mensaje: "Indicá tu nombre o correo para registrar quién edita." },
-      { status: 400 }
-    );
   }
   if (!motivoEdicion) {
     return NextResponse.json(
