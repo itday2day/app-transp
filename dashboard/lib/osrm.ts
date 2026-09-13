@@ -67,6 +67,38 @@ const MAX_PUNTOS_OSRM = 10;
 // tolerado al buscar a qué calle pertenece cada ping.
 const RADIO_GPS_METROS = 25;
 
+// ⚠️ **Corrección (segunda regresión encontrada en el piloto, después del fix
+// de MAX_PUNTOS_OSRM)**: `ubicaciones_tracking` puede tener pings duplicados
+// exactos (mismo lat/lng/timestamp repetido varias veces — confirmado en una
+// jornada real de prueba: 9 filas guardadas, pero solo 3 posiciones/horarios
+// realmente distintos, el resto eran copias bit a bit de esas tres). Esos
+// duplicados rompen el Hidden Markov Model de `/match`: con la traza tal
+// cual (9 puntos, con duplicados) `/match` respondía
+// `400 {"code":"NoMatch","message":"Could not match the trace."}`; con esos
+// mismos 3 puntos únicos, sin tocar nada más, respondía `code: "Ok"`. Subir
+// el radio (probado a mano con 50/100/200, no solo con este trazado) **no**
+// lo arregla — en cambio empeora: ya en 50m el servidor responde un `TooBig`
+// distinto (`"Radius search size is too large for map matching"`, un límite
+// propio del radio, no de la cantidad de puntos del fix anterior; no se
+// probó el punto exacto entre 25 y 50 donde empieza a fallar, no hace falta
+// para descartar la hipótesis). El origen real
+// de los duplicados está del lado del tracking GPS de la app móvil (no se
+// investigó en esta corrección, queda como deuda técnica — ver
+// contexto_proyecto.md); acá se los filtra de forma defensiva porque de
+// todos modos son ruido puro para el matching: no aportan ninguna
+// información nueva sobre el trayecto.
+function quitarPingsDuplicados(pings: PuntoRuta[]): PuntoRuta[] {
+  return pings.filter((ping, indice) => {
+    if (indice === 0) return true;
+    const anterior = pings[indice - 1];
+    return !(
+      ping.lat === anterior.lat &&
+      ping.lng === anterior.lng &&
+      ping.timestamp === anterior.timestamp
+    );
+  });
+}
+
 function muestrear<T>(items: T[], max: number): T[] {
   if (items.length <= max) return items;
 
@@ -100,11 +132,12 @@ interface RespuestaOSRMMatch {
  * responsabilidad de quien llama decidir el fallback (ver useRutaJornada).
  */
 export async function getOSRMRoute(pings: PuntoRuta[]): Promise<[number, number][]> {
-  if (pings.length < 2) {
+  const pingsUnicos = quitarPingsDuplicados(pings);
+  if (pingsUnicos.length < 2) {
     throw new Error("Se necesitan al menos 2 puntos para calcular una ruta.");
   }
 
-  const muestreados = muestrear(pings, MAX_PUNTOS_OSRM);
+  const muestreados = muestrear(pingsUnicos, MAX_PUNTOS_OSRM);
   const coordenadasUrl = muestreados.map((p) => `${p.lng},${p.lat}`).join(";");
   const timestampsUrl = muestreados
     .map((p) => Math.floor(new Date(p.timestamp).getTime() / 1000))

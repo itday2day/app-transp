@@ -523,7 +523,24 @@ de ese chofer, ajustado a las calles.
   `getOSRMRoute` cuando OSRM responde con un status distinto de 200 ahora incluye el cuerpo de la
   respuesta (antes solo decía "OSRM respondió 400.", sin el `code`/`message` real de OSRM) — así el
   `console.error` de `useRutaJornada` alcanza para diagnosticar un fallo futuro sin tener que abrir
-  las devtools de red a mano.
+  las devtools de red a mano. ⚠️ **Segunda corrección (2026-09-13, misma sesión de piloto)**: arreglado
+  el límite de cantidad de puntos, la prueba real siguió mostrando línea recta — ahora `/match`
+  respondía `400 {"code":"NoMatch","message":"Could not match the trace."}`. Causa confirmada con los
+  pings reales de la jornada de prueba: `ubicaciones_tracking` tenía **pings duplicados exactos**
+  (mismo lat/lng/timestamp repetido varias veces — 9 filas guardadas, pero solo 3 posiciones/horarios
+  realmente distintos). Esos duplicados rompen el Hidden Markov Model de `/match`: con los 9 puntos
+  tal cual (con duplicados) fallaba con `NoMatch`; con esos mismos 3 puntos únicos, sin tocar nada
+  más, `/match` respondía `code: "Ok"`. Se probó subir `radiuses` (50/100/200) como alternativa — **no
+  funciona**, y de hecho empeora: por encima de 25m el servidor responde un `TooBig` distinto
+  (`"Radius search size is too large for map matching"`, un límite del radio, no de la cantidad de
+  puntos). El radio se mantiene en 25m; `getOSRMRoute` ahora filtra pings consecutivos idénticos
+  (mismo lat+lng+timestamp) antes de armar la traza para OSRM, como paso defensivo simple — no un
+  algoritmo de detección de outliers. **El origen real de los duplicados no se investigó en esta
+  corrección** (fuera de alcance: es un problema de la app móvil, no del Dashboard) — candidato más
+  probable, sin confirmar: `useSeguimientoGPS.ts` suscribe `Location.watchPositionAsync` dentro de un
+  `useEffect` async con su propio flag de cancelación; ese patrón es conocido por poder disparar el
+  callback más de una vez con la misma posición cacheada del SO si el efecto se remonta rápido
+  (React Strict Mode en desarrollo, o remontajes reales de la pantalla). Ver deuda técnica en §6.
 - `dashboard/lib/hooks/use-ruta-jornada.ts` — orquesta: pings crudos → OSRM → si OSRM falla, cae a
   una línea recta entre los pings en vez de no mostrar nada.
 - `dashboard/components/mapa/trazado-ruta.tsx` — el dibujo en sí (`Polyline` `#2563eb`, grosor 4,
@@ -626,6 +643,15 @@ chofer si se decide agregar uno.
 - OSRM y Nominatim, desde 2026-09-10 (ver §4), corren contra sus servidores demo públicos y
   gratuitos, no instancias propias — ver la advertencia ⚠️ en esa sección. Si el uso crece mucho,
   evaluar alojar una instancia propia o un proveedor pago.
+- **Pings de GPS duplicados** (encontrado 2026-09-13 al diagnosticar por qué `/match` fallaba con
+  `NoMatch` — ver §4, "Trazado histórico de rutas"): `ubicaciones_tracking` puede tener filas con
+  lat/lng/timestamp exactamente idénticos repetidos varias veces para un mismo ping real. El
+  Dashboard ya lo mitiga defensivamente (`osrm.ts` los filtra antes de llamar a OSRM), pero el origen
+  no se investigó — candidato más probable sin confirmar: `src/hooks/useSeguimientoGPS.ts`
+  (`Location.watchPositionAsync` dentro de un `useEffect` async) podría estar disparando el callback
+  más de una vez con la misma posición cacheada del SO si el efecto se remonta rápido. Si se llega a
+  confirmar y corregir del lado de la app móvil, el filtro defensivo en `osrm.ts` puede quedar como
+  está de todos modos (no molesta con datos limpios).
 - Metro Bundler puede caerse en Windows si algo dentro de `node_modules/` de cualquier
   sub-proyecto cambia mientras Metro lo tiene bajo watch (ej. correr `npm install` en
   `server/mock` con la app corriendo) — es el fallback de archivo que usa Metro sin Watchman
