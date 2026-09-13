@@ -1,9 +1,11 @@
 "use client";
 
-import { AlertTriangle, ImageOff, MapPin, Pencil } from "lucide-react";
+import { AlertTriangle, ImageOff, MapPin, Pencil, Route } from "lucide-react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { RutaJornadaDialog } from "@/components/mapa/ruta-jornada-dialog";
 import { useDireccion } from "@/lib/hooks/use-direccion";
 import { formatFechaHora } from "@/lib/utils";
 import type { JornadaRow } from "@/lib/types";
@@ -88,6 +90,21 @@ function Foto({ titulo, url }: { titulo: string; url: string | null }) {
 }
 
 export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDetalleDialogProps) {
+  const [verRutaAbierto, setVerRutaAbierto] = useState(false);
+  const [jornadaIdAnterior, setJornadaIdAnterior] = useState<string | null>(null);
+
+  // Si cambia la jornada (se cierra el detalle, o se selecciona otra
+  // directamente sin cerrar) el modal de ruta no debe quedar abierto
+  // mostrando la jornada anterior — este componente no se remonta entre una
+  // jornada y otra, solo cambia la prop. Ajuste de estado durante el render
+  // (no en un efecto): patrón recomendado por React para resetear estado
+  // cuando cambia una prop, ver https://react.dev/learn/you-might-not-need-an-effect.
+  const jornadaIdActual = jornada?.id ?? null;
+  if (jornadaIdActual !== jornadaIdAnterior) {
+    setJornadaIdAnterior(jornadaIdActual);
+    setVerRutaAbierto(false);
+  }
+
   return (
     <Dialog open={jornada != null} onClose={onClose} title="Detalle de jornada">
       {jornada && (
@@ -146,6 +163,13 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
             />
           </dl>
 
+          <div>
+            <Button type="button" variant="outline" onClick={() => setVerRutaAbierto(true)}>
+              <Route className="h-4 w-4" />
+              Ver ruta
+            </Button>
+          </div>
+
           {jornada.incidencias && (
             <div>
               <p className="mb-1 text-xs text-muted-foreground">Incidencias (notas de ruta)</p>
@@ -188,6 +212,12 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
             <Foto titulo="Hoja de ruta" url={jornada.foto_ruta_url} />
             <Foto titulo="Tacómetro final" url={jornada.foto_tacometro_final_url} />
           </div>
+
+          <RutaJornadaDialog
+            jornadaId={verRutaAbierto ? jornada.id : null}
+            titulo={`Ruta de la jornada — ${jornada.chofer_nombre} (${jornada.matricula})`}
+            onClose={() => setVerRutaAbierto(false)}
+          />
         </div>
       )}
     </Dialog>

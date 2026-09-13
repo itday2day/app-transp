@@ -1,6 +1,6 @@
 # Contexto del proyecto — app-transp
 
-_Última actualización: 2026-09-12._
+_Última actualización: 2026-09-13._
 
 Documento de referencia técnica para cualquier IA (o persona) que retome trabajo en este
 repositorio. Refleja el **estado real del código**, no el plan original — donde la implementación
@@ -509,13 +509,50 @@ de ese chofer, ajustado a las calles.
   coordenada que sobrevive el muestreo.
 - `dashboard/lib/hooks/use-ruta-jornada.ts` — orquesta: pings crudos → OSRM → si OSRM falla, cae a
   una línea recta entre los pings en vez de no mostrar nada.
-- `dashboard/components/mapa/ruta-historica.tsx` — `Polyline` (`#2563eb`, grosor 4, opacidad 0.8) +
-  marcadores de inicio/fin. **Sin** su propio `dynamic(..., { ssr: false })`: ya vive detrás del
-  límite ssr:false que envuelve `MapaFlota` completo a nivel de página
-  (`app/(dashboard)/mapa/page.tsx`) — envolverlo de nuevo sería redundante.
-- La "selección de jornada" para ver su ruta usa el chofer seleccionado en el panel de activos
-  (su `jornadaIds[0]`), no un buscador de jornadas pasadas por rango de fechas — eso sería una
-  función más grande (reutilizando los filtros de `/jornadas`), todavía no construida.
+- `dashboard/components/mapa/trazado-ruta.tsx` — el dibujo en sí (`Polyline` `#2563eb`, grosor 4,
+  opacidad 0.8, + marcadores de inicio/fin + el `fitBounds` que encuadra el trazado la primera vez
+  que aparece, vía un `encuadreKey` para no repetirlo si el usuario después hace zoom/paneo a mano).
+  Extraído de `ruta-historica.tsx` (2026-09-13) para poder reutilizarlo también en el modal de ruta
+  de una jornada puntual (ver más abajo) — debe montarse siempre como hijo de un `<MapContainer>`
+  (`useMap()` lo exige).
+- `dashboard/components/mapa/ruta-historica.tsx` — ahora es solo el pegamento entre
+  `useRutaJornada` y `TrazadoRuta`: pide los datos y, si hay trazado, renderiza `TrazadoRuta` (si
+  está cargando, hubo error, o no hay pings, no renderiza nada — igual que antes). **Sin** su propio
+  `dynamic(..., { ssr: false })`: ya vive detrás del límite ssr:false que envuelve `MapaFlota`
+  completo a nivel de página (`app/(dashboard)/mapa/page.tsx`) — envolverlo de nuevo sería
+  redundante.
+- La "selección de jornada" **en el mapa en vivo** usa el chofer seleccionado en el panel de activos
+  (su `jornadaIds[0]`), no un buscador de jornadas pasadas por rango de fechas — eso sigue fuera de
+  alcance. Pero desde `/jornadas` sí se puede ver la ruta de **cualquier** jornada puntual (ver
+  subsección siguiente), que es un camino de acceso distinto y no requiere ese buscador.
+
+### Ver ruta de una jornada puntual desde `/jornadas` (2026-09-13)
+
+⚠️ **Corrección**: hasta acá, "Ver ruta" solo existía en `/mapa` (panel de choferes activos), atado
+a la jornada *abierta* actual del chofer seleccionado — no había forma de ver el trazado de una
+jornada ya cerrada. Ahora también se puede ver desde el modal de detalle de cualquier jornada en
+`/jornadas` (`jornada-detalle-dialog.tsx`), sin importar si está abierta o cerrada, ni de qué fecha
+sea — reutiliza el mismo backend que ya existía (`ubicaciones_tracking_planas`,
+`GET /api/tracking/ruta-jornada`, `useRutaJornada`, `osrm.ts`), sin tocar ninguno de los tres.
+
+- Botón **"Ver ruta"** en `jornada-detalle-dialog.tsx`, siempre visible, cerca de la sección
+  `Ubicacion` (Check-In/Check-Out). Abre un modal nuevo y más grande (`className="max-w-4xl"`, no el
+  modal de detalle, que ya está ocupado con fotos/ubicaciones) — el detalle queda abierto detrás,
+  para no perder el contexto de qué jornada se estaba viendo.
+- `dashboard/components/mapa/ruta-jornada-dialog.tsx` — el modal en sí (`Dialog` propio del
+  proyecto). Llama a `useRutaJornada(jornadaId)` y decide qué mostrar: spinner mientras carga,
+  mensaje de error si falla, **"No hay datos de ubicación registrados para esta jornada"** si
+  `puntos.length === 0` (en vez de un mapa vacío o un error), o el mapa con el trazado si hay datos.
+- `dashboard/components/mapa/mapa-ruta-jornada.tsx` — `MapContainer` de Leaflet **propio y
+  aislado** de este modal (no el de `MapaFlota`, que trae marcadores de otros choferes y no aplica
+  acá), cargado vía `dynamic(..., { ssr: false })` desde `ruta-jornada-dialog.tsx` — mismo patrón que
+  `MapaFlota` en `app/(dashboard)/mapa/page.tsx`. Recibe `trazado`/`puntos` ya resueltos como props
+  (no vuelve a pedir los datos) y los dibuja con `TrazadoRuta`.
+- **Sin polling**: a diferencia del mapa en vivo (`useUltimasPosiciones`, `refetchInterval: 8000`),
+  `useRutaJornada` nunca tuvo `refetchInterval` — los pings de una jornada ya cerrada (o incluso
+  abierta, en el momento de abrir este modal) no van a cambiar mientras el modal está abierto, así
+  que alcanza con la única carga inicial que ya hacía este hook (`staleTime: 60_000`). No hizo falta
+  ningún cambio en `use-ruta-jornada.ts` para esta función.
 
 **Geocodificación inversa (2026-09-10)**: en el modal de detalle de jornada (`jornada-detalle-dialog.tsx`,
 componente `Ubicacion`), cada coordenada de check-in/check-out muestra un enlace "Ver en mapa"
