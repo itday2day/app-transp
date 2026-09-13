@@ -9,7 +9,8 @@ export interface RutaJornada {
   trazado: [number, number][];
   /** Pings crudos de GPS, en orden — para los marcadores de inicio/fin. */
   puntos: PuntoRuta[];
-  /** false si OSRM falló y se cayó a línea recta entre los pings. */
+  /** false si OSRM no pudo ajustar todo el trazado a calles (falló del todo,
+   * o al menos uno de sus tramos cayó a línea recta — ver osrm.ts). */
   ajustadoACalles: boolean;
 }
 
@@ -27,9 +28,14 @@ async function obtenerPuntosRuta(jornadaId: string): Promise<PuntoRuta[]> {
 /**
  * Trae los pings de GPS de una jornada y arma el trazado a mostrar en el
  * mapa. Si hay 2+ puntos, intenta ajustarlos a las calles vía OSRM
- * (`getOSRMRoute`); si esa llamada falla (servidor demo público de OSRM caído
- * o con rate-limit — ver advertencia en lib/osrm.ts), cae a una línea recta
- * entre los pings crudos en vez de no mostrar nada.
+ * (`getOSRMRoute`, que internamente puede hacer varias llamadas secuenciales
+ * si el trayecto es largo — ver "tramos" en lib/osrm.ts); si eso falla del
+ * todo (servidor demo público de OSRM caído o con rate-limit — ver
+ * advertencia en lib/osrm.ts), cae a una línea recta entre los pings crudos
+ * en vez de no mostrar nada. El estado de carga de este hook (`isLoading`)
+ * cubre toda esa secuencia de llamadas, no solo la primera — es un único
+ * `await` de punta a punta desde acá, sin importar cuántas llamadas internas
+ * haga `getOSRMRoute`.
  */
 export function useRutaJornada(jornadaId: string | null) {
   return useQuery({
@@ -43,10 +49,10 @@ export function useRutaJornada(jornadaId: string | null) {
       }
 
       try {
-        const trazado = await getOSRMRoute(puntos);
-        return { trazado, puntos, ajustadoACalles: true };
+        const { trazado, matcheoCompleto } = await getOSRMRoute(puntos);
+        return { trazado, puntos, ajustadoACalles: matcheoCompleto };
       } catch (err) {
-        console.error("OSRM falló, se muestra línea recta entre los pings:", err);
+        console.error("OSRM falló por completo, se muestra línea recta entre los pings:", err);
         return { trazado: lineaRecta, puntos, ajustadoACalles: false };
       }
     },

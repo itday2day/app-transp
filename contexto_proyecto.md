@@ -503,9 +503,13 @@ de ese chofer, ajustado a las calles.
   proveedor pago (Mapbox Directions, Google Roads, etc.). La función recibe pings con `lat`/`lng`/
   `timestamp` y devuelve coordenadas como `[lat, lng]` (consistente con el resto del proyecto —
   Leaflet, `PosicionChofer`, etc.), manejando la inversión a `[lng, lat]` que exige GeoJSON/OSRM de
-  forma transparente para quien la llama. Muestrea a máximo 10 puntos conservando siempre el primer y
-  el último — el muestreo preserva ping completo (lat/lng/timestamp), no solo lat/lng, porque
-  `/match` necesita el timestamp de cada coordenada que sobrevive el muestreo. ⚠️ **Corrección
+  forma transparente para quien la llama. Antes de armar la traza filtra pings duplicados
+  (`quitarPingsDuplicados`, ver más abajo) y la parte en **tramos** de hasta 10 puntos cada uno, con
+  1 punto de solapamiento entre tramos consecutivos, llamando a `/match` una vez por tramo en
+  secuencia — nunca en paralelo, para no golpear el servidor demo público con ráfagas simultáneas
+  (ver la tercera corrección, más abajo, para el detalle completo). El muestreo preserva ping
+  completo (lat/lng/timestamp), no solo lat/lng, porque `/match` necesita el timestamp de cada
+  coordenada. ⚠️ **Corrección
   (2026-09-13, regresión detectada en el piloto)**: ese máximo era 100 hasta acá — un valor calibrado
   para el límite de **largo de URL** de `/route` (que sí tolera cientos de coordenadas), nunca
   revalidado contra `/match`, que es bastante más pesado de calcular (corre un Hidden Markov Model
@@ -541,6 +545,32 @@ de ese chofer, ajustado a las calles.
   `useEffect` async con su propio flag de cancelación; ese patrón es conocido por poder disparar el
   callback más de una vez con la misma posición cacheada del SO si el efecto se remonta rápido
   (React Strict Mode en desarrollo, o remontajes reales de la pantalla). Ver deuda técnica en §6.
+  ⚠️ **Tercera corrección (2026-09-13, misma sesión de piloto)**: con los dos fixes anteriores ya
+  aplicados, una jornada larga (varios minutos, varias calles) seguía mostrando una ruta que iba en
+  la dirección correcta pero sin seguir la calle real en el medio del trayecto — `/match` respondía
+  `code: "Ok"` sin ningún error, pero con solo 10 puntos para representar **todo** el trayecto, esos
+  puntos quedaban muy espaciados y el resultado era una aproximación gruesa (a diferencia de los dos
+  fixes anteriores, acá no había ningún `code` de error que avisara del problema). El límite de 10
+  puntos **por llamada** sigue siendo real y no se puede subir (confirmado en la primera corrección)
+  — la solución fue partir el trayecto en **tramos** de hasta 10 puntos, con 1 punto de solapamiento
+  entre tramos consecutivos (el último de un tramo es el primero del siguiente, para no dejar un
+  salto visual en cada límite), y llamar a `/match` una vez por tramo, en secuencia — nunca en
+  paralelo. Nueva constante `OSRM_MAX_TRAMOS = 15`: con tramos de 10 y solapamiento de 1, permite
+  hasta 15 × 9 + 1 = **136 pings reales** por trazado (~13x más detalle que el límite anterior de 10
+  puntos totales) antes de tener que degradar con el mismo muestreo uniforme que ya existía. Si un
+  tramo puntual falla (`code` distinto de `"Ok"`, timeout, etc.), se aplica el fallback de línea
+  recta **solo para los puntos de ese tramo** — `getOSRMRoute` ya no tira abajo el trazado completo
+  por un problema aislado en uno de varios tramos; devuelve `{ trazado, matcheoCompleto }`, donde
+  `matcheoCompleto` pasa a `false` si al menos un tramo cayó a línea recta (`RutaJornada.ajustadoACalles`
+  en `use-ruta-jornada.ts` ahora refleja esto con precisión, en vez de ser solo "todo o nada").
+  Probado a mano con una ruta real de 10.4 minutos simulando pings cada 20s (32 puntos → 4 tramos de
+  10/10/10/5): los 4 tramos matchearon con `code: "Ok"` y confianza 0.96–0.98, sin fallback en
+  ninguno, con una geometría final de 231 puntos siguiendo calles reales (contra los 10 puntos
+  totales que hubiera dado el límite anterior). **Limitación que queda** (reemplaza a la anterior,
+  mucho más agresiva): jornadas de más de ~45 minutos de tracking (a un ping cada ~20s, eso ronda los
+  136 pings) todavía se degradan con el muestreo uniforme antes de partir en tramos — bastante menos
+  frecuente y bastante menos agresivo que antes (antes, *cualquier* jornada de más de ~3 minutos ya
+  se reducía a 10 paradas totales para todo el trayecto).
 - `dashboard/lib/hooks/use-ruta-jornada.ts` — orquesta: pings crudos → OSRM → si OSRM falla, cae a
   una línea recta entre los pings en vez de no mostrar nada.
 - `dashboard/components/mapa/trazado-ruta.tsx` — el dibujo en sí (`Polyline` `#2563eb`, grosor 4,

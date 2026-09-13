@@ -60,6 +60,40 @@ const TIMEOUT_MS = 8000;
 // de OSRM.
 const MAX_PUNTOS_OSRM = 10;
 
+// ⚠️ **Trazado por tramos (encontrado en el piloto, tercera corrección sobre
+// este archivo)**: el límite de 10 puntos de arriba es real y no se puede
+// subir — pero antes de esta corrección, `getOSRMRoute` lo aplicaba
+// muestreando **todo** el trayecto a esos 10 puntos en una sola llamada a
+// `/match`. Con una jornada larga (varios minutos, varias calles), esos 10
+// puntos quedaban muy espaciados entre sí: `/match` respondía `code: "Ok"`
+// sin ningún error, pero el resultado era una aproximación gruesa — la
+// dirección general era correcta, pero se perdían las vueltas y calles
+// intermedias entre esos 10 puntos (a diferencia de `TooBig`/`NoMatch`, acá
+// no había ningún error que avisara del problema).
+//
+// La solución no es subir `MAX_PUNTOS_OSRM` (sigue siendo el límite real por
+// llamada) sino partir el trayecto en varios **tramos** de hasta
+// `MAX_PUNTOS_OSRM` puntos cada uno, con 1 punto de solapamiento entre
+// tramos consecutivos (el último de un tramo es el primero del siguiente,
+// para no dejar un salto visual en cada límite de tramo), y llamar a
+// `/match` una vez por tramo, en secuencia. `MAX_PUNTOS_OSRM` y
+// `OSRM_MAX_TRAMOS` son dos límites relacionados pero distintos: uno es
+// cuántos puntos tolera el servidor **por llamada**, el otro es cuántas
+// llamadas secuenciales estamos dispuestos a hacerle **nosotros** al mismo
+// servidor demo público para una sola jornada, para no convertir "ver una
+// ruta" en decenas de requests a un servicio gratuito compartido.
+const OSRM_MAX_TRAMOS = 15;
+
+// Con tramos de MAX_PUNTOS_OSRM puntos y 1 de solapamiento, cada tramo aporta
+// (MAX_PUNTOS_OSRM - 1) pings nuevos + 1 heredado del tramo anterior — salvo
+// el primero, que aporta los MAX_PUNTOS_OSRM completos. De ahí el +1 al
+// final: con los valores actuales, 15 × 9 + 1 = 136 pings reales por
+// trazado sin descartar ninguno (~13x más detalle que el límite viejo de 10
+// puntos totales). Si una jornada tiene más pings que esto, se degrada con
+// el mismo muestreo uniforme que ya existía — no se descarta el trazado,
+// solo se lo aproxima un poco más.
+const MAX_PUNTOS_TOTAL = OSRM_MAX_TRAMOS * (MAX_PUNTOS_OSRM - 1) + 1;
+
 // `ubicaciones_tracking`/`ubicaciones_tracking_planas` no guardan la
 // precisión real del GPS de cada ping (no existe esa columna) — se usa un
 // radio fijo generoso para todos los puntos en vez de sumar tracking de
@@ -110,6 +144,27 @@ function muestrear<T>(items: T[], max: number): T[] {
   return muestreados;
 }
 
+/**
+ * Parte `items` en tramos consecutivos de hasta `tamanoTramo` puntos, con 1
+ * punto de solapamiento entre tramos consecutivos (el último de un tramo es
+ * el primero del siguiente). Nunca genera más de `maxTramos` tramos. Si
+ * `items` ya entra en un solo tramo, devuelve `[items]` sin partir nada —
+ * una jornada corta sigue resolviéndose con una sola llamada a `/match`.
+ */
+function partirEnTramos<T>(items: T[], tamanoTramo: number, maxTramos: number): T[][] {
+  if (items.length <= tamanoTramo) return [items];
+
+  const tramos: T[][] = [];
+  let inicio = 0;
+  while (inicio < items.length - 1 && tramos.length < maxTramos) {
+    const fin = Math.min(inicio + tamanoTramo, items.length);
+    tramos.push(items.slice(inicio, fin));
+    if (fin >= items.length) break;
+    inicio = fin - 1;
+  }
+  return tramos;
+}
+
 interface MatchingOSRM {
   geometry: { coordinates: [number, number][] };
 }
@@ -120,29 +175,18 @@ interface RespuestaOSRMMatch {
 }
 
 /**
- * Recibe pings de GPS (con `lat`/`lng`/`timestamp`, tal como los devuelve
- * `/api/tracking/ruta-jornada`) y devuelve el trazado ajustado a las calles
- * como `[lat, lng]` — el orden que usa el resto de este proyecto (Leaflet,
- * PosicionChofer, etc.), listo para `<Polyline positions=.../>`. La
- * conversión a `lng,lat` (lo que exige la URL de OSRM) y de vuelta a
- * `lat,lng` (lo que devuelve el GeoJSON de la respuesta) queda encapsulada
- * acá — quien llama nunca maneja el orden invertido.
- *
- * Tira un error si OSRM no responde o no puede ajustar la ruta — es
- * responsabilidad de quien llama decidir el fallback (ver useRutaJornada).
+ * Llama a `/match` para UN tramo de hasta `MAX_PUNTOS_OSRM` puntos y
+ * devuelve su geometría ajustada a calles como `[lat, lng]`. Tira un error
+ * si OSRM no responde o no puede ajustar ESE tramo — quien llama
+ * (`getOSRMRoute`) decide el fallback a línea recta solo para ese tramo, sin
+ * afectar a los demás.
  */
-export async function getOSRMRoute(pings: PuntoRuta[]): Promise<[number, number][]> {
-  const pingsUnicos = quitarPingsDuplicados(pings);
-  if (pingsUnicos.length < 2) {
-    throw new Error("Se necesitan al menos 2 puntos para calcular una ruta.");
-  }
-
-  const muestreados = muestrear(pingsUnicos, MAX_PUNTOS_OSRM);
-  const coordenadasUrl = muestreados.map((p) => `${p.lng},${p.lat}`).join(";");
-  const timestampsUrl = muestreados
+async function matchearTramo(tramo: PuntoRuta[]): Promise<[number, number][]> {
+  const coordenadasUrl = tramo.map((p) => `${p.lng},${p.lat}`).join(";");
+  const timestampsUrl = tramo
     .map((p) => Math.floor(new Date(p.timestamp).getTime() / 1000))
     .join(";");
-  const radiusesUrl = muestreados.map(() => RADIO_GPS_METROS).join(";");
+  const radiusesUrl = tramo.map(() => RADIO_GPS_METROS).join(";");
 
   const respuesta = await fetch(
     `${OSRM_BASE_URL}/${coordenadasUrl}` +
@@ -168,15 +212,67 @@ export async function getOSRMRoute(pings: PuntoRuta[]): Promise<[number, number]
     throw new Error(`OSRM no pudo ajustar la ruta (code: ${cuerpo.code}).`);
   }
 
-  // `/match` puede partir el trayecto en varios `matchings` cuando hay un
+  // `/match` puede partir el tramo en varios `matchings` cuando hay un
   // salto de más de 60s entre dos pings consecutivos, o una transición poco
   // plausible entre ellos (cada uno trae su propia geometría). No hace falta
-  // unir los tramos con nada especial: `<Polyline>` ya dibuja una línea recta
-  // entre cada par de puntos consecutivos del arreglo `positions`, así que
-  // concatenar las geometrías en orden conecta el final de un tramo con el
-  // inicio del siguiente exactamente con el mismo criterio que ya usa este
-  // archivo como fallback cuando OSRM falla del todo.
+  // unir esos matchings con nada especial: `<Polyline>` ya dibuja una línea
+  // recta entre cada par de puntos consecutivos del arreglo `positions`, así
+  // que concatenar las geometrías en orden conecta el final de uno con el
+  // inicio del siguiente exactamente con el mismo criterio que se usa como
+  // fallback cuando OSRM falla del todo (ver getOSRMRoute).
   return cuerpo.matchings.flatMap((matching) =>
     matching.geometry.coordinates.map(([lng, lat]): [number, number] => [lat, lng])
   );
+}
+
+export interface ResultadoOSRM {
+  trazado: [number, number][];
+  /** false si al menos un tramo no pudo ajustarse a calles y se completó con línea recta. */
+  matcheoCompleto: boolean;
+}
+
+/**
+ * Recibe pings de GPS (con `lat`/`lng`/`timestamp`, tal como los devuelve
+ * `/api/tracking/ruta-jornada`) y devuelve el trazado ajustado a las calles
+ * como `[lat, lng]` — el orden que usa el resto de este proyecto (Leaflet,
+ * PosicionChofer, etc.), listo para `<Polyline positions=.../>`. La
+ * conversión a `lng,lat` (lo que exige la URL de OSRM) y de vuelta a
+ * `lat,lng` (lo que devuelve el GeoJSON de la respuesta) queda encapsulada
+ * acá — quien llama nunca maneja el orden invertido.
+ *
+ * Internamente parte el trayecto en tramos (ver `OSRM_MAX_TRAMOS` más
+ * arriba) y llama a `/match` una vez por tramo, en secuencia — nunca en
+ * paralelo, para no mandarle una ráfaga simultánea de requests al servidor
+ * demo público. Un tramo que falla cae a línea recta solo para sus propios
+ * puntos, sin afectar a los demás tramos.
+ *
+ * Tira un error solo si ni siquiera hay 2 pings únicos para intentar algo
+ * (después de `quitarPingsDuplicados`) — es responsabilidad de quien llama
+ * decidir el fallback total para ese caso (ver useRutaJornada).
+ */
+export async function getOSRMRoute(pings: PuntoRuta[]): Promise<ResultadoOSRM> {
+  const pingsUnicos = quitarPingsDuplicados(pings);
+  if (pingsUnicos.length < 2) {
+    throw new Error("Se necesitan al menos 2 puntos para calcular una ruta.");
+  }
+
+  const pingsMuestreados = muestrear(pingsUnicos, MAX_PUNTOS_TOTAL);
+  const tramos = partirEnTramos(pingsMuestreados, MAX_PUNTOS_OSRM, OSRM_MAX_TRAMOS);
+
+  let matcheoCompleto = true;
+  const geometriasPorTramo: [number, number][][] = [];
+  for (const [indice, tramo] of tramos.entries()) {
+    try {
+      geometriasPorTramo.push(await matchearTramo(tramo));
+    } catch (err) {
+      matcheoCompleto = false;
+      console.error(
+        `OSRM no pudo ajustar el tramo ${indice + 1}/${tramos.length} (${tramo.length} puntos) — se usa línea recta solo para ese tramo:`,
+        err
+      );
+      geometriasPorTramo.push(tramo.map((p): [number, number] => [p.lat, p.lng]));
+    }
+  }
+
+  return { trazado: geometriasPorTramo.flat(), matcheoCompleto };
 }
