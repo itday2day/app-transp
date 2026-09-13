@@ -36,13 +36,29 @@ const OSRM_BASE_URL = "https://router.project-osrm.org/match/v1/driving";
 // cualquier otro fallo de OSRM: aborta, tira error, cae al fallback.
 const TIMEOUT_MS = 8000;
 
-// El límite real es el largo de la URL (las coordenadas van en el path, no
-// en el body) — cada par "lng,lat;" ronda 20-24 caracteres con 5 decimales
-// de precisión (~1m de resolución, de sobra para pings de GPS). 100 puntos
-// da una URL de ~2200 caracteres, dentro de límites típicos de servidor/
-// navegador con margen. Si hay más, se muestrea parejo conservando siempre
-// el primer y el último punto (para no perder inicio/fin del trayecto).
-const MAX_PUNTOS_OSRM = 100;
+// ⚠️ **Corrección (regresión del cambio /route → /match, encontrada en el
+// piloto)**: este valor era 100, calibrado para el límite de **largo de
+// URL** de `/route` (que sí tolera cientos de coordenadas). `/match` es un
+// servicio bastante más pesado de calcular (corre un Hidden Markov Model
+// sobre la traza), y el servidor demo público de OSRM le impone un límite
+// de **cantidad de puntos** mucho más chico e independiente del largo de la
+// URL: confirmado a mano contra `router.project-osrm.org/match` que 10
+// puntos responde `Ok`, pero 11 ya responde
+// `400 {"code":"TooBig","message":"Too many trace coordinates"}` — sin
+// relación con qué tan separados estén entre sí. Con el valor viejo (100),
+// **casi cualquier jornada real** (más de ~3 minutos de tracking a un ping
+// cada ~20s) terminaba mandando más de 10 puntos, `/match` rechazaba la
+// petición, y el código caía silenciosamente al fallback de línea recta
+// entre pings crudos — exactamente el síntoma reportado ("la ruta atraviesa
+// edificios, como una línea recta entre pocos puntos"): en la práctica,
+// *siempre* se estaba usando el fallback, nunca el ajuste a calles. Este
+// límite no está documentado en la API pública de OSRM (no es parte del
+// protocolo Map Matching en sí, sino de la configuración `--max-matching-
+// size` de esta instancia demo en particular) y podría cambiar sin aviso —
+// si en el futuro empieza a fallar de nuevo con `TooBig`, hay que volver a
+// probarlo a mano y ajustar este número, no asumir que 10 es un límite fijo
+// de OSRM.
+const MAX_PUNTOS_OSRM = 10;
 
 // `ubicaciones_tracking`/`ubicaciones_tracking_planas` no guardan la
 // precisión real del GPS de cada ping (no existe esa columna) — se usa un
@@ -103,7 +119,14 @@ export async function getOSRMRoute(pings: PuntoRuta[]): Promise<[number, number]
   );
 
   if (!respuesta.ok) {
-    throw new Error(`OSRM respondió ${respuesta.status}.`);
+    // El cuerpo de un error de OSRM (ej. `{"code":"TooBig","message":"Too
+    // many trace coordinates"}`) es la única forma de distinguir un límite
+    // del servidor de un simple 500/502 — sin esto, quien llama solo ve
+    // "OSRM respondió 400." en la consola y tiene que ir a las devtools de
+    // red a mano para saber por qué. Ver la corrección de MAX_PUNTOS_OSRM
+    // más arriba: este es exactamente el error que pasaba desapercibido.
+    const cuerpoError = await respuesta.text().catch(() => "");
+    throw new Error(`OSRM respondió ${respuesta.status}: ${cuerpoError || "(sin cuerpo)"}`);
   }
 
   const cuerpo = (await respuesta.json()) as RespuestaOSRMMatch;

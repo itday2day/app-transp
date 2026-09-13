@@ -503,10 +503,27 @@ de ese chofer, ajustado a las calles.
   proveedor pago (Mapbox Directions, Google Roads, etc.). La función recibe pings con `lat`/`lng`/
   `timestamp` y devuelve coordenadas como `[lat, lng]` (consistente con el resto del proyecto —
   Leaflet, `PosicionChofer`, etc.), manejando la inversión a `[lng, lat]` que exige GeoJSON/OSRM de
-  forma transparente para quien la llama. Muestrea a máximo 100 puntos (límite práctico de largo de
-  URL, no de la API en sí) conservando siempre el primer y el último punto — el muestreo preserva
-  ping completo (lat/lng/timestamp), no solo lat/lng, porque `/match` necesita el timestamp de cada
-  coordenada que sobrevive el muestreo.
+  forma transparente para quien la llama. Muestrea a máximo 10 puntos conservando siempre el primer y
+  el último — el muestreo preserva ping completo (lat/lng/timestamp), no solo lat/lng, porque
+  `/match` necesita el timestamp de cada coordenada que sobrevive el muestreo. ⚠️ **Corrección
+  (2026-09-13, regresión detectada en el piloto)**: ese máximo era 100 hasta acá — un valor calibrado
+  para el límite de **largo de URL** de `/route` (que sí tolera cientos de coordenadas), nunca
+  revalidado contra `/match`, que es bastante más pesado de calcular (corre un Hidden Markov Model
+  sobre la traza) y al que el servidor demo público le impone un límite de **cantidad de puntos**
+  mucho más chico e independiente del largo de la URL: confirmado a mano que 10 puntos responde `Ok`
+  pero 11 ya responde `400 {"code":"TooBig","message":"Too many trace coordinates"}`. Con el valor
+  viejo, cualquier jornada de más de ~3 minutos de tracking (a un ping cada ~20s) ya mandaba más de
+  10 puntos, `/match` rechazaba la petición, y el código caía **siempre** al fallback de línea recta
+  entre pings crudos sin que se notara — el síntoma reportado en el piloto ("la ruta atraviesa
+  edificios, como una línea recta entre pocos puntos") no era un defecto de `/match` en sí: `/match`
+  nunca llegaba a responder, el ajuste a calles no se estaba usando en la práctica. Este límite no es
+  parte del protocolo Map Matching de OSRM, es la configuración `--max-matching-size` de esta
+  instancia demo puntual — podría cambiar sin aviso, y si vuelve a fallar con `TooBig` hay que
+  volver a probarlo a mano, no asumir que 10 es un límite fijo de OSRM. De paso, el error que arma
+  `getOSRMRoute` cuando OSRM responde con un status distinto de 200 ahora incluye el cuerpo de la
+  respuesta (antes solo decía "OSRM respondió 400.", sin el `code`/`message` real de OSRM) — así el
+  `console.error` de `useRutaJornada` alcanza para diagnosticar un fallo futuro sin tener que abrir
+  las devtools de red a mano.
 - `dashboard/lib/hooks/use-ruta-jornada.ts` — orquesta: pings crudos → OSRM → si OSRM falla, cae a
   una línea recta entre los pings en vez de no mostrar nada.
 - `dashboard/components/mapa/trazado-ruta.tsx` — el dibujo en sí (`Polyline` `#2563eb`, grosor 4,
