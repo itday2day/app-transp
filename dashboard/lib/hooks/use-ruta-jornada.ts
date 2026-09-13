@@ -1,16 +1,16 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { getOSRMRoute } from "@/lib/osrm";
+import { obtenerTrazadoAjustado } from "@/lib/ruta-matching";
 import type { PuntoRuta, RutaJornadaResponse } from "@/lib/types";
 
 export interface RutaJornada {
-  /** Trazado a dibujar en el mapa — ajustado a calles vía OSRM si fue posible. */
+  /** Trazado a dibujar en el mapa — ajustado a calles reales si fue posible. */
   trazado: [number, number][];
   /** Pings crudos de GPS, en orden — para los marcadores de inicio/fin. */
   puntos: PuntoRuta[];
-  /** false si OSRM no pudo ajustar todo el trazado a calles (falló del todo,
-   * o al menos uno de sus tramos cayó a línea recta — ver osrm.ts). */
+  /** false si el ajuste a calles no pudo completarse (ver ruta-matching.ts /
+   * el Route Handler de ruta-jornada-match para el detalle del fallback). */
   ajustadoACalles: boolean;
 }
 
@@ -27,15 +27,12 @@ async function obtenerPuntosRuta(jornadaId: string): Promise<PuntoRuta[]> {
 
 /**
  * Trae los pings de GPS de una jornada y arma el trazado a mostrar en el
- * mapa. Si hay 2+ puntos, intenta ajustarlos a las calles vía OSRM
- * (`getOSRMRoute`, que internamente puede hacer varias llamadas secuenciales
- * si el trayecto es largo — ver "tramos" en lib/osrm.ts); si eso falla del
- * todo (servidor demo público de OSRM caído o con rate-limit — ver
- * advertencia en lib/osrm.ts), cae a una línea recta entre los pings crudos
- * en vez de no mostrar nada. El estado de carga de este hook (`isLoading`)
- * cubre toda esa secuencia de llamadas, no solo la primera — es un único
- * `await` de punta a punta desde acá, sin importar cuántas llamadas internas
- * haga `getOSRMRoute`.
+ * mapa. Si hay 2+ puntos, pide el ajuste a calles a
+ * `/api/tracking/ruta-jornada-match` (Geoapify Map Matching, del lado del
+ * servidor — ver ese Route Handler); si esa llamada falla del todo (el
+ * servidor del Dashboard no responde), cae a una línea recta entre los pings
+ * crudos en vez de no mostrar nada. El estado de carga de este hook
+ * (`isLoading`) cubre toda la espera de esa llamada de punta a punta.
  */
 export function useRutaJornada(jornadaId: string | null) {
   return useQuery({
@@ -49,10 +46,10 @@ export function useRutaJornada(jornadaId: string | null) {
       }
 
       try {
-        const { trazado, matcheoCompleto } = await getOSRMRoute(puntos);
+        const { trazado, matcheoCompleto } = await obtenerTrazadoAjustado(jornadaId as string);
         return { trazado, puntos, ajustadoACalles: matcheoCompleto };
       } catch (err) {
-        console.error("OSRM falló por completo, se muestra línea recta entre los pings:", err);
+        console.error("No se pudo ajustar la ruta a las calles, se muestra línea recta:", err);
         return { trazado: lineaRecta, puntos, ajustadoACalles: false };
       }
     },

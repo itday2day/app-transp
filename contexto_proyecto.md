@@ -1,6 +1,6 @@
 # Contexto del proyecto — app-transp
 
-_Última actualización: 2026-09-13._
+_Última actualización: 2026-09-13 (migración a Geoapify)._
 
 Documento de referencia técnica para cualquier IA (o persona) que retome trabajo en este
 repositorio. Refleja el **estado real del código**, no el plan original — donde la implementación
@@ -20,9 +20,10 @@ comparten el mismo backend (Supabase):
   (`POST /reports/export-excel`) que genera el `.xlsx` y lo envía por correo vía la API de Resend.
 
 **Stack tecnológico de un vistazo**: Next.js (Dashboard) · Node/Express (servidor de reportes) ·
-Supabase (PostgreSQL + PostGIS + Auth + Storage + RLS) · Expo/React Native (móvil) · Leaflet +
-OSRM (mapa en vivo y trazado de rutas, ambos sobre OpenStreetMap, sin API key) · Render (hosting de
-Dashboard y servidor de reportes) · Resend (envío de correo vía API HTTPS, producción) · GitHub
+Supabase (PostgreSQL + PostGIS + Auth + Storage + RLS) · Expo/React Native (móvil) · Leaflet (mapa en
+vivo, sobre OpenStreetMap, sin API key) · Geoapify Map Matching (trazado histórico de rutas ajustado
+a calles — ver §4, reemplazó a una integración con OSRM) · Render (hosting de Dashboard y servidor de
+reportes) · Resend (envío de correo vía API HTTPS, producción) · GitHub
 (`github.com/itday2day/app-transp`, rama `master`, auto-deploy a Render en cada push).
 
 **Metodología de trabajo**: Spec-Driven Development (SDD) — Fase 1 (especificación técnica,
@@ -103,11 +104,13 @@ restringida a la propia carpeta del chofer, `evidencias/{choferId}/...`, vía po
 (`src/services/storageService.ts`) — a propósito **no** usa `expo-file-system` (ver §3, política de
 no sumar módulos nativos nuevos).
 
-**Mapas**: 100% OpenStreetMap vía `react-leaflet` + `leaflet`, sin API key, para el visor en vivo del
-Dashboard. **Corrección (2026-09-10)**: tanto OSRM (cálculo de rutas) como Nominatim
-(geocodificación inversa) **ya están implementados** — ver "Trazado histórico de rutas" y
-"Geocodificación inversa" en §4. El ecosistema OSM del proyecto (Leaflet + OSRM + Nominatim, los
-tres sobre OpenStreetMap, sin API key) queda completo.
+**Mapas**: `react-leaflet` + `leaflet` sobre OpenStreetMap, sin API key, para el visor en vivo del
+Dashboard. **Corrección (2026-09-10)**: la geocodificación inversa vía Nominatim **ya está
+implementada** — ver "Geocodificación inversa" en §4. ⚠️ **Corrección (2026-09-13)**: el trazado
+histórico de rutas (ver esa sección en §4) usó primero OSRM, pero ya no — se migró a **Geoapify Map
+Matching**, que no es parte del ecosistema OSM (es un proveedor propio, aunque construido sobre datos
+OSM); Leaflet y Nominatim siguen siendo 100% OpenStreetMap sin API key, pero el trazado de rutas ya
+no lo es.
 
 **Enlaces a Google/Apple Maps para coordenadas puntuales** (check-in/check-out de una jornada,
 distinto del visor en vivo de arriba): en vez de mostrar lat/lng como texto plano, se abre la
@@ -479,100 +482,70 @@ de ese chofer, ajustado a las calles.
   orden por tiempo se hacen en la query, no en la vista.
 - `dashboard/app/api/tracking/ruta-jornada/route.ts` — `GET ?jornadaId=`, pings ordenados
   ascendente por `timestamp`.
-- `dashboard/lib/osrm.ts` — cliente de la **API pública y gratuita de OSRM**. ⚠️ **Corrección
-  (2026-09-12, encontrada durante el piloto con choferes reales)**: este documento decía que se
-  usaba el servicio `/route` (`router.project-osrm.org/route/v1/driving`) — se cambió a **`/match`**
-  (`router.project-osrm.org/match/v1/driving`, Map Matching). `/route` calcula la ruta "óptima" entre
-  los puntos recibidos, tratándolos como paradas deliberadas; con los pings espaciados del GPS
-  best-effort de la app móvil (~20s, sin cola de reintentos, ver `trackingService.ts`), terminaba
-  dibujando el camino más corto/rápido entre esos puntos según OSRM, no necesariamente la calle real
-  que tomó el chofer — confirmado en el piloto: el trazado no coincidía con el recorrido real.
-  `/match` sí ajusta una secuencia de puntos GPS al camino más probable, usando el `timestamp` de
-  cada ping y un radio de tolerancia de precisión (`radiuses`). Como `ubicaciones_tracking` no
-  guarda la precisión real de cada ping (no existe esa columna), se usa un **radio fijo de 25
-  metros** para todos los puntos en vez de sumar tracking de precisión real en esta iteración. Si
-  `/match` devuelve el trayecto partido en varios `matchings` (pasa con un salto de más de 60s entre
-  dos pings, o una transición poco plausible), se concatenan sus geometrías en orden sin lógica
-  especial — `<Polyline>` ya dibuja una línea recta entre cada par de puntos consecutivos del
-  arreglo, así que la concatenación conecta el final de un tramo con el inicio del siguiente con una
-  línea recta de por sí, el mismo criterio que ya usaba (y sigue usando) el archivo como fallback
-  cuando OSRM falla del todo. El resto del diseño no cambió: sigue siendo el servidor demo público de
-  OSRM, no un servicio contratado — su política de uso es para pruebas/tráfico liviano, no producción
-  sostenida; puede aplicar rate-limit o caerse sin aviso, y si el trazado por calles se vuelve una
-  función central (no solo una mejora visual ocasional) habría que evaluar una instancia propia o un
-  proveedor pago (Mapbox Directions, Google Roads, etc.). La función recibe pings con `lat`/`lng`/
-  `timestamp` y devuelve coordenadas como `[lat, lng]` (consistente con el resto del proyecto —
-  Leaflet, `PosicionChofer`, etc.), manejando la inversión a `[lng, lat]` que exige GeoJSON/OSRM de
-  forma transparente para quien la llama. Antes de armar la traza filtra pings duplicados
-  (`quitarPingsDuplicados`, ver más abajo) y la parte en **tramos** de hasta 10 puntos cada uno, con
-  1 punto de solapamiento entre tramos consecutivos, llamando a `/match` una vez por tramo en
-  secuencia — nunca en paralelo, para no golpear el servidor demo público con ráfagas simultáneas
-  (ver la tercera corrección, más abajo, para el detalle completo). El muestreo preserva ping
-  completo (lat/lng/timestamp), no solo lat/lng, porque `/match` necesita el timestamp de cada
-  coordenada. ⚠️ **Corrección
-  (2026-09-13, regresión detectada en el piloto)**: ese máximo era 100 hasta acá — un valor calibrado
-  para el límite de **largo de URL** de `/route` (que sí tolera cientos de coordenadas), nunca
-  revalidado contra `/match`, que es bastante más pesado de calcular (corre un Hidden Markov Model
-  sobre la traza) y al que el servidor demo público le impone un límite de **cantidad de puntos**
-  mucho más chico e independiente del largo de la URL: confirmado a mano que 10 puntos responde `Ok`
-  pero 11 ya responde `400 {"code":"TooBig","message":"Too many trace coordinates"}`. Con el valor
-  viejo, cualquier jornada de más de ~3 minutos de tracking (a un ping cada ~20s) ya mandaba más de
-  10 puntos, `/match` rechazaba la petición, y el código caía **siempre** al fallback de línea recta
-  entre pings crudos sin que se notara — el síntoma reportado en el piloto ("la ruta atraviesa
-  edificios, como una línea recta entre pocos puntos") no era un defecto de `/match` en sí: `/match`
-  nunca llegaba a responder, el ajuste a calles no se estaba usando en la práctica. Este límite no es
-  parte del protocolo Map Matching de OSRM, es la configuración `--max-matching-size` de esta
-  instancia demo puntual — podría cambiar sin aviso, y si vuelve a fallar con `TooBig` hay que
-  volver a probarlo a mano, no asumir que 10 es un límite fijo de OSRM. De paso, el error que arma
-  `getOSRMRoute` cuando OSRM responde con un status distinto de 200 ahora incluye el cuerpo de la
-  respuesta (antes solo decía "OSRM respondió 400.", sin el `code`/`message` real de OSRM) — así el
-  `console.error` de `useRutaJornada` alcanza para diagnosticar un fallo futuro sin tener que abrir
-  las devtools de red a mano. ⚠️ **Segunda corrección (2026-09-13, misma sesión de piloto)**: arreglado
-  el límite de cantidad de puntos, la prueba real siguió mostrando línea recta — ahora `/match`
-  respondía `400 {"code":"NoMatch","message":"Could not match the trace."}`. Causa confirmada con los
-  pings reales de la jornada de prueba: `ubicaciones_tracking` tenía **pings duplicados exactos**
-  (mismo lat/lng/timestamp repetido varias veces — 9 filas guardadas, pero solo 3 posiciones/horarios
-  realmente distintos). Esos duplicados rompen el Hidden Markov Model de `/match`: con los 9 puntos
-  tal cual (con duplicados) fallaba con `NoMatch`; con esos mismos 3 puntos únicos, sin tocar nada
-  más, `/match` respondía `code: "Ok"`. Se probó subir `radiuses` (50/100/200) como alternativa — **no
-  funciona**, y de hecho empeora: por encima de 25m el servidor responde un `TooBig` distinto
-  (`"Radius search size is too large for map matching"`, un límite del radio, no de la cantidad de
-  puntos). El radio se mantiene en 25m; `getOSRMRoute` ahora filtra pings consecutivos idénticos
-  (mismo lat+lng+timestamp) antes de armar la traza para OSRM, como paso defensivo simple — no un
-  algoritmo de detección de outliers. **El origen real de los duplicados no se investigó en esta
-  corrección** (fuera de alcance: es un problema de la app móvil, no del Dashboard) — candidato más
-  probable, sin confirmar: `useSeguimientoGPS.ts` suscribe `Location.watchPositionAsync` dentro de un
-  `useEffect` async con su propio flag de cancelación; ese patrón es conocido por poder disparar el
-  callback más de una vez con la misma posición cacheada del SO si el efecto se remonta rápido
-  (React Strict Mode en desarrollo, o remontajes reales de la pantalla). Ver deuda técnica en §6.
-  ⚠️ **Tercera corrección (2026-09-13, misma sesión de piloto)**: con los dos fixes anteriores ya
-  aplicados, una jornada larga (varios minutos, varias calles) seguía mostrando una ruta que iba en
-  la dirección correcta pero sin seguir la calle real en el medio del trayecto — `/match` respondía
-  `code: "Ok"` sin ningún error, pero con solo 10 puntos para representar **todo** el trayecto, esos
-  puntos quedaban muy espaciados y el resultado era una aproximación gruesa (a diferencia de los dos
-  fixes anteriores, acá no había ningún `code` de error que avisara del problema). El límite de 10
-  puntos **por llamada** sigue siendo real y no se puede subir (confirmado en la primera corrección)
-  — la solución fue partir el trayecto en **tramos** de hasta 10 puntos, con 1 punto de solapamiento
-  entre tramos consecutivos (el último de un tramo es el primero del siguiente, para no dejar un
-  salto visual en cada límite), y llamar a `/match` una vez por tramo, en secuencia — nunca en
-  paralelo. Nueva constante `OSRM_MAX_TRAMOS = 15`: con tramos de 10 y solapamiento de 1, permite
-  hasta 15 × 9 + 1 = **136 pings reales** por trazado (~13x más detalle que el límite anterior de 10
-  puntos totales) antes de tener que degradar con el mismo muestreo uniforme que ya existía. Si un
-  tramo puntual falla (`code` distinto de `"Ok"`, timeout, etc.), se aplica el fallback de línea
-  recta **solo para los puntos de ese tramo** — `getOSRMRoute` ya no tira abajo el trazado completo
-  por un problema aislado en uno de varios tramos; devuelve `{ trazado, matcheoCompleto }`, donde
-  `matcheoCompleto` pasa a `false` si al menos un tramo cayó a línea recta (`RutaJornada.ajustadoACalles`
-  en `use-ruta-jornada.ts` ahora refleja esto con precisión, en vez de ser solo "todo o nada").
-  Probado a mano con una ruta real de 10.4 minutos simulando pings cada 20s (32 puntos → 4 tramos de
-  10/10/10/5): los 4 tramos matchearon con `code: "Ok"` y confianza 0.96–0.98, sin fallback en
-  ninguno, con una geometría final de 231 puntos siguiendo calles reales (contra los 10 puntos
-  totales que hubiera dado el límite anterior). **Limitación que queda** (reemplaza a la anterior,
-  mucho más agresiva): jornadas de más de ~45 minutos de tracking (a un ping cada ~20s, eso ronda los
-  136 pings) todavía se degradan con el muestreo uniforme antes de partir en tramos — bastante menos
-  frecuente y bastante menos agresivo que antes (antes, *cualquier* jornada de más de ~3 minutos ya
-  se reducía a 10 paradas totales para todo el trayecto).
-- `dashboard/lib/hooks/use-ruta-jornada.ts` — orquesta: pings crudos → OSRM → si OSRM falla, cae a
-  una línea recta entre los pings en vez de no mostrar nada.
+- `dashboard/app/api/tracking/ruta-jornada-match/route.ts` — ajusta el trazado a calles reales.
+  ⚠️ **Corrección (2026-09-13): reemplazo completo de proveedor.** Este documento llegó a acumular
+  tres correcciones sucesivas sobre una integración con el **servidor demo público de OSRM**
+  (`router.project-osrm.org/match`, cliente en `dashboard/lib/osrm.ts`, ya eliminado): cambio de
+  `/route` a `/match` (Map Matching, para dejar de tratar los pings como paradas deliberadas), bajar
+  `MAX_PUNTOS_OSRM` de 100 a 10 (límite real y no documentado de esa instancia demo — 11 puntos ya
+  respondía `400 TooBig`), filtrar pings duplicados exactos (`quitarPingsDuplicados` — rompían el
+  Hidden Markov Model de OSRM con `NoMatch`), y finalmente partir el trayecto en tramos de a 10 con
+  solapamiento (`OSRM_MAX_TRAMOS = 15`) para no perder detalle en jornadas largas dado ese límite de
+  10 puntos por llamada. Todo ese sistema de tramos **se reemplazó por completo** —no se mantiene
+  como alternativa/fallback de proveedor— por **Geoapify Map Matching**
+  (`apidocs.geoapify.com/docs/map-matching/`), que acepta hasta **1000 waypoints en una sola
+  llamada** (100x el límite de OSRM): no hace falta partir nada para prácticamente ninguna jornada
+  real, y con eso desaparece toda la complejidad de partir/llamar en secuencia/unir/manejar fallback
+  por tramo.
+
+  Es un cambio de **arquitectura**, no solo de proveedor: la llamada pasa a correr **del lado del
+  servidor** (antes `lib/osrm.ts` llamaba a OSRM directo desde el navegador) — mismo motivo que ya
+  tenía Nominatim (ver "Geocodificación inversa" más abajo), aunque acá la razón puntual es otra:
+  Geoapify exige una API key que no debe quedar expuesta en el cliente. `GEOAPIFY_API_KEY` (env var
+  nueva; cuenta gratuita sin tarjeta, 3.000 créditos/día, 1 crédito cada 100 waypoints — para el
+  volumen de este sistema el costo esperado es \$0) vive solo en el servidor.
+
+  - Este Route Handler (`GET ?jornadaId=`) trae los pings con la misma consulta que
+    `/api/tracking/ruta-jornada` (consulta independiente, no encadena un fetch a esa otra ruta),
+    aplica `quitarPingsDuplicados` (criterio sin cambios respecto a como vivía en `osrm.ts`) y un
+    muestreo uniforme si superan los 1000 puntos (red de seguridad para una jornada de varias horas
+    de tracking continuo — mismo criterio de muestreo que ya existía, solo que ahora rarísima vez
+    hace falta), y llama a `POST https://api.geoapify.com/v1/mapmatching?apiKey=...` con
+    `{ mode: "drive", waypoints: [{ location: [lng, lat], timestamp: <ISO 8601> }, ...] }`. **Sin
+    parámetro de radio/precisión**: a diferencia de `radiuses` en OSRM, la documentación de Geoapify
+    no expone ninguno (confirmado contra la documentación real y la API, no asumido) — maneja su
+    propia tolerancia de matching internamente. Si `GEOAPIFY_API_KEY` no está configurada, hay menos
+    de 2 pings únicos, o la llamada falla, devuelve `{ trazado: <línea recta>, matcheoCompleto:
+    false }` (mismo shape de siempre) en vez de un error — el fallback vive del lado del servidor
+    ahora, con un `console.error` en los **logs de Render**, no en la consola del navegador como
+    cuando la llamada era client-side.
+  - `dashboard/lib/ruta-matching.ts` (reemplaza a `lib/osrm.ts`): cliente delgado del lado del
+    navegador — solo un `fetch` al endpoint de arriba, sin ninguna lógica de armado de
+    request/parseo de proveedor (eso vive enteramente en el Route Handler).
+  - **Forma real de la respuesta de Geoapify** (confirmada contra la API en vivo, no asumida de la
+    documentación): `{ type: "FeatureCollection", features: [{ type: "Feature", properties: {
+    distance, time, mode, legs, waypoints: [{ location, original_location, match_type:
+    "matched"|"unmatched"|"interpolated", match_distance, leg_index, step_index }] }, geometry: {
+    type: "MultiLineString", coordinates: [[[lng,lat], ...], ...] } }] }`. La geometría es un
+    `MultiLineString` (array de `LineString`s), no un único `LineString` como en OSRM — se
+    concatenan en orden, mismo criterio que ya se usaba con los `matchings` de OSRM.
+  - Probado contra la API real (no solo contra la documentación) con la misma ruta simulada de 10.4
+    min / 32 pings usada para verificar el sistema de tramos de OSRM: **una sola llamada** (835ms),
+    los 32 puntos con `match_type: "matched"`, geometría final de 225 puntos siguiendo calles reales
+    — comparable en detalle a los 231 puntos que había dado el sistema de tramos de OSRM con 4
+    llamadas secuenciales, pero en una sola llamada y sin nada de esa complejidad. También probado
+    con los pings reales (deduplicados) de la jornada que rompía a OSRM con `NoMatch` (gap real de
+    29 minutos entre dos pings, ver la corrección de duplicados más arriba en el historial de este
+    documento) — Geoapify los matcheó sin problema, `match_type: "matched"` en los 3.
+
+  **Limitación que queda**: jornadas con más de 1000 pings únicos (varias horas de tracking continuo
+  ininterrumpido) siguen degradándose con el muestreo uniforme — un caso mucho más raro que el
+  límite de 136 que dejaba el sistema de tramos de OSRM, y rarísimo comparado con el límite original
+  de 10 puntos totales de la primera integración con OSRM.
+- `dashboard/lib/hooks/use-ruta-jornada.ts` — orquesta: pings crudos → pide el ajuste a calles al
+  Route Handler de arriba → si esa llamada en sí falla del todo (no el caso de que Geoapify falle,
+  eso ya lo resuelve el propio Route Handler devolviendo 200 igual), cae a una línea recta entre los
+  pings en vez de no mostrar nada.
 - `dashboard/components/mapa/trazado-ruta.tsx` — el dibujo en sí (`Polyline` `#2563eb`, grosor 4,
   opacidad 0.8, + marcadores de inicio/fin + el `fitBounds` que encuadra el trazado la primera vez
   que aparece, vía un `encuadreKey` para no repetirlo si el usuario después hace zoom/paneo a mano).
@@ -596,8 +569,11 @@ de ese chofer, ajustado a las calles.
 a la jornada *abierta* actual del chofer seleccionado — no había forma de ver el trazado de una
 jornada ya cerrada. Ahora también se puede ver desde el modal de detalle de cualquier jornada en
 `/jornadas` (`jornada-detalle-dialog.tsx`), sin importar si está abierta o cerrada, ni de qué fecha
-sea — reutiliza el mismo backend que ya existía (`ubicaciones_tracking_planas`,
-`GET /api/tracking/ruta-jornada`, `useRutaJornada`, `osrm.ts`), sin tocar ninguno de los tres.
+sea — reutiliza el mismo backend que ya existía en ese momento (`ubicaciones_tracking_planas`,
+`GET /api/tracking/ruta-jornada`, `useRutaJornada`, `osrm.ts`), sin tocar ninguno de los tres. (El
+ajuste a calles migró de `osrm.ts` a Geoapify Map Matching poco después, ver "Trazado histórico de
+rutas" más arriba — esta función en sí no se vio afectada por esa migración, solo el mecanismo
+interno con el que `useRutaJornada` obtiene el trazado.)
 
 - Botón **"Ver ruta"** en `jornada-detalle-dialog.tsx`, siempre visible, cerca de la sección
   `Ubicacion` (Check-In/Check-Out). Abre un modal nuevo y más grande (`className="max-w-4xl"`, no el
@@ -623,11 +599,13 @@ componente `Ubicacion`), cada coordenada de check-in/check-out muestra un enlace
 (mismo formato Google Maps URLs API que ya usa el Excel) **más** la dirección legible.
 
 - `dashboard/app/api/geocodificar/route.ts` — `GET ?lat=&lng=` contra la **API pública de
-  Nominatim** (`nominatim.openstreetmap.org/reverse`). ⚠️ A diferencia de OSRM (que sí se llama
-  directo desde el navegador), esta llamada **corre exclusivamente del lado del servidor** — no es
-  una preferencia de diseño, es una restricción real: la política de uso de Nominatim exige
-  identificar la app con un `User-Agent` válido, y los navegadores ignoran silenciosamente
-  cualquier `User-Agent` custom que JavaScript intente fijar en un `fetch()` del lado del cliente.
+  Nominatim** (`nominatim.openstreetmap.org/reverse`). Esta llamada **corre exclusivamente del lado
+  del servidor** — no es una preferencia de diseño, es una restricción real: la política de uso de
+  Nominatim exige identificar la app con un `User-Agent` válido, y los navegadores ignoran
+  silenciosamente cualquier `User-Agent` custom que JavaScript intente fijar en un `fetch()` del lado
+  del cliente. (El trazado de rutas, en `ruta-jornada-match/route.ts`, corre server-side por otro
+  motivo — Geoapify exige una API key que no debe exponerse al cliente, ver "Trazado histórico de
+  rutas" más arriba.)
   Solo un Route Handler puede cumplir ese requisito (acá: `"app-transp-dashboard (it@day2day.es)"`).
   Cache en memoria del propio proceso (clave = lat/lng redondeados a 4 decimales, sin expiración —
   una dirección no cambia), sin sumar Redis ni nada externo; se pierde al reiniciar el proceso,
@@ -637,9 +615,11 @@ componente `Ubicacion`), cada coordenada de check-in/check-out muestra un enlace
   mapa sin el texto.
 - `dashboard/lib/hooks/use-direccion.ts` — hook TanStack Query que llama a `/api/geocodificar`
   (nunca a Nominatim directo), `staleTime` de 1h.
-- `dashboard/lib/osrm.ts` también recibió `AbortSignal.timeout(8000)` en esta misma tanda de
-  trabajo — antes no tenía timeout, así que un servidor demo colgado (no caído, colgado) dejaba la
-  query de TanStack Query esperando para siempre en vez de caer al fallback de línea recta.
+- El entonces `dashboard/lib/osrm.ts` también recibió `AbortSignal.timeout(8000)` en esta misma
+  tanda de trabajo — antes no tenía timeout, así que un servidor demo colgado (no caído, colgado)
+  dejaba la query de TanStack Query esperando para siempre en vez de caer al fallback de línea recta.
+  Ese archivo ya no existe (ver "Trazado histórico de rutas" más arriba — se migró a Geoapify), pero
+  el mismo timeout de 8s se mantuvo en `ruta-jornada-match/route.ts` por el mismo motivo.
 
 Todas las rutas `/api/*` usan `lib/supabase/server.ts` (cliente con el `service_role` key, marcado
 `server-only` — el build falla si se importa por error desde código de cliente). `lib/supabase/client.ts`
@@ -670,18 +650,20 @@ chofer si se decide agregar uno.
 
 ## 6. Deuda técnica y pendientes conocidos
 
-- OSRM y Nominatim, desde 2026-09-10 (ver §4), corren contra sus servidores demo públicos y
-  gratuitos, no instancias propias — ver la advertencia ⚠️ en esa sección. Si el uso crece mucho,
-  evaluar alojar una instancia propia o un proveedor pago.
-- **Pings de GPS duplicados** (encontrado 2026-09-13 al diagnosticar por qué `/match` fallaba con
-  `NoMatch` — ver §4, "Trazado histórico de rutas"): `ubicaciones_tracking` puede tener filas con
+- Nominatim, desde 2026-09-10 (ver §4), corre contra su servidor demo público y gratuito, no una
+  instancia propia — ver la advertencia en esa sección. Si el uso crece mucho, evaluar alojar una
+  instancia propia o un proveedor pago. (El trazado de rutas ya no depende de un servidor demo desde
+  el 2026-09-13 — ver más abajo y §4: se migró a Geoapify, con plan gratuito de 3.000 créditos/día.)
+- **Pings de GPS duplicados** (encontrado 2026-09-13 al diagnosticar por qué el matching de rutas
+  fallaba — ver §4, "Trazado histórico de rutas"): `ubicaciones_tracking` puede tener filas con
   lat/lng/timestamp exactamente idénticos repetidos varias veces para un mismo ping real. El
-  Dashboard ya lo mitiga defensivamente (`osrm.ts` los filtra antes de llamar a OSRM), pero el origen
+  Dashboard ya lo mitiga defensivamente (`ruta-jornada-match/route.ts` los filtra antes de llamar al
+  proveedor de matching), pero el origen
   no se investigó — candidato más probable sin confirmar: `src/hooks/useSeguimientoGPS.ts`
   (`Location.watchPositionAsync` dentro de un `useEffect` async) podría estar disparando el callback
   más de una vez con la misma posición cacheada del SO si el efecto se remonta rápido. Si se llega a
-  confirmar y corregir del lado de la app móvil, el filtro defensivo en `osrm.ts` puede quedar como
-  está de todos modos (no molesta con datos limpios).
+  confirmar y corregir del lado de la app móvil, el filtro defensivo en `ruta-jornada-match/route.ts`
+  puede quedar como está de todos modos (no molesta con datos limpios).
 - Metro Bundler puede caerse en Windows si algo dentro de `node_modules/` de cualquier
   sub-proyecto cambia mientras Metro lo tiene bajo watch (ej. correr `npm install` en
   `server/mock` con la app corriendo) — es el fallback de archivo que usa Metro sin Watchman

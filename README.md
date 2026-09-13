@@ -100,6 +100,7 @@ credenciales, genera un link de previsualización del correo) — alcanza para d
 | `SUPABASE_SERVICE_ROLE_KEY`     | Clave service_role — **salta RLS**, solo se usa en Route Handlers     |
 | `DASHBOARD_SESSION_SECRET`      | Secreto para firmar la cookie de sesión (HMAC-SHA256, ver `lib/auth.ts`) |
 | `MOCK_SERVER_URL`               | URL de `server/mock` (`http://localhost:4000` en local)               |
+| `GEOAPIFY_API_KEY`              | Map Matching del trazado histórico de rutas (plan gratuito, sin tarjeta) |
 
 ### `server/mock` (variables de entorno del proceso, sin archivo `.env` propio en producción)
 
