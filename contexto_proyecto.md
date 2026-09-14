@@ -226,7 +226,10 @@ corporativa y cuentas" en §2 para el estado pendiente de verificación de la cu
 pendiente|sincronizando|sincronizado|error`. `src/services/syncService.ts` sube en segundo plano lo
 pendiente hacia Supabase (máx. 5 intentos por jornada), disparado por `NetworkContext` (poll de
 conectividad cada 15s). El GPS (`src/services/trackingService.ts`) es distinto: _best-effort_, sin
-cola de reintentos en SQLite — perder un ping no importa, el siguiente llega en 20s.
+cola de reintentos en SQLite — perder un ping no importa, el siguiente llega en 20s. ⚠️ **Fix —
+pings duplicados (2026-09-14)**: `src/hooks/useSeguimientoGPS.ts` ahora descarta un ping antes de
+enviarlo si su lat/lng/timestamp coincide exactamente con el último ping ya enviado — ver el
+diagnóstico completo (causa sospechada vs. causa confirmada) en §6.
 
 **Pantallas**: `LoginScreen`, `RegistroScreen`, `CheckInScreen` (solo la lista de rutas activas),
 `NuevoCheckInScreen`, `HistorialScreen` (+ botón exportar), `DetalleJornadaScreen`. No existe una
@@ -399,7 +402,7 @@ permiso.
 - `POST /api/auth/login` (`app/api/auth/login/route.ts`, runtime Node): recibe `{ email, password
 }`, busca el admin por `email` (comparación exacta en minúsculas — los correos se insertan en
   minúsculas al dar de alta un admin), valida `activo = true` y `bcryptjs.compare(password,
-  password_hash)`. Mensaje de error genérico ("Correo o contraseña incorrectos.") sin distinguir
+password_hash)`. Mensaje de error genérico ("Correo o contraseña incorrectos.") sin distinguir
   cuál de los tres falló, para no filtrar qué correos existen. Si es correcto, actualiza
   `ultimo_acceso = now()` y emite la cookie de sesión.
 - `lib/auth.ts` (Web Crypto nativo, sin librería de JWT — mismo criterio que antes): la cookie
@@ -465,10 +468,10 @@ de tipo — sigue siendo texto plano, no una FK a `admins.id` (habría exigido u
 para las filas ya editadas antes de este cambio; el texto real ahora es siempre confiable porque lo
 escribe el servidor, no el formulario).
 
-**Autenticación de `/api/jornadas/editar`**: no repite el chequeo de *si hay* sesión — igual que el
+**Autenticación de `/api/jornadas/editar`**: no repite el chequeo de _si hay_ sesión — igual que el
 resto de Route Handlers de este Dashboard (`reportes/exportar`, `tracking/ultimas-posiciones`,
 `jornadas`), confía en que `proxy.ts` (middleware) ya protege todo `/api/*` salvo `/api/auth/*`. Sí
-lee la cookie para obtener la *identidad* del admin (vía `obtenerAdminSesion()`, no solo el booleano
+lee la cookie para obtener la _identidad_ del admin (vía `obtenerAdminSesion()`, no solo el booleano
 `esCookieSesionValida()`) — si por algún motivo la sesión no parsea (cookie corrupta, secreto
 rotado), devuelve 401 en vez de guardar con una identidad vacía.
 
@@ -516,7 +519,7 @@ de ese chofer, ajustado a las calles.
     no expone ninguno (confirmado contra la documentación real y la API, no asumido) — maneja su
     propia tolerancia de matching internamente. Si `GEOAPIFY_API_KEY` no está configurada, hay menos
     de 2 pings únicos, o la llamada falla, devuelve `{ trazado: <línea recta>, matcheoCompleto:
-    false }` (mismo shape de siempre) en vez de un error — el fallback vive del lado del servidor
+false }` (mismo shape de siempre) en vez de un error — el fallback vive del lado del servidor
     ahora, con un `console.error` en los **logs de Render**, no en la consola del navegador como
     cuando la llamada era client-side.
   - `dashboard/lib/ruta-matching.ts` (reemplaza a `lib/osrm.ts`): cliente delgado del lado del
@@ -524,9 +527,9 @@ de ese chofer, ajustado a las calles.
     request/parseo de proveedor (eso vive enteramente en el Route Handler).
   - **Forma real de la respuesta de Geoapify** (confirmada contra la API en vivo, no asumida de la
     documentación): `{ type: "FeatureCollection", features: [{ type: "Feature", properties: {
-    distance, time, mode, legs, waypoints: [{ location, original_location, match_type:
-    "matched"|"unmatched"|"interpolated", match_distance, leg_index, step_index }] }, geometry: {
-    type: "MultiLineString", coordinates: [[[lng,lat], ...], ...] } }] }`. La geometría es un
+distance, time, mode, legs, waypoints: [{ location, original_location, match_type:
+"matched"|"unmatched"|"interpolated", match_distance, leg_index, step_index }] }, geometry: {
+type: "MultiLineString", coordinates: [[[lng,lat], ...], ...] } }] }`. La geometría es un
     `MultiLineString` (array de `LineString`s), no un único `LineString` como en OSRM — se
     concatenan en orden, mismo criterio que ya se usaba con los `matchings` de OSRM.
   - Probado contra la API real (no solo contra la documentación) con la misma ruta simulada de 10.4
@@ -542,6 +545,7 @@ de ese chofer, ajustado a las calles.
   ininterrumpido) siguen degradándose con el muestreo uniforme — un caso mucho más raro que el
   límite de 136 que dejaba el sistema de tramos de OSRM, y rarísimo comparado con el límite original
   de 10 puntos totales de la primera integración con OSRM.
+
 - `dashboard/lib/hooks/use-ruta-jornada.ts` — orquesta: pings crudos → pide el ajuste a calles al
   Route Handler de arriba → si esa llamada en sí falla del todo (no el caso de que Geoapify falle,
   eso ya lo resuelve el propio Route Handler devolviendo 200 igual), cae a una línea recta entre los
@@ -566,7 +570,7 @@ de ese chofer, ajustado a las calles.
 ### Ver ruta de una jornada puntual desde `/jornadas` (2026-09-13)
 
 ⚠️ **Corrección**: hasta acá, "Ver ruta" solo existía en `/mapa` (panel de choferes activos), atado
-a la jornada *abierta* actual del chofer seleccionado — no había forma de ver el trazado de una
+a la jornada _abierta_ actual del chofer seleccionado — no había forma de ver el trazado de una
 jornada ya cerrada. Ahora también se puede ver desde el modal de detalle de cualquier jornada en
 `/jornadas` (`jornada-detalle-dialog.tsx`), sin importar si está abierta o cerrada, ni de qué fecha
 sea — reutiliza el mismo backend que ya existía en ese momento (`ubicaciones_tracking_planas`,
@@ -654,16 +658,31 @@ chofer si se decide agregar uno.
   instancia propia — ver la advertencia en esa sección. Si el uso crece mucho, evaluar alojar una
   instancia propia o un proveedor pago. (El trazado de rutas ya no depende de un servidor demo desde
   el 2026-09-13 — ver más abajo y §4: se migró a Geoapify, con plan gratuito de 3.000 créditos/día.)
-- **Pings de GPS duplicados** (encontrado 2026-09-13 al diagnosticar por qué el matching de rutas
-  fallaba — ver §4, "Trazado histórico de rutas"): `ubicaciones_tracking` puede tener filas con
-  lat/lng/timestamp exactamente idénticos repetidos varias veces para un mismo ping real. El
-  Dashboard ya lo mitiga defensivamente (`ruta-jornada-match/route.ts` los filtra antes de llamar al
-  proveedor de matching), pero el origen
-  no se investigó — candidato más probable sin confirmar: `src/hooks/useSeguimientoGPS.ts`
-  (`Location.watchPositionAsync` dentro de un `useEffect` async) podría estar disparando el callback
-  más de una vez con la misma posición cacheada del SO si el efecto se remonta rápido. Si se llega a
-  confirmar y corregir del lado de la app móvil, el filtro defensivo en `ruta-jornada-match/route.ts`
-  puede quedar como está de todos modos (no molesta con datos limpios).
+- ✅ **Pings de GPS duplicados — mitigado en origen (2026-09-14)**, previamente deuda técnica
+  abierta desde 2026-09-13 (ver §4, "Trazado histórico de rutas"): `ubicaciones_tracking` podía
+  tener filas con lat/lng/timestamp exactamente idénticos repetidos hasta 5 veces para un mismo
+  ping real. La sospecha inicial (`useSeguimientoGPS.ts`: el `useEffect` de
+  `Location.watchPositionAsync` no cancelaba bien la suscripción anterior si se remontaba rápido) se
+  **descartó con evidencia**: el patrón `cancelado` (flag por closure) + `suscripcionRef` (`useRef`,
+  no una variable local) en la limpieza es justamente el diseño robusto contra esa race — la
+  limpieza siempre lee `suscripcionRef.current` en el momento en que corre, nunca un valor
+  obsoleto. Tampoco es un problema de dependencias inestables (`usuario` solo cambia de referencia
+  en login/logout; `claveJornadas` sale de una consulta SQLite con `ORDER BY fechaCheckIn DESC`
+  estable). Revisando pings reales de varias jornadas/choferes/días (vía `service_role`): los
+  duplicados aparecían **incluso con una sola jornada activa** (descarta que fuera por solapamiento
+  de jornadas concurrentes cambiando `claveJornadas`), en ráfagas de tamaño variable (x1 a x5) que
+  tienden a agruparse después de una brecha de varios minutos sin pings, o justo antes del
+  check-out — consistente con que el proveedor de ubicación del SO reentregue una posición
+  cacheada/reciente al reanudar la entrega de actualizaciones (la app solo trackea en primer plano,
+  así que volver de segundo plano es un candidato natural), más que con un bug de este efecto — pero
+  el mecanismo nativo exacto **no se pudo confirmar** sin logs de dispositivo en vivo, fuera del
+  alcance de esta corrección. Ante esa incertidumbre, `useSeguimientoGPS.ts` ahora filtra en origen:
+  compara cada posición nueva contra el último ping efectivamente enviado (mismo criterio exacto que
+  `quitarPingsDuplicados` del lado del Dashboard — lat+lng+timestamp idénticos) y descarta el envío
+  si coincide, con un `console.warn` para poder confirmar en logs si sigue pasando. El filtro
+  defensivo del lado del Dashboard (`ruta-jornada-match/route.ts`) se mantiene igual — sigue siendo
+  la red de seguridad para filas ya guardadas antes de este fix, o si el mecanismo nativo vuelve a
+  aparecer por otra vía.
 - Metro Bundler puede caerse en Windows si algo dentro de `node_modules/` de cualquier
   sub-proyecto cambia mientras Metro lo tiene bajo watch (ej. correr `npm install` en
   `server/mock` con la app corriendo) — es el fallback de archivo que usa Metro sin Watchman
