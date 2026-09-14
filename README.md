@@ -93,13 +93,13 @@ credenciales, genera un link de previsualización del correo) — alcanza para d
 
 ### `dashboard/.env.local`
 
-| Variable                        | Descripción                                                           |
-| ------------------------------- | --------------------------------------------------------------------- |
-| `NEXT_PUBLIC_SUPABASE_URL`      | URL del proyecto Supabase                                             |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave anon/publicable                                                 |
-| `SUPABASE_SERVICE_ROLE_KEY`     | Clave service_role — **salta RLS**, solo se usa en Route Handlers     |
+| Variable                        | Descripción                                                              |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| `NEXT_PUBLIC_SUPABASE_URL`      | URL del proyecto Supabase                                                |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Clave anon/publicable                                                    |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Clave service_role — **salta RLS**, solo se usa en Route Handlers        |
 | `DASHBOARD_SESSION_SECRET`      | Secreto para firmar la cookie de sesión (HMAC-SHA256, ver `lib/auth.ts`) |
-| `MOCK_SERVER_URL`               | URL de `server/mock` (`http://localhost:4000` en local)               |
+| `MOCK_SERVER_URL`               | URL de `server/mock` (`http://localhost:4000` en local)                  |
 | `GEOAPIFY_API_KEY`              | Map Matching del trazado histórico de rutas (plan gratuito, sin tarjeta) |
 
 ### `server/mock` (variables de entorno del proceso, sin archivo `.env` propio en producción)
