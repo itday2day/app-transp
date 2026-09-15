@@ -85,6 +85,17 @@ body {
   font-size: 14px;
 }
 
+/* Pin arrastrable del selector de ubicación en mapa (ver
+   components/jornadas/mapa-ubicacion-picker.tsx). */
+.marcador-ubicacion {
+  width: 20px;
+  height: 20px;
+  border-radius: 9999px;
+  border: 3px solid white;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  background: var(--color-primary);
+}
+
 /* Marcadores de inicio/fin de la ruta histórica (ver components/mapa/ruta-historica.tsx). */
 .marcador-ruta {
   display: flex;

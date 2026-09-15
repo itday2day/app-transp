@@ -101,6 +101,18 @@ export interface GeocodificarResponse {
   direccion: string | null;
 }
 
+/** Un resultado de búsqueda de dirección (geocodificación directa). */
+export interface ResultadoBusquedaDireccion {
+  displayName: string;
+  lat: number;
+  lng: number;
+}
+
+/** Respuesta de GET /api/geocodificar/buscar. */
+export interface BuscarDireccionResponse {
+  resultados: ResultadoBusquedaDireccion[];
+}
+
 /** Respuesta paginada de GET /api/jornadas. */
 export interface JornadasResponse {
   data: JornadaRow[];

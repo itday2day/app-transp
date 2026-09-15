@@ -202,11 +202,12 @@ export async function POST(request: Request) {
 
   // Se necesita la fila actual antes de actualizar: chofer_id (arma la ruta
   // de Storage), fecha_check_in (valida el check-out), estado (decide si
-  // corresponde cerrar) y fotos_incidencia (append sin pisar lo que ya
-  // subió el chofer).
+  // corresponde cerrar), fotos_incidencia (append sin pisar lo que ya subió
+  // el chofer) y foto_tacometro_final_url (ver más abajo — defensa en
+  // profundidad, no reemplazable si ya existe).
   const { data: actual, error: errorLectura } = await supabase
     .from("jornadas")
-    .select("chofer_id, estado, fecha_check_in, fotos_incidencia")
+    .select("chofer_id, estado, fecha_check_in, fotos_incidencia, foto_tacometro_final_url")
     .eq("id", cuerpo.id)
     .single();
 
@@ -224,7 +225,15 @@ export async function POST(request: Request) {
   let fotoTacometroFinalUrl: string | undefined;
   let fotosIncidenciaActualizadas: string[] | undefined;
   try {
-    if (cuerpo.fotoTacometroFinal) {
+    // ⚠️ **Corrección (2026-09-15)**: la spec original decía "cargar una
+    // foto nueva reemplaza la anterior si ya había una" — se cambió a "no
+    // reemplazable": si `foto_tacometro_final_url` ya tiene valor (lo haya
+    // cargado el chofer desde la app, o un admin en una corrección previa),
+    // un archivo nuevo entrante para este campo se ignora en silencio, sin
+    // romper el resto de la corrección. La UI ya deshabilita el input
+    // cuando corresponde (ver editar-jornada-dialog.tsx); esto es defensa
+    // en profundidad del lado del servidor, no solo una restricción visual.
+    if (cuerpo.fotoTacometroFinal && !actual.foto_tacometro_final_url) {
       fotoTacometroFinalUrl = await subirEvidencia(
         supabase,
         `${actual.chofer_id}/${cuerpo.id}-final.jpg`,

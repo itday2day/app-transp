@@ -466,15 +466,10 @@ columna independiente de `fecha_check_out`, no se derivaba sola — hubo que cer
 manual en el SQL Editor, sin quedar auditado. Se extendió el mismo formulario/endpoint (no una
 pantalla nueva) con una sección "Datos de cierre", todo opcional:
 
-- **Hora de check-out** (`datetime-local`) — si se completa y la jornada estaba `"abierta"`, el
-  backend cambia `estado` a `"cerrada"` como parte del mismo `UPDATE`. Sin lógica de reabrir (no se
-  puede volver a `"abierta"` borrando esta fecha). Valida que no sea anterior a `fecha_check_in` de
-  esa jornada (400 sin guardar nada si lo es). ⚠️ El input solo tiene precisión de **minuto** — el
-  diálogo compara contra el valor inicial (`fechaCheckOutInicial`, derivado de la jornada, estable
-  durante la vida del componente) y **solo manda el campo si el admin lo cambió de verdad**; si
-  siempre se reenviara (mismo criterio que `kmFinal`/`combustibleFinal`), cualquier corrección de
-  cualquier otro campo en una jornada ya cerrada le truncaría en silencio los segundos/milisegundos
-  a `fecha_check_out`.
+- **Hora de check-out** — si se completa y la jornada estaba `"abierta"`, el backend cambia `estado`
+  a `"cerrada"` como parte del mismo `UPDATE`. Sin lógica de reabrir (no se puede volver a `"abierta"`
+  borrando esta fecha). Valida que no sea anterior a `fecha_check_in` de esa jornada (400 sin guardar
+  nada si lo es).
 - **Latitud/longitud final** — mismo criterio que el check-out sin GPS desde la app (ver
   "Robustecimiento del Check-Out" en §3): opcionales, no todo cierre manual va a tener coordenadas
   exactas.
@@ -487,13 +482,52 @@ Subida de archivos: el navegador del admin sube a `POST /api/jornadas/editar` (q
 Storage con el `service_role` key — nunca directo del navegador a Storage, para no exponer esa clave
 al cliente. **Misma convención de rutas que ya usa la app móvil** (confirmada contra
 `src/services/storageService.ts` + `syncService.ts` antes de escribir esto, no asumida): bucket
-`evidencias`, `{choferId}/{jornadaId}-final.jpg` (tacómetro final, reemplaza la anterior vía
-`upsert: true` — mismo criterio que ya existía para pisar km/combustible final) y
+`evidencias`, `{choferId}/{jornadaId}-final.jpg` (tacómetro final) y
 `{choferId}/{jornadaId}-incidencia-{índice}.jpg` (fotos de incidencia, siempre **agregadas** al
 arreglo `fotos_incidencia` existente — el índice de la primera foto nueva arranca en
 `fotos_incidencia.length` para no pisar índices ya usados por el chofer). Límite de 8MB por imagen,
 solo `image/jpeg`/`image/png` — sin compresión del lado del Dashboard (la app sí comprime,
 `src/services/imageService.ts`, pero no es un requisito duro acá).
+
+⚠️ **Enmienda (2026-09-15, mismo día): 3 ajustes pedidos después de probar la funcionalidad en
+producción** (`editar-jornada-dialog.tsx`, `mapa-ubicacion-picker.tsx` nuevo,
+`app/api/geocodificar/buscar/route.ts` nuevo):
+
+1. **Selector de ubicación en mapa** reemplaza los dos inputs numéricos de lat/lng final —
+   `dashboard/components/jornadas/mapa-ubicacion-picker.tsx`, `MapContainer` propio (Leaflet/OSM,
+   sin API key, cargado con `dynamic(..., { ssr: false })` igual que el resto de mapas de este
+   Dashboard), con un pin arrastrable/clickeable y un buscador de direcciones. El buscador pega
+   contra `GET /api/geocodificar/buscar?q=` (nuevo, **geocodificación directa** — complementa a
+   `/api/geocodificar`, que ya hacía la inversa), que a su vez llama a
+   `nominatim.openstreetmap.org/search` **del lado del servidor**, mismo motivo que la inversa: la
+   política de uso de Nominatim exige identificar la app con `User-Agent` y los navegadores ignoran
+   cualquier `User-Agent` custom que JavaScript intente fijar en un `fetch()` del cliente. Sin caché
+   en memoria acá (a diferencia de la inversa) — el texto de búsqueda libre es mucho menos probable
+   que se repita exacto. Centrado inicial del mapa, en orden de prioridad: `lat_final`/`lng_final` ya
+   guardados (con pin precargado) → `lat_inicial`/`lng_inicial` del check-in (sin pin) → Barcelona
+   por defecto (donde operan las jornadas reales del piloto — ⚠️ distinto del centro por defecto de
+   `MapaFlota`, Ciudad de México, un placeholder de otra tanda de trabajo que no se tocó, fuera de
+   alcance de esta spec). `lat_final`/`lng_final` siguen siendo opcionales: si no se toca el mapa, se
+   guardan como estaban.
+2. **La foto de tacómetro final ya no se puede reemplazar si ya existe una** — corrige lo que decía
+   la spec original arriba ("reemplaza la anterior"). Si `foto_tacometro_final_url` ya tiene valor
+   (chofer desde la app, o admin en una corrección previa), el input de archivo correspondiente se
+   deshabilita en la UI mostrando la foto existente como referencia, **y el backend ignora en
+   silencio** cualquier archivo entrante para ese campo si la jornada ya tiene una — defensa en
+   profundidad, no solo una restricción visual. Las fotos de incidencia no cambian, se siguen
+   agregando sin reemplazar nada.
+3. **Formato 24 horas forzado** en la hora de check-out — el `<input type="datetime-local">` que
+   tenía antes no lo garantiza (su presentación depende del locale del navegador/SO del admin, puede
+   mostrarse con AM/PM). Se reemplazó por `<input type="date">` (el valor de un input de fecha
+   siempre es `"YYYY-MM-DD"` sin ambigüedad) + un input de texto propio para la hora, con máscara
+   mientras se escribe y patrón `^([01]\d|2[0-3]):[0-5]\d$` — texto plano controlado por el propio
+   código, no delegado a un widget del navegador, así que el formato nunca varía por locale. No se
+   sumó ninguna librería de date-picker nueva. El contrato del endpoint no cambió: sigue siendo el
+   mismo ISO/UTC vía `new Date(...).toISOString()`, ahora construido desde `${fecha}T${hora}` en vez
+   de un único valor de `datetime-local`. La guarda de "solo mandar `fechaCheckOut` si el admin lo
+   cambió de verdad" (evita truncar en silencio segundos/milisegundos en cualquier corrección que no
+   toque el check-out) se adaptó a comparar fecha+hora por separado contra sus valores iniciales, con
+   el mismo criterio que antes.
 
 ⚠️ **La validación de incidencia replica la regla real de `IncidenciasForm.tsx`, no la que se asumía
 al principio**: el tipo de incidencia **nunca es obligatorio** aunque `tuvoIncidencia` sea `true` —
