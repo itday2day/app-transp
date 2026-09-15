@@ -1,6 +1,6 @@
 # Contexto del proyecto — app-transp
 
-_Última actualización: 2026-09-13 (migración a Geoapify)._
+_Última actualización: 2026-09-15._
 
 Documento de referencia técnica para cualquier IA (o persona) que retome trabajo en este
 repositorio. Refleja el **estado real del código**, no el plan original — donde la implementación
@@ -458,6 +458,48 @@ tabla de jornadas y el modal de detalle muestran un `Badge` "Editado" con `Toolt
 motivo) cuando `fue_editado === true`. Tras guardar, se invalida la query de TanStack
 (`queryClient.invalidateQueries({ queryKey: ["jornadas"] })`) para refrescar la tabla sin recargar
 la página.
+
+⚠️ **Corrección (2026-09-15) — "Corregir" ahora también puede cerrar una jornada abierta**: hallazgo
+del piloto (jornada huérfana de un chofer tras reinstalar el `.apk` — quedó "abierta" sin
+check-out). Hasta acá no había forma de cerrar una jornada desde el Dashboard: `estado` es una
+columna independiente de `fecha_check_out`, no se derivaba sola — hubo que cerrarla con un `UPDATE`
+manual en el SQL Editor, sin quedar auditado. Se extendió el mismo formulario/endpoint (no una
+pantalla nueva) con una sección "Datos de cierre", todo opcional:
+
+- **Hora de check-out** (`datetime-local`) — si se completa y la jornada estaba `"abierta"`, el
+  backend cambia `estado` a `"cerrada"` como parte del mismo `UPDATE`. Sin lógica de reabrir (no se
+  puede volver a `"abierta"` borrando esta fecha). Valida que no sea anterior a `fecha_check_in` de
+  esa jornada (400 sin guardar nada si lo es). ⚠️ El input solo tiene precisión de **minuto** — el
+  diálogo compara contra el valor inicial (`fechaCheckOutInicial`, derivado de la jornada, estable
+  durante la vida del componente) y **solo manda el campo si el admin lo cambió de verdad**; si
+  siempre se reenviara (mismo criterio que `kmFinal`/`combustibleFinal`), cualquier corrección de
+  cualquier otro campo en una jornada ya cerrada le truncaría en silencio los segundos/milisegundos
+  a `fecha_check_out`.
+- **Latitud/longitud final** — mismo criterio que el check-out sin GPS desde la app (ver
+  "Robustecimiento del Check-Out" en §3): opcionales, no todo cierre manual va a tener coordenadas
+  exactas.
+- **Foto de tacómetro final** e **incidencia** (tipo + detalle + fotos de respaldo) — los mismos
+  datos que un check-out normal desde la app, para que un cierre manual pueda quedar tan completo
+  como sea posible sin bloquear el cierre si no se tiene todo.
+
+Subida de archivos: el navegador del admin sube a `POST /api/jornadas/editar` (que pasó de JSON a
+`multipart/form-data` para poder llevar archivos), y de ahí el propio Route Handler sube a Supabase
+Storage con el `service_role` key — nunca directo del navegador a Storage, para no exponer esa clave
+al cliente. **Misma convención de rutas que ya usa la app móvil** (confirmada contra
+`src/services/storageService.ts` + `syncService.ts` antes de escribir esto, no asumida): bucket
+`evidencias`, `{choferId}/{jornadaId}-final.jpg` (tacómetro final, reemplaza la anterior vía
+`upsert: true` — mismo criterio que ya existía para pisar km/combustible final) y
+`{choferId}/{jornadaId}-incidencia-{índice}.jpg` (fotos de incidencia, siempre **agregadas** al
+arreglo `fotos_incidencia` existente — el índice de la primera foto nueva arranca en
+`fotos_incidencia.length` para no pisar índices ya usados por el chofer). Límite de 8MB por imagen,
+solo `image/jpeg`/`image/png` — sin compresión del lado del Dashboard (la app sí comprime,
+`src/services/imageService.ts`, pero no es un requisito duro acá).
+
+⚠️ **La validación de incidencia replica la regla real de `IncidenciasForm.tsx`, no la que se asumía
+al principio**: el tipo de incidencia **nunca es obligatorio** aunque `tuvoIncidencia` sea `true` —
+solo el detalle es obligatorio, y únicamente cuando el tipo es `"Otro"`. Confirmado contra
+`CheckOutForm.tsx` (`detalleIncidenciaValido = tipo !== "Otro" || detalle.trim().length > 0`) antes
+de implementar, no asumido de la spec original.
 
 ✅ **Corrección (2026-09-11)**: `editado_por` ya no es texto libre que escribe quien edita — ahora
 se deriva de la sesión real (`obtenerAdminSesion()` en `lib/auth.ts`, ver "Auth" arriba), usando el

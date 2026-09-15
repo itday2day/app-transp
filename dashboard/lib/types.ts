@@ -132,6 +132,14 @@ export interface CamposEditablesJornada {
   kmFinal?: number;
   combustibleInicial?: number;
   combustibleFinal?: number;
+  /** ISO 8601. Si viene y la jornada estaba "abierta", el backend la cierra
+   * como parte de la misma corrección (ver POST /api/jornadas/editar). */
+  fechaCheckOut?: string;
+  latFinal?: number;
+  lngFinal?: number;
+  tuvoIncidencia?: boolean;
+  tipoIncidencia?: TipoIncidencia | null;
+  detalleIncidencia?: string;
 }
 
 export interface EditarJornadaRequest extends CamposEditablesJornada {
