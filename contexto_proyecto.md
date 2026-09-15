@@ -332,6 +332,27 @@ una jornada quedaba "Error al enviar" para siempre:
    un pedido explícito del chofer de "probá de nuevo"), mientras que el auto-sync de fondo lo sigue
    respetando (si no, un pull-to-refresh cada tanto convertiría el tope en inútil).
 
+**Pull-to-refresh también en la pantalla inicial (2026-09-15)**: hasta acá, forzar el reintento de
+sincronización (ignorando `MAX_INTENTOS`, punto 3 de arriba) solo era posible desde
+`HistorialScreen.tsx` — si una jornada quedaba en `error` y el chofer no entraba a Historial, no
+tenía forma de forzarlo desde la pantalla inicial (`CheckInScreen.tsx`). Se replicó ahí el mismo
+patrón exacto que ya tenía Historial (confirmado contra ese código antes de tocar nada, no asumido):
+`RefreshControl` sobre el contenedor scrolleable, `onRefresh` que llama a `sincronizarAhora(true)`
+(de `useNetwork()`, el mismo wrapper de contexto que ya usaba Historial — no `syncService.ts`
+directo) y después recarga la lista.
+
+⚠️ **Única diferencia deliberada con el patrón de Historial**: Historial reusa su propio estado
+`cargando` como bandera del `RefreshControl` (`refreshing={cargando}`, sin estado separado).
+`CheckInScreen` **no** puede hacer lo mismo con el `cargando` de `useJornadasAbiertas()`: esta
+pantalla tiene un `if (cargandoViajes) return null` que Historial no tiene — reusar esa bandera
+pondría toda la pantalla en blanco en cada pull-to-refresh en vez de mostrar el spinner nativo sobre
+el contenido ya visible. Por eso lleva un estado `refrescando` propio, envuelto en `try/finally`
+para que el spinner nunca quede pegado. `useJornadasAbiertas()` ya exponía `recargar` (lo usa su
+propio `useFocusEffect` internamente) — se reutiliza tal cual, sin duplicar la query. El indicador
+de estado por fila que ya tenía `TarjetaJornada.tsx` (pendiente/sincronizando/error/sincronizado,
+`jornada.sincronizacion`) se refresca solo, porque `recargar()` vuelve a leer de SQLite — no hizo
+falta tocarlo.
+
 ⚠️ **Nota operativa, no de código**: durante el debugging de lo anterior, Metro Bundler se cayó en
 Windows por un error del watcher de archivos (`FallbackWatcher`, el fallback que usa Metro sin
 Watchman instalado) al toparse con un archivo temporal que `npm install` borró a mitad de un

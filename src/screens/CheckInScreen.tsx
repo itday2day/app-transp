@@ -1,8 +1,9 @@
-import React from "react";
-import { View, Text, FlatList, ScrollView, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, Text, FlatList, RefreshControl, ScrollView, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
+import { useNetwork } from "@/context/NetworkContext";
 import { useJornadasAbiertas } from "@/hooks/useJornadasAbiertas";
 import { useSeguimientoGPS } from "@/hooks/useSeguimientoGPS";
 import { TarjetaJornada } from "@/components/TarjetaJornada";
@@ -20,16 +21,45 @@ export default function CheckInScreen() {
   const navigation = useNavigation<TabsNavigationProp<"CheckIn">>();
   const { t } = useTranslation();
   const { usuario } = useAuth();
-  const { jornadas: viajesActivos, cargando: cargandoViajes } = useJornadasAbiertas();
+  const { sincronizarAhora } = useNetwork();
+  const {
+    jornadas: viajesActivos,
+    cargando: cargandoViajes,
+    recargar: recargarViajes,
+  } = useJornadasAbiertas();
 
   // Mientras haya al menos una ruta activa y la app esté en primer plano, se
   // envían pings de posición al Dashboard en tiempo real (ver useSeguimientoGPS).
   useSeguimientoGPS(viajesActivos.map((jornada) => jornada.id));
 
+  // Pull-to-refresh: mismo criterio que HistorialScreen.tsx (forzar el
+  // reintento de sincronización ignorando MAX_INTENTOS, es un pedido
+  // explícito del chofer de "probá de nuevo"), pero con un estado de
+  // `refrescando` propio en vez de reusar `cargandoViajes` del hook — a
+  // diferencia de Historial, esta pantalla hace `if (cargandoViajes) return
+  // null` más abajo, así que reusar esa misma bandera pondría la pantalla
+  // en blanco en cada pull-to-refresh en vez de mostrar el spinner nativo
+  // sobre el contenido ya visible.
+  const [refrescando, setRefrescando] = useState(false);
+
+  async function refrescar() {
+    setRefrescando(true);
+    try {
+      await sincronizarAhora(true);
+      await recargarViajes();
+    } finally {
+      setRefrescando(false);
+    }
+  }
+
   if (cargandoViajes) return null;
 
   return (
-    <ScrollView style={estilos.pantalla} contentContainerStyle={estilos.contenido}>
+    <ScrollView
+      style={estilos.pantalla}
+      contentContainerStyle={estilos.contenido}
+      refreshControl={<RefreshControl refreshing={refrescando} onRefresh={refrescar} />}
+    >
       <Text style={estilos.titulo}>{t("checkIn.titulo")}</Text>
       <Text style={estilos.chofer}>{t("checkIn.chofer", { nombre: usuario?.nombre ?? "" })}</Text>
 
