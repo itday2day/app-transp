@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, Text, FlatList, RefreshControl, ScrollView, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { useNetwork } from "@/context/NetworkContext";
@@ -52,12 +53,20 @@ export default function CheckInScreen() {
     }
   }
 
+  // Alto real de la barra de tabs, con el inset de la barra de gestos de
+  // Android ya incluido (el propio BottomTabBar de @react-navigation lo suma
+  // solo — ver la nota en RootNavigator.tsx). Se usa acá en vez de un número
+  // fijo porque esta pantalla no tiene `tabBarStyle` custom, así que su
+  // altura real no está escrita en ningún lado del código: sin esto, el
+  // último elemento de la lista queda tapado por la barra de tabs.
+  const alturaTabBar = useBottomTabBarHeight();
+
   if (cargandoViajes) return null;
 
   return (
     <ScrollView
       style={estilos.pantalla}
-      contentContainerStyle={estilos.contenido}
+      contentContainerStyle={[estilos.contenido, { paddingBottom: espaciado.xl + alturaTabBar }]}
       refreshControl={<RefreshControl refreshing={refrescando} onRefresh={refrescar} />}
     >
       <Text style={estilos.titulo}>{t("checkIn.titulo")}</Text>

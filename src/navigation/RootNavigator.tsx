@@ -36,6 +36,14 @@ function PrincipalTabs() {
   const { cerrarSesion } = useAuth();
   const { t } = useTranslation();
 
+  // ⚠️ Sin `tabBarStyle` a propósito: `BottomTabBar` (@react-navigation/bottom-tabs)
+  // ya suma `insets.bottom` a su propio paddingBottom por defecto (confirmado
+  // en su código fuente, no asumido) — reservar espacio para la barra de
+  // gestos de Android en la barra de tabs en sí ya viene resuelto sin tocar
+  // nada acá. Lo que sí hace falta (y no viene gratis) es el padding inferior
+  // del CONTENIDO scrolleable de cada pantalla con tabs, para que el último
+  // elemento de una lista no quede tapado por la barra de tabs — ver
+  // `useBottomTabBarHeight()` en CheckInScreen.tsx/HistorialScreen.tsx.
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({

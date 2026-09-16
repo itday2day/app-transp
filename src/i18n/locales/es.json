@@ -167,9 +167,9 @@
       "Diciembre"
     ]
   },
-  "selectorPais": {
-    "buscarPlaceholder": "Buscar país...",
-    "sinResultados": "No se encontraron países con ese nombre."
+  "selectorBuscable": {
+    "buscarPlaceholder": "Buscar...",
+    "sinResultados": "No se encontraron resultados."
   },
   "selectorDesplegable": {
     "sinOpciones": "No hay opciones cargadas para esta selección."

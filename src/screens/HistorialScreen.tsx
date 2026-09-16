@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { View, Text, FlatList, StyleSheet, RefreshControl } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { useNetwork } from "@/context/NetworkContext";
@@ -43,12 +44,17 @@ export default function HistorialScreen() {
     await cargar();
   }
 
+  // Alto real de la barra de tabs (con el inset de la barra de gestos de
+  // Android ya sumado, ver la nota en RootNavigator.tsx) — sin esto, la
+  // última jornada de la lista queda tapada por la barra de tabs.
+  const alturaTabBar = useBottomTabBarHeight();
+
   return (
     <View style={estilos.pantalla}>
       <FlatList
         data={jornadas}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={estilos.lista}
+        contentContainerStyle={[estilos.lista, { paddingBottom: espaciado.lg + alturaTabBar }]}
         refreshControl={<RefreshControl refreshing={cargando} onRefresh={refrescar} />}
         renderItem={({ item }) => (
           <TarjetaJornada

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
+import { SelectorBuscable } from "@/components/SelectorBuscable";
 import { SelectorDesplegable } from "@/components/SelectorDesplegable";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
@@ -109,11 +110,17 @@ export function SelectorFecha({ etiqueta, valor, onCambiar, edadMinima = 18 }: P
           />
         </View>
         <View style={estilos.columnaAnio}>
-          <SelectorDesplegable
+          {/* Con edadMinima=18 (el caso real, registro de choferes), esto son
+              ~82 años (anioActual-100 a anioActual-18) — muy por encima de
+              "un puñado", a diferencia de día (31) y mes (12), que quedan
+              con SelectorDesplegable por ser listas cortas de interacción
+              convencional por scroll (ver spec de SelectorBuscable). */}
+          <SelectorBuscable
             etiqueta=""
             placeholder={t("selectorFecha.anio")}
             valor={anio}
             opciones={aniosDisponibles}
+            obtenerEtiqueta={(item) => item}
             onSeleccionar={(nuevoAnio) => manejarSeleccion(dia, mes, nuevoAnio)}
           />
         </View>

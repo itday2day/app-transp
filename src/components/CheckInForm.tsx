@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
+import { SelectorBuscable } from "@/components/SelectorBuscable";
 import { SelectorDesplegable } from "@/components/SelectorDesplegable";
 import { SelectorMatricula } from "@/components/SelectorMatricula";
 import { SelectorCombustible } from "@/components/SelectorCombustible";
@@ -135,11 +136,12 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
     <View>
       {/* Sección 1: datos de operación — empresa y ruta dependen una de la otra. */}
       <View>
-        <SelectorDesplegable
+        <SelectorBuscable
           etiqueta={t("checkInForm.empresaEtiqueta")}
           placeholder={t("checkInForm.empresaPlaceholder")}
           valor={empresa}
           opciones={EMPRESAS}
+          obtenerEtiqueta={(item) => item}
           onSeleccionar={manejarCambioEmpresa}
         />
 

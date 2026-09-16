@@ -247,10 +247,52 @@ cancelarlo salvo enviarlo. `useJornadasAbiertas()` (en `CheckInScreen`) ya usaba
 así que la lista se refresca sola al volver con `goBack()` tras un check-in exitoso, sin necesidad
 de pasar ningún callback de refresco entre pantallas.
 
+**Encuadre con la barra de gestos de Android (2026-09-16)**: `react-native-safe-area-context` ya
+estaba instalado (`~5.7.0`, dependencia de React Navigation) y `App.tsx` ya envolvía todo en
+`SafeAreaProvider` — no hizo falta agregar nada nuevo. ⚠️ La barra de tabs en sí (`RootNavigator.tsx`,
+`PrincipalTabs`) **no necesitó ningún cambio tampoco**: confirmado contra el código fuente de
+`@react-navigation/bottom-tabs` (no asumido) que su `BottomTabBar` por defecto ya suma `insets.bottom`
+a su propio `paddingBottom` sin que haga falta `tabBarStyle` custom — y este proyecto nunca tuvo uno.
+Lo que sí hacía falta era el `paddingBottom` del **contenido scrolleable** de `CheckInScreen.tsx` y
+`HistorialScreen.tsx`: sin él, el último elemento de la lista quedaba tapado por la barra de tabs.
+Se usa `useBottomTabBarHeight()` (de `@react-navigation/bottom-tabs`) en vez de un número fijo — da
+el alto real de la barra en cada dispositivo (ya con el inset incluido) en vez de tener que
+adivinarlo, útil justamente porque esta pantalla no tiene un alto de tab bar configurado en ningún
+lado del código.
+
 **Campos de una jornada** (`src/types/index.ts`): empresa, matrícula, ruta, km inicial/final,
 combustible inicial/final (`NivelCombustible` — porcentaje `number` 0-100, ver más abajo),
 incidencias (tipo + detalle), 3 fotos (tacómetro inicial, hoja de ruta opcional, tacómetro final),
-lat/lng de inicio y cierre.
+lat/lng de inicio y cierre. ⚠️ **Empresa y ruta ya eran una lista/catálogo antes de esta corrección**,
+no texto libre — `src/data/empresas.ts` (`EMPRESAS`, 19 nombres fijos, y `RUTAS_POR_EMPRESA`, 2-4
+rutas por empresa configurada, con opción de agregar una ruta a mano si la empresa no tiene ninguna
+cargada). Matrícula sí es distinta: lista de matrículas frecuentes del propio chofer (hasta 8,
+`obtenerMatriculasFrecuentes`) con opción de tipear una nueva — la lista no es un catálogo fijo.
+
+**`SelectorBuscable<T>` (2026-09-16)**: selector genérico con buscador integrado (`src/components/
+SelectorBuscable.tsx`) — mismo patrón visual de hoja modal deslizable desde abajo que ya tenía
+`SelectorDesplegable.tsx`, con un campo de texto fijo arriba de la lista que la filtra en cada tecla
+(subcadena, sin distinguir mayúsculas ni acentos — `normalize("NFD")` + quitar diacríticos a los dos
+lados de la comparación, sin librería de búsqueda difusa). Sin umbral de "a partir de cuántas
+opciones aparece el buscador" — siempre se muestra, es más simple y predecible que un número mágico.
+⚠️ **Se extrajo de `SelectorPais.tsx`**, que ya resolvía exactamente este problema pero hardcodeado a
+la lista de países de `RegistroScreen` — resultó ser el selector de lista larga "que no sabíamos que
+existía" al revisar el código (190+ países). `SelectorPais.tsx` ahora es un wrapper fino sobre
+`SelectorBuscable<Pais>` (mismo criterio que ya usaba `SelectorMatricula.tsx` sobre
+`SelectorDesplegable`: wrapper de dominio específico sobre un selector genérico), sin cambiar su API
+pública — `RegistroScreen.tsx` no se tocó. Conectado además en:
+
+- `CheckInForm.tsx` — el selector de **empresa** (19 opciones). El de **ruta** se queda en
+  `SelectorDesplegable` a propósito: sus listas son cortas (2-4 rutas por empresa, "un puñado") y
+  además necesita `deshabilitado`/`opcionEspecial` (el link "agregar ruta a mano"), que
+  `SelectorBuscable` no replica — no hacía falta para el único caso real que lo usa.
+- `SelectorFecha.tsx` — el selector de **año** (`anioActual - 100` a `anioActual - edadMinima`, ~82
+  opciones con `edadMinima = 18`, el caso real de registro de choferes) — otro selector de lista
+  larga encontrado al revisar el código. Día (31) y mes (12) se quedan en `SelectorDesplegable`, son
+  listas cortas de interacción convencional por scroll, no por tipeo.
+- Quedan sin migrar, a propósito, fuera de alcance: `LanguageSelector` (2 opciones), el selector de
+  tipo de incidencia en `IncidenciasForm.tsx` (4 opciones), `SelectorCombustible.tsx` (barra
+  deslizable, no una lista).
 
 **Combustible como porcentaje**: `NivelCombustible` era un enum de texto de 5 niveles
 (`"Reserva"|"1/4"|"1/2"|"3/4"|"Lleno"`) y pasó a ser `number` (0-100). El selector
