@@ -2,12 +2,14 @@ import { supabase } from "@/lib/supabase";
 import { subirEvidencia } from "./storageService";
 import {
   obtenerPendientesSincronizacion,
+  obtenerJornadasParaReconciliar,
+  sobrescribirCierreRemoto,
   marcarComoSincronizado,
   marcarErrorSincronizacion,
   marcarSincronizando,
   actualizarUrlsFotos,
 } from "@/db/jornadasRepo";
-import { Jornada, UrlsFotosJornada } from "@/types";
+import { EstadoJornada, Jornada, NivelCombustible, TipoIncidencia, UrlsFotosJornada } from "@/types";
 
 const MAX_INTENTOS = 5;
 
@@ -152,4 +154,93 @@ export async function sincronizarPendientes(
   }
 
   return { exitosas, fallidas };
+}
+
+/** Forma de la fila que interesa de `jornadas` en Supabase para reconciliar
+ * — subconjunto de columnas, tal como las devuelve supabase-js (snake_case,
+ * sin transformar). */
+interface FilaJornadaRemota {
+  estado: EstadoJornada;
+  fecha_check_out: string | null;
+  lat_final: number | null;
+  lng_final: number | null;
+  foto_tacometro_final_url: string | null;
+  km_final: number | null;
+  combustible_final: NivelCombustible | null;
+  tuvo_incidencia: boolean | null;
+  tipo_incidencia: TipoIncidencia | null;
+  detalle_incidencia: string | null;
+  fotos_incidencia: string[] | null;
+}
+
+/**
+ * Reconcilia el estado local de las jornadas que la app ya dio por
+ * sincronizadas contra Supabase — necesario porque un administrador puede
+ * cerrar una jornada directo desde el Dashboard ("Corregir", Hallazgo #6),
+ * sin pasar nunca por la app: `syncService` hasta acá solo subía cambios
+ * locales, nunca bajaba nada, así que esa fila quedaba "abierta" en el
+ * celular para siempre aunque en Supabase (la fuente de verdad) ya figurara
+ * "cerrada".
+ *
+ * Se descarta a propósito Supabase Realtime para esto — el proyecto ya
+ * tiene un patrón establecido de chequeo periódico para todo lo relacionado
+ * a sincronización (ver `NetworkContext.tsx`, cada 15s); sumar una
+ * suscripción en tiempo real para este único caso sería una arquitectura
+ * paralela e inconsistente, con su propio ciclo de vida de reconexión que
+ * mantener.
+ *
+ * `obtenerJornadasParaReconciliar` ya filtra a propósito por
+ * `sincronizacion = 'sincronizado'` — una jornada con cambios locales
+ * `pendiente`/`error` se saltea sin tocar, para no arriesgarse a pisar una
+ * edición local que la app todavía no subió con lo que diga Supabase en ese
+ * momento (limitación conocida y aceptada: requiere que el chofer y un
+ * administrador actúen sobre la misma jornada casi al mismo tiempo, un caso
+ * raro).
+ *
+ * Devuelve los ids de las jornadas que efectivamente se cerraron acá (puede
+ * ser un arreglo vacío, el caso común) — quien llama lo usa para saber si
+ * hace falta avisar a algo más que el estado de esa jornada cambió (ver
+ * `NetworkContext.tsx`, que lo usa para que `useSeguimientoGPS` dejé de
+ * trackear una jornada recién cerrada aunque el chofer esté en otra
+ * pestaña).
+ */
+export async function reconciliarJornadasAbiertas(choferId: string): Promise<string[]> {
+  const candidatas = await obtenerJornadasParaReconciliar(choferId);
+  if (candidatas.length === 0) return [];
+
+  const cerradas: string[] = [];
+
+  for (const jornada of candidatas) {
+    const { data, error } = await supabase
+      .from("jornadas")
+      .select(
+        "estado, fecha_check_out, lat_final, lng_final, foto_tacometro_final_url, km_final, combustible_final, tuvo_incidencia, tipo_incidencia, detalle_incidencia, fotos_incidencia"
+      )
+      .eq("id", jornada.id)
+      .maybeSingle<FilaJornadaRemota>();
+
+    if (error) {
+      console.error(`reconciliarJornadasAbiertas: no se pudo consultar la jornada ${jornada.id}:`, error);
+      continue;
+    }
+    // Sin fila remota (se borró), o sigue abierta de verdad allá — nada que
+    // reconciliar todavía.
+    if (!data || data.estado !== "cerrada" || !data.fecha_check_out) continue;
+
+    await sobrescribirCierreRemoto(jornada.id, {
+      kmFinal: data.km_final,
+      combustibleFinal: data.combustible_final,
+      fotoTacometroFinalUrl: data.foto_tacometro_final_url,
+      latFinal: data.lat_final,
+      lngFinal: data.lng_final,
+      fechaCheckOut: data.fecha_check_out,
+      tuvoIncidencia: data.tuvo_incidencia,
+      tipoIncidencia: data.tipo_incidencia,
+      detalleIncidencia: data.detalle_incidencia,
+      fotosIncidencia: data.fotos_incidencia,
+    });
+    cerradas.push(jornada.id);
+  }
+
+  return cerradas;
 }

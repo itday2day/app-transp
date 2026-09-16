@@ -1,6 +1,6 @@
 # Contexto del proyecto — app-transp
 
-_Última actualización: 2026-09-15._
+_Última actualización: 2026-09-16._
 
 Documento de referencia técnica para cualquier IA (o persona) que retome trabajo en este
 repositorio. Refleja el **estado real del código**, no el plan original — donde la implementación
@@ -352,6 +352,55 @@ propio `useFocusEffect` internamente) — se reutiliza tal cual, sin duplicar la
 de estado por fila que ya tenía `TarjetaJornada.tsx` (pendiente/sincronizando/error/sincronizado,
 `jornada.sincronizacion`) se refresca solo, porque `recargar()` vuelve a leer de SQLite — no hizo
 falta tocarlo.
+
+**Reconciliación: la app se entera cuando el Dashboard cierra una jornada (2026-09-15)**:
+`syncService.ts` hasta acá era exclusivamente de **subida** — nunca existió un camino que bajara el
+estado real de Supabase para una jornada que la app ya daba por `sincronizada`. Desde el Hallazgo #6
+(un administrador puede cerrar una jornada abierta directo desde "Corregir" en el Dashboard, ver §4),
+esa fila quedaba `estado = "abierta"` en el celular del chofer para siempre, aunque en Supabase ya
+figurara `"cerrada"` — la ruta seguía viéndose "en curso" sin ninguna forma de que se actualizara
+sola.
+
+- `syncService.reconciliarJornadasAbiertas(choferId)` — por cada jornada local `"abierta"` **y**
+  `sincronizacion = "sincronizado"` (sin cambios locales pendientes: si tiene algo en
+  `pendiente`/`error` se la saltea a propósito, para no arriesgarse a pisar una edición local
+  todavía no subida — limitación conocida y aceptada, caso raro), consulta esa fila puntual en
+  Supabase (respeta RLS, el chofer solo puede leer las suyas). Si el `estado` remoto ya es
+  `"cerrada"`, sobreescribe la fila local completa con los valores remotos.
+- `jornadasRepo.sobrescribirCierreRemoto()` — nueva, hace el `UPDATE` en SQLite. ⚠️ A propósito **no**
+  reutiliza `registrarCheckOut()` (el check-out normal hecho por el chofer): esa función pone
+  `fechaCheckOut = new Date()` (la hora actual del dispositivo — acá hace falta la del cierre real,
+  que viene de Supabase) y dejaba `sincronizacion = 'pendiente'` (pondría esta jornada en cola para
+  volver a subirse, cuando estos datos ya están en Supabase — son el origen del `UPDATE`, no algo por
+  subir). Mismas columnas/tabla que `registrarCheckOut`, con esos dos criterios adaptados. También
+  completa `fotoCheckOutUrl`/`fotosIncidencia` (las columnas que `syncService` ya usa como "esto ya
+  está subido, no lo reintentes") con la misma URL remota que `fotoTacometroFinalUri`/
+  `fotosIncidenciaUris` (las que usa `DetalleJornadaScreen` para _mostrar_ la foto — a
+  `<Image source={{uri}}>` le da igual si `uri` es un archivo local o una URL remota).
+- **Se descartó Supabase Realtime a propósito** — mismo motivo que el mapa en vivo del Dashboard (ver
+  §2): sumar una arquitectura de suscripción distinta para este único caso sería inconsistente con el
+  patrón de chequeo periódico que ya usa todo lo demás de sincronización en el proyecto.
+- **3 disparadores**, todos convergiendo en la misma implementación (no 3 copias de la lógica):
+  1. `NetworkContext.tsx` — nuevo `reconciliarSiCorresponde()`, llamado en el mismo ciclo de 15s que
+     ya revisa sincronización pendiente. Si cierra al menos una jornada, expone
+     `jornadasReconciliadasEn: Date | null` en el contexto (mismo patrón ya establecido que
+     `ultimaSincronizacion`).
+  2. `useJornadasAbiertas()` — su `recargar()` ahora llama a `reconciliarJornadasAbiertas()` **antes**
+     de leer SQLite, así que su `useFocusEffect` ya existente (dispara al volver a la pantalla de
+     Check-In) reconcilia gratis, sin código nuevo en `CheckInScreen.tsx` para este disparador.
+  3. El pull-to-refresh de `CheckInScreen.tsx` (punto anterior) ya llama a `recargarViajes()` después
+     de sincronizar — como `recargar()` reconcilia internamente, este disparador tampoco necesitó
+     tocarse.
+- ⚠️ **Por qué hace falta el puente del punto 1 (`jornadasReconciliadasEn`)**: `useSeguimientoGPS`
+  (ver §3 arriba) no tiene ninguna API imperativa de "dejar de trackear esta jornada" — es puramente
+  reactivo a su prop `jornadaIds`, que viene de `viajesActivos` (el estado de `useJornadasAbiertas()`
+  en `CheckInScreen`). Con bottom-tabs, esa pantalla **no se desmonta** al cambiar de pestaña — sigue
+  trackeando en segundo plano — así que si el chofer está en Historial cuando un administrador cierra
+  su jornada, ni el `useFocusEffect` ni el pull-to-refresh de Check-In van a disparar hasta que vuelva
+  ahí. `useJornadasAbiertas()` (que sigue montado igual, sin foco) escucha `jornadasReconciliadasEn` y
+  se recarga sola apenas `NetworkContext` avisa que cerró algo — eso actualiza `viajesActivos`, lo que
+  a su vez hace que `useSeguimientoGPS` deje de trackear esa jornada, con el mismo mecanismo reactivo
+  de siempre (sin ninguna función nueva de "detener tracking").
 
 ⚠️ **Nota operativa, no de código**: durante el debugging de lo anterior, Metro Bundler se cayó en
 Windows por un error del watcher de archivos (`FallbackWatcher`, el fallback que usa Metro sin

@@ -189,6 +189,92 @@ export async function obtenerJornadasAbiertas(choferId: string): Promise<Jornada
   return filas.map(filaAJornada);
 }
 
+// Candidatas a reconciliar contra Supabase (ver
+// syncService.reconciliarJornadasAbiertas): "abierta" localmente, pero sin
+// ningún cambio local pendiente de subir todavía (sincronizacion =
+// 'sincronizado') — si tuviera algo en 'pendiente'/'error', se la saltea a
+// propósito, para no arriesgarse a pisar una edición local que la app
+// todavía no subió con lo que diga Supabase en ese momento.
+export async function obtenerJornadasParaReconciliar(choferId: string): Promise<Jornada[]> {
+  const db = await obtenerBaseDeDatos();
+  const filas = await db.getAllAsync<FilaJornadaSQLite>(
+    `SELECT * FROM jornadas WHERE choferId = ? AND estado = 'abierta' AND sincronizacion = 'sincronizado'`,
+    [choferId]
+  );
+  return filas.map(filaAJornada);
+}
+
+/** Los mismos campos de cierre que ya puede cargar "Corregir" desde el
+ * Dashboard (ver Hallazgo #6) — tal como vienen de Supabase (snake_case
+ * implícito en los nombres de columna reales, acá ya en camelCase porque
+ * syncService los arma a partir del `select()` de supabase-js). */
+export interface CierreRemoto {
+  kmFinal: number | null;
+  combustibleFinal: NivelCombustible | null;
+  fotoTacometroFinalUrl: string | null;
+  latFinal: number | null;
+  lngFinal: number | null;
+  fechaCheckOut: string;
+  tuvoIncidencia: boolean | null;
+  tipoIncidencia: TipoIncidencia | null;
+  detalleIncidencia: string | null;
+  fotosIncidencia: string[] | null;
+}
+
+/**
+ * Sobreescribe localmente una jornada que ya estaba sincronizada, cuando la
+ * reconciliación (ver syncService.reconciliarJornadasAbiertas) encuentra que
+ * en Supabase ya figura "cerrada" — por ejemplo, un administrador la cerró
+ * desde el Dashboard con "Corregir" sin que la app se entere por su cuenta.
+ *
+ * A propósito NO reutiliza registrarCheckOut() (el check-out normal, hecho
+ * por el chofer): esa función pone `fechaCheckOut = new Date()` (la hora
+ * ACTUAL del dispositivo — acá hace falta la del cierre real, que viene de
+ * Supabase) y `sincronizacion = 'pendiente'` (pondría esta jornada en cola
+ * para volver a subirse, cuando en realidad ya está en Supabase — es
+ * literalmente el origen de estos datos). Mismo patrón de columnas/tabla que
+ * registrarCheckOut, pero con esos dos criterios adaptados a este caso.
+ *
+ * `fotoTacometroFinalUri`/`fotosIncidenciaUris` (las columnas que usa
+ * DetalleJornadaScreen para MOSTRAR la foto — a `<Image source={{uri}}>` le
+ * da igual si `uri` es un archivo local o una URL remota) se completan con
+ * la URL remota, igual que `fotoCheckOutUrl`/`fotosIncidencia` (las columnas
+ * que syncService ya usa como "esto ya está subido, no lo reintentes").
+ */
+export async function sobrescribirCierreRemoto(id: string, remoto: CierreRemoto): Promise<void> {
+  const db = await obtenerBaseDeDatos();
+  const fotosIncidenciaJson =
+    remoto.fotosIncidencia && remoto.fotosIncidencia.length > 0
+      ? JSON.stringify(remoto.fotosIncidencia)
+      : null;
+
+  await db.runAsync(
+    `UPDATE jornadas SET
+      kmFinal = ?, combustibleFinal = ?,
+      fotoTacometroFinalUri = ?, fotoCheckOutUrl = ?,
+      latFinal = ?, lngFinal = ?, fechaCheckOut = ?,
+      tuvoIncidencia = ?, tipoIncidencia = ?, detalleIncidencia = ?,
+      fotosIncidenciaUris = ?, fotosIncidencia = ?,
+      estado = 'cerrada', sincronizacion = 'sincronizado'
+    WHERE id = ?`,
+    [
+      remoto.kmFinal,
+      remoto.combustibleFinal,
+      remoto.fotoTacometroFinalUrl,
+      remoto.fotoTacometroFinalUrl,
+      remoto.latFinal,
+      remoto.lngFinal,
+      remoto.fechaCheckOut,
+      remoto.tuvoIncidencia == null ? null : remoto.tuvoIncidencia ? 1 : 0,
+      remoto.tipoIncidencia,
+      remoto.detalleIncidencia,
+      fotosIncidenciaJson,
+      fotosIncidenciaJson,
+      id,
+    ]
+  );
+}
+
 export async function obtenerJornadaPorId(id: string): Promise<Jornada | null> {
   const db = await obtenerBaseDeDatos();
   const fila = await db.getFirstAsync<FilaJornadaSQLite>(`SELECT * FROM jornadas WHERE id = ?`, [id]);
