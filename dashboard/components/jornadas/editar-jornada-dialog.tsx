@@ -581,7 +581,7 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
                     rows={3}
                     value={detalleIncidencia}
                     onChange={(e) => setDetalleIncidencia(e.target.value)}
-                    className="flex w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex w-full rounded-md border border-border bg-card px-3 py-2 text-base text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
                   />
                   {detalleIncidenciaFaltante && (
                     <p className="mt-1 text-xs text-danger">
@@ -608,7 +608,7 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
             placeholder="Ej: el chofer cargó mal el kilometraje final por error de tipeo."
             value={motivoEdicion}
             onChange={(e) => setMotivoEdicion(e.target.value)}
-            className="flex w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex w-full rounded-md border border-border bg-card px-3 py-2 text-base text-foreground shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:text-sm"
           />
         </div>
 

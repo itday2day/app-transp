@@ -24,8 +24,8 @@ export default function MapaPage() {
   const listaPosiciones = posiciones ?? [];
 
   return (
-    <div className="flex h-full min-h-[600px] flex-col md:flex-row">
-      <div className="relative order-2 min-h-[50vh] flex-1 md:order-1 md:min-h-0">
+    <div className="flex h-full min-h-[600px] flex-col lg:flex-row">
+      <div className="relative order-2 min-h-[50dvh] flex-1 lg:order-1 lg:min-h-0">
         {isError && (
           <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 rounded-md border border-danger/30 bg-card px-3 py-2 text-sm text-danger shadow">
             No se pudieron cargar las posiciones. Reintentando…
@@ -37,7 +37,13 @@ export default function MapaPage() {
           jornadaRutaActiva={jornadaRutaActiva}
         />
       </div>
-      <aside className="order-1 h-64 w-full shrink-0 border-b border-border bg-card md:order-2 md:h-full md:w-80 md:border-b-0 md:border-l">
+      {/* Sin altura fija: el panel crece con su contenido (2-3 choferes no
+          deja hueco vacío) hasta max-h-[40dvh] — a partir de ahí, PanelChoferes
+          ya scrollea internamente su lista (mantiene el header "Choferes
+          activos" fijo) porque a esa altura clampeada el h-full interno pasa a
+          resolver contra un valor definido. El mapa mantiene su propio piso de
+          altura (min-h-[50dvh] arriba) sin cambios. */}
+      <aside className="order-1 max-h-[40dvh] w-full shrink-0 border-b border-border bg-card lg:order-2 lg:h-full lg:max-h-none lg:w-80 lg:border-b-0 lg:border-l">
         <PanelChoferes
           posiciones={listaPosiciones}
           cargando={isLoading}

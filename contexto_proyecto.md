@@ -818,6 +818,95 @@ Todas las rutas `/api/*` usan `lib/supabase/server.ts` (cliente con el `service_
 (con el `anon` key) existe pero no se usa todavía — quedaría preparado para un futuro login de
 chofer si se decide agregar uno.
 
+**Dashboard usable desde navegador móvil (2026-09-16)**: el Dashboard se diseñó pensando en
+escritorio, sin encuadre pensado para pantalla chica — se pidió mejorarlo sin tocar funcionalidad.
+Mobile-first con los breakpoints que Tailwind v4 ya trae, sin sumar ninguna librería de detección de
+dispositivo. **El corte entre "layout mobile" (pila vertical/tarjetas/pantalla completa) y "layout de
+escritorio" (barra lateral/tabla/modal centrado) es `lg` (1024px) en todos lados — no `md` (768px)**:
+la primera versión usó `md`, y al probarla en un teléfono real en horizontal (la mayoría ronda
+800-930px de ancho) mostraba el layout de escritorio completo dentro de una pantalla angosta en alto
+(ver "Ajuste — breakpoint a `lg`" más abajo). Los ajustes de fuente (16px) y área de toque (44px) de
+más abajo son aparte y siguen en `md` — no están atados a esta decisión de layout.
+
+Confirmado contra el código real antes de tocar nada — varias partes ya venían resueltas desde el
+diseño original, contra lo que suponía la spec:
+
+- **`/mapa`**: `app/(dashboard)/mapa/page.tsx` ya apilaba panel+mapa en mobile (`flex-col`/`order-1`/
+  `order-2`) y `app/(dashboard)/layout.tsx` ya tenía un header con nav horizontal scrolleable para
+  mobile (`SidebarNav horizontal`, solo 2 enlaces — no hizo falta un menú hamburguesa). Lo que sí
+  faltaba: toda la cadena de alto dependía de `min-h-screen` (`vh`) en la raíz del layout — con la
+  barra de direcciones de un navegador móvil mostrándose/ocultándose, el mapa saltaba de tamaño. Se
+  cambió `min-h-screen` → `min-h-dvh` en `app/(dashboard)/layout.tsx` (y de paso en `app/login/page.tsx`,
+  mismo problema) y `min-h-[50vh]` → `min-h-[50dvh]` en `mapa/page.tsx` — sin inventar ningún cálculo
+  nuevo restando header/panel a mano, porque el `flex-1` que ya usa esta cadena de layout ya se encarga
+  de eso; solo hacía falta que la unidad de la que parte no saltara.
+- **`/jornadas`**: el componente real es `components/jornadas/tabla-jornadas.tsx` (`TablaJornadas`),
+  con 9 columnas y `min-w-[860px]` (scroll horizontal en mobile). Se agregó una vista de tarjetas
+  (`lg:hidden`, tabla pasa a `hidden lg:block`) alimentada por el mismo array de jornadas ya cargado —
+  cada tarjeta muestra chofer/empresa+matrícula/ruta/estado/check-in/check-out/badges de
+  incidencia/editado y abre el mismo `JornadaDetalleDialog` que hoy abre una fila. Los filtros
+  (`filtros-jornadas.tsx`) ya usaban `grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6` — un grid propio
+  sin relación con el corte layout mobile/desktop, no se tocó.
+- **Los 3 modales** (`jornada-detalle-dialog`, `editar-jornada-dialog`, `mapa-ubicacion-picker`):
+  `components/ui/dialog.tsx` es el único componente `Dialog` base (sin Radix), ya centrado con
+  `max-w-2xl` por defecto y ya con un botón "X" visible en todos los tamaños — no hizo falta agregarlo,
+  solo agrandar su área de toque (`p-1` → `p-3.5` en mobile, sin cambios en desktop). Pasa a ocupar
+  pantalla completa por debajo de `lg` (`h-full w-full rounded-none border-0`) y vuelve al
+  tamaño/centrado de siempre desde `lg:` (`lg:h-auto lg:max-h-[90dvh] lg:rounded-lg lg:border`); el
+  `max-w-*` que cada modal pasa por `className` (`max-w-lg`, `max-w-md`, `max-w-4xl`) sigue
+  gobernando el ancho en desktop sin tocarlo. El botón de cerrar comparte el mismo corte `lg` que el
+  panel (no `md`, a propósito): mientras el modal esté a pantalla completa, el botón se queda grande.
+  Como los 3 (y también `exportar-reporte-dialog` y `ruta-jornada-dialog`, no nombrados en la spec
+  pero que comparten el mismo `Dialog`) se beneficiaron parejo. Dentro de `editar-jornada-dialog`,
+  `mapa-ubicacion-picker.tsx` ya tenía un alto fijo en píxeles (`h-56`, no `0px` ni dependiente de un
+  contenedor colapsado) — no hacía falta ningún cambio ahí.
+- **Login, header, inputs**: `app/login/page.tsx` ya tenía ancho fluido (`w-full max-w-sm` + `px-4`) —
+  no hacía falta tocarlo más que el `dvh` de arriba. `Input`/`Select` (`components/ui/`) y los dos
+  `<textarea>` propios de `editar-jornada-dialog.tsx` estaban en `text-sm` (14px) — dispara zoom
+  automático al enfocar en Safari/iOS; se cambió a `text-base md:text-sm` (16px en mobile, 14px sin
+  cambios desde `md`). El componente `Button` compartido (`h-9`/`h-8`/ícono `h-9 w-9`) quedaba por
+  debajo de 44×44px de área de toque; se cambió a `h-11`/ícono `h-11 w-11` en mobile, `md:h-9`/`md:h-8`
+  sin cambios desde `md` — cubre de una sola vez exportar, corregir, cancelar/guardar, cerrar sesión y
+  alternar tema, todos usan este mismo componente. El toggle "Ver ruta" del panel de choferes
+  (`panel-choferes.tsx`, texto+ícono propio, no usa `Button`) se ajustó aparte (`py-3.5 md:py-1.5`).
+  Estos 4 (`Input`/`Select`/`textarea`/`Button`/toggle "Ver ruta") se quedaron deliberadamente en `md`,
+  no en `lg` — son correcciones de fuente/toque, no del layout mobile/desktop, y no forman parte del
+  ajuste de breakpoint de abajo. Quedaron deliberadamente sin tocar por su tamaño (sería visualmente
+  absurdo agrandarlos): el botón "quitar foto" superpuesto sobre una miniatura de 56×56px en
+  `editar-jornada-dialog.tsx`, y los resultados de búsqueda de dirección en `mapa-ubicacion-picker.tsx`.
+
+**Ajuste — breakpoint a `lg` y altura del panel de choferes (mismo día, tras probar en un teléfono
+real)**: la primera versión de arriba usaba `md` (768px) como el corte layout mobile/desktop en
+`layout.tsx`, `mapa/page.tsx`, `tabla-jornadas.tsx` y `dialog.tsx` — al probarla en un teléfono real,
+rotarlo a horizontal (ancho >768px en la mayoría de los modelos) hacía aparecer el layout de
+escritorio completo (barra lateral, tabla de 9 columnas, modal centrado) dentro de una pantalla
+angosta en alto. Se subieron los 4 archivos de `md:` a `lg:` (1024px, por encima del ancho horizontal
+de cualquier teléfono actual sin afectar tablets/laptops) — los ajustes de fuente/toque de arriba
+(`Input`/`Select`/`textarea`/`Button`/toggle "Ver ruta") se dejaron en `md` a propósito, no están
+atados a esta decisión de layout.
+
+Segundo problema real encontrado en la misma prueba: en `/mapa` en vertical, con pocos choferes
+activos, el panel de choferes dejaba un hueco vacío debajo de la lista. La causa real (distinta de lo
+que sospechaba la spec — no era un `min-h-[50dvh]` en el panel, ese piso lo tiene el MAPA, no el
+panel) era que `aside` en `mapa/page.tsx` tenía `h-64` fijo (256px) en mobile, independiente de
+cuántos choferes hubiera. Se cambió a `max-h-[40dvh]` (techo, no piso) sin `h-*` fijo: con pocos
+choferes, el panel se achica a su contenido real (sin hueco) porque en ese caso el `h-full` interno de
+`PanelChoferes` no tiene un alto porcentual contra el que resolver y el navegador lo trata como
+`auto`; con una lista larga, `aside` queda clampeado a `max-h-[40dvh]` (ahí sí un alto definido), y
+recién en ese punto el `flex-1 overflow-y-auto` que ya tenía `PanelChoferes` internamente empieza a
+scrollear solo la lista, sin arrastrar el header "Choferes activos" fuera de vista. El mapa mantiene
+su propio piso `min-h-[50dvh]` sin cambios — Ajuste 1 y 2 conviven porque son independientes (uno es
+el breakpoint del layout, el otro la altura del panel dentro del layout mobile ya elegido).
+
+Verificación: `tsc --noEmit`/`lint`/`format:check` limpios en `dashboard/` (el único warning de
+Prettier es en `CLAUDE.md`, preexistente, no tocado en esta tanda). El servidor de desarrollo (Next
+16 + Turbopack) levanta sin errores y las 3 rutas responden (`/login` 200, `/mapa` y `/jornadas` 307
+sin cookie de sesión — esperado). **Pendiente**: no se pudo abrir Chrome DevTools en modo dispositivo
+ni probar en un teléfono real dentro de este entorno (sin navegador disponible) — queda para que el
+usuario confirme, ahora explícitamente en horizontal además de vertical, en `/mapa` y `/jornadas`, y
+que el panel de choferes no deje hueco vacío con pocos choferes ni rompa el layout con una lista
+larga.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

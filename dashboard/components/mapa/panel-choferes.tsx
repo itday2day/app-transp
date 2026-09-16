@@ -93,7 +93,7 @@ export function PanelChoferes({
                     type="button"
                     onClick={() => onToggleRuta(jornadaId)}
                     className={cn(
-                      "flex w-full items-center gap-1.5 border-t border-border/60 px-4 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      "flex w-full items-center gap-1.5 border-t border-border/60 px-4 py-3.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:py-1.5",
                       rutaVisible && "text-primary"
                     )}
                   >
