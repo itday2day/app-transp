@@ -31,7 +31,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <SidebarNav horizontal />
         </div>
 
-        <main className="min-w-0 flex-1">{children}</main>
+        {/* `flex flex-col` (no solo `flex-1`): una página como /mapa necesita
+            que su hijo raíz llene el alto disponible con `flex-1` — un
+            `height:100%` ahí, colgando de un `main` que NO es un contenedor
+            flex, es percentage-height intercalado entre dos `flex-1`, que no
+            está garantizado por spec como "definido" y fue la causa real de
+            que el mapa quedara con alto 0 (ver contexto_proyecto.md §4). */}
+        <main className="flex min-w-0 flex-1 flex-col">{children}</main>
       </div>
     </div>
   );

@@ -24,7 +24,7 @@ export default function MapaPage() {
   const listaPosiciones = posiciones ?? [];
 
   return (
-    <div className="flex h-full min-h-[600px] flex-col lg:flex-row">
+    <div className="flex min-h-[600px] flex-1 flex-col lg:flex-row">
       <div className="relative order-2 min-h-[50dvh] flex-1 lg:order-1 lg:min-h-0">
         {isError && (
           <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 rounded-md border border-danger/30 bg-card px-3 py-2 text-sm text-danger shadow">

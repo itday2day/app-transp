@@ -12,13 +12,56 @@ interface FiltrosJornadasFormProps {
   onChange: (filtros: FiltrosJornadas) => void;
 }
 
+// Fechas locales YYYY-MM-DD (mismo valor que ya espera <input type="date">
+// y el resto del filtrado) calculadas con los getters LOCALES de Date
+// (getFullYear/getMonth/getDate) — mismo patrón ya establecido en
+// editar-jornada-dialog.tsx (isoAFechaLocal/isoAHoraLocal), a propósito NO
+// se reusan todayIsoDate()/daysAgoIsoDate() de lib/utils.ts porque esas usan
+// toISOString() (zona horaria UTC): cerca de medianoche, en la zona horaria
+// del admin, pueden devolver el día siguiente o anterior al real.
+function fechaLocalIso(fecha: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}-${pad(fecha.getDate())}`;
+}
+
+type AtajoRango = "hoy" | "7dias" | "mes";
+
+function calcularAtajoRango(atajo: AtajoRango): { desde: string; hasta: string } {
+  const hoy = new Date();
+  const hasta = fechaLocalIso(hoy);
+
+  if (atajo === "hoy") return { desde: hasta, hasta };
+
+  if (atajo === "7dias") {
+    const hace6Dias = new Date(hoy);
+    hace6Dias.setDate(hoy.getDate() - 6);
+    return { desde: fechaLocalIso(hace6Dias), hasta };
+  }
+
+  const primerDiaDelMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  return { desde: fechaLocalIso(primerDiaDelMes), hasta };
+}
+
 export function FiltrosJornadasForm({ filtros, onChange }: FiltrosJornadasFormProps) {
   function actualizar<K extends keyof FiltrosJornadas>(campo: K, valor: FiltrosJornadas[K]) {
     onChange({ ...filtros, [campo]: valor, page: 1 });
   }
 
+  // Atajo de escritura sobre los mismos "desde"/"hasta" de siempre — dispara
+  // el mismo filtrado que si el admin hubiera cargado las fechas a mano, sin
+  // ningún estado ni modo de filtrado nuevo.
+  function aplicarAtajoRango(atajo: AtajoRango) {
+    onChange({ ...filtros, ...calcularAtajoRango(atajo), page: 1 });
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+    // Por debajo de `lg`: una columna, cada control en su propia fila salvo
+    // el par Desde/Hasta (su propia sub-grilla de 2 columnas) y "Limpiar"
+    // siempre en su propia fila a ancho completo, nunca al lado de un input.
+    // Desde `lg:`: misma disposición de 6 columnas que ya había (el grupo de
+    // fechas ocupa 2 de las 6, igual que las columnas sueltas Desde/Hasta de
+    // antes).
+    <div className="grid grid-cols-1 gap-3 lg:grid-cols-6">
       <div>
         <Label htmlFor="f-empresa">Empresa</Label>
         <Input
@@ -49,24 +92,64 @@ export function FiltrosJornadasForm({ filtros, onChange }: FiltrosJornadasFormPr
           <option value="cerrada">Cerrada</option>
         </Select>
       </div>
-      <div>
-        <Label htmlFor="f-desde">Desde</Label>
-        <Input
-          id="f-desde"
-          type="date"
-          value={filtros.desde}
-          onChange={(e) => actualizar("desde", e.target.value)}
-        />
+
+      <div className="lg:col-span-2">
+        <Label>Rango de fechas</Label>
+        {/* min-w-0: un <input type="date"> nativo tiene un ancho mínimo
+            intrínseco (el que necesita para el formato de fecha completo) y
+            los hijos de grid tienen min-width:auto por defecto — sin esto,
+            el input no se achica dentro de su celda y se monta sobre lo que
+            tenga al lado (así se veía "Hasta" solapado con "Limpiar"). */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <Input
+              id="f-desde"
+              type="date"
+              aria-label="Desde"
+              value={filtros.desde}
+              onChange={(e) => actualizar("desde", e.target.value)}
+              className="w-full"
+            />
+          </div>
+          <div className="min-w-0">
+            <Input
+              id="f-hasta"
+              type="date"
+              aria-label="Hasta"
+              value={filtros.hasta}
+              onChange={(e) => actualizar("hasta", e.target.value)}
+              className="w-full"
+            />
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => aplicarAtajoRango("hoy")}
+          >
+            Hoy
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => aplicarAtajoRango("7dias")}
+          >
+            Últimos 7 días
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => aplicarAtajoRango("mes")}
+          >
+            Este mes
+          </Button>
+        </div>
       </div>
-      <div>
-        <Label htmlFor="f-hasta">Hasta</Label>
-        <Input
-          id="f-hasta"
-          type="date"
-          value={filtros.hasta}
-          onChange={(e) => actualizar("hasta", e.target.value)}
-        />
-      </div>
+
       <div className="flex items-end">
         <Button
           type="button"

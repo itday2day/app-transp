@@ -4,6 +4,7 @@ import L from "leaflet";
 import { Search } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { InvalidarAlRedimensionar } from "@/components/mapa/invalidar-al-redimensionar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { BuscarDireccionResponse, ResultadoBusquedaDireccion } from "@/lib/types";
@@ -158,6 +159,7 @@ export default function MapaUbicacionPicker({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+          <InvalidarAlRedimensionar />
           <ClickParaMover onCambiar={manejarCambio} />
           {recentrarA && <Recentrador posicion={recentrarA} />}
           {posicion && (

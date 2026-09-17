@@ -907,6 +907,68 @@ usuario confirme, ahora explícitamente en horizontal además de vertical, en `/
 que el panel de choferes no deje hueco vacío con pocos choferes ni rompa el layout con una lista
 larga.
 
+**Regresión: el mapa dejó de verse en `/mapa` tras el commit de arriba (2026-09-17), y ajuste a los
+filtros de fecha de `/jornadas`**: al desplegar en Render, `/mapa` quedó en blanco. Diagnóstico
+**sin poder abrir DevTools en este entorno** — inferido leyendo la cadena de CSS real, no
+reproducido visualmente:
+
+- **Causa real (escenario "alto 0", confirmado por diseño)**: `mapa/page.tsx` le daba a su `<div>`
+  raíz `h-full` (un `height: 100%`), y su padre es `<main className="min-w-0 flex-1">` en
+  `layout.tsx` — `main` **no era un contenedor flex**, solo un ítem flex de la fila de arriba. Un
+  `height: 100%` necesita que su contenedor tenga un alto ya resuelto en términos de CSS
+  ("definido"); el alto que Flexbox le da a un ítem vía `flex-grow` (como tenía `main`) no está
+  garantizado por la spec como "definido" para que los HIJOS de ese ítem resuelvan un `%` contra él
+  — es la combinación específica de intercalar un `height: 100%` entre dos saltos `flex-1` (uno
+  arriba, en `main`; otro abajo, en el propio mapa) la que es ambigua/inconsistente entre
+  navegadores, no cualquiera de los dos saltos por separado (`flex-1` dentro de `flex-1`, o `h-full`
+  colgando directo de un padre con `flex-1` ya resuelto, funcionan bien solos — es la mezcla la que
+  falla). Fix: `main` pasa a ser `flex flex-col` y el `<div>` raíz de `mapa/page.tsx` cambia
+  `h-full` → `flex-1` — la cadena entera queda en `flex-1` continuo (el mismo mecanismo, sin cruzar
+  nunca a resolución por porcentaje), igual que ya usa el patrón "sticky footer" de
+  `min-h-dvh`/`min-h-screen` + `flex-col` + `flex-1` que sí es un patrón bien establecido.
+- **No se pudo confirmar en qué contextos fallaba exactamente** (¿solo mobile, también escritorio?
+  ¿vertical, horizontal, ambos?) sin poder reproducir visualmente — el razonamiento de arriba aplica
+  igual en cualquier ancho, porque `main` deja de ser un contenedor flex-col independientemente del
+  breakpoint, así que el fix no depende de `lg`/`md` ni de `dvh`.
+- **Además, como refuerzo (escenario "invalidateSize", puede ser el mismo problema o uno aparte, no
+  se pudo descartar sin poder rotar un teléfono real)**: se agregó `components/mapa/invalidar-al-
+  redimensionar.tsx` — un componente hijo de `<MapContainer>` (mismo patrón que
+  `ControladorVista`/`ClickParaMover`/`Recentrador` ya existentes) que usa `useMap()` +
+  `ResizeObserver` sobre `map.getContainer()` para llamar `map.invalidateSize()` cada vez que el
+  contenedor cambia de tamaño — cubre rotación, cruce de breakpoint y recálculo de `dvh` con un solo
+  mecanismo, sin `setTimeout` con un número inventado. Se agregó a los 3 `MapContainer` de este
+  Dashboard: `mapa-flota.tsx` (`/mapa`), `mapa-ubicacion-picker.tsx` (dentro del modal "Corregir" —
+  su alto es fijo en px, pero su ANCHO cambia al rotar el teléfono con el modal ya abierto) y
+  `mapa-ruta-jornada.tsx` (el trazado de una jornada puntual desde "Ver ruta" en `/jornadas`, no
+  nombrado en la spec pero con el mismo riesgo al compartir el mismo componente `Dialog`).
+- No se revirtió ninguna decisión de las specs anteriores (`dvh`, corte en `lg`, panel sin alto fijo).
+
+Filtros de `/jornadas`: confirmado contra `filtros-jornadas.tsx` — la causa real del solapamiento
+era la sospechada por la spec: la grilla mobile era `grid-cols-2`, y con 6 controles (Empresa,
+Chofer, Estado, Desde, Hasta, Limpiar) "Hasta" y "Limpiar" caían en la misma fila; un
+`<input type="date">` nativo tiene un ancho mínimo intrínseco y los hijos de grid tienen
+`min-width: auto` por defecto, así que el input no se achicaba y se montaba sobre "Limpiar". Se
+rediseñó a `grid-cols-1` (cada control en su propia fila) con `lg:grid-cols-6` (la disposición de
+escritorio no cambia — el grupo de fechas pasa a ocupar 2 de las 6 columnas, mismo espacio que antes
+ocupaban las dos columnas sueltas Desde/Hasta), `min-w-0` en los contenedores de los inputs de
+fecha, y Desde/Hasta agrupados bajo una sola etiqueta visual "Rango de fechas" (cada input mantiene
+su propio `aria-label` — "Desde"/"Hasta" — para no perder la asociación accesible que tenían las
+etiquetas individuales de antes). Se agregaron 3 atajos (Hoy / Últimos 7 días / Este mes, con el
+`Button` compartido — ya cumplen 44px de alto en mobile sin nada extra) que solo completan "desde"/
+"hasta" y disparan el mismo `onChange` que cargarlos a mano; las fechas se calculan con los getters
+LOCALES de `Date` (mismo patrón que `isoAFechaLocal`/`isoAHoraLocal` en `editar-jornada-dialog.tsx`)
+— a propósito **no** se reusaron `todayIsoDate()`/`daysAgoIsoDate()` de `lib/utils.ts` (las que ya
+usa `exportar-reporte-dialog.tsx`) porque esas calculan con `toISOString()` (UTC): cerca de
+medianoche, según la zona horaria del admin, pueden devolver el día siguiente o anterior al real —
+un bug preexistente en esos helpers, fuera de alcance de esta spec, que no se tocó.
+
+Verificación: `tsc --noEmit`/`lint`/`format:check` limpios en `dashboard/`. El servidor de desarrollo
+sigue respondiendo sin error 500 tras todos estos cambios (recompiló en caliente). **Pendiente, sin
+poder verificar en este entorno**: no se pudo confirmar visualmente que el mapa vuelva a verse (con
+tiles y marcadores) en escritorio/mobile vertical/mobile horizontal, ni rotar un teléfono con el
+mapa ya abierto, ni revisar la consola del navegador en busca de errores nuevos (en particular por
+el `ResizeObserver` agregado) — quedan para que el usuario los confirme.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
