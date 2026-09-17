@@ -983,6 +983,50 @@ tiles y marcadores) en escritorio/mobile vertical/mobile horizontal, ni rotar un
 mapa ya abierto, ni revisar la consola del navegador en busca de errores nuevos (en particular por
 el `ResizeObserver` agregado) — quedan para que el usuario los confirme.
 
+**Hallazgo #12 — en `/mapa`, mapa y panel de choferes no entran juntos en un teléfono (2026-09-17)**:
+con el mapa ya andando en mobile (Hallazgo #11), quedó a la vista el problema de fondo — repartir el
+alto entre mapa (piso `min-h-[50dvh]`) y panel (techo `max-h-[40dvh]`) deja a los dos incómodos; la
+lista de choferes, medida sobre la página real, ocupaba ~569px contra los ~300px que le daba el
+`max-h-[40dvh]` en un teléfono de ~750px de alto — entraba poco más de la mitad, con scroll interno
+dentro de una caja chica. Fix: **selector "Mapa/Lista" por debajo de `lg`** — `app/(dashboard)/
+mapa/page.tsx` agrega un estado local `vistaMobile: "mapa" | "lista"` (default `"mapa"`, sin
+persistencia ni parámetro de URL) y dos botones (`Button` compartido, `aria-pressed`) arriba del
+contenido; por debajo de `lg` se muestra un panel u otro a pantalla completa (nunca repartidos),
+desde `lg` no cambia nada (mapa y panel lado a lado, como siempre — el nuevo estado ni se usa ahí).
+
+- **El mapa queda MONTADO todo el tiempo, solo oculto** (`hidden`/`display:none` vía clases
+  condicionales, nunca desmontado condicionalmente en React) — desmontarlo perdería la instancia de
+  Leaflet (zoom/centro) y volvería a pedir tiles cada vez; el polling de 8s sigue corriendo esté o no
+  visible (no depende del layout). Mientras oculto, su contenedor mide 0 — al mostrarse de nuevo,
+  `MapaFlota` recibe una prop `vistaActiva` y un nuevo componente interno `RecalcularAlMostrar`
+  (mismo patrón `useMap()` que el resto) llama `map.invalidateSize()` explícitamente en un efecto
+  disparado por esa prop, **sin esperar a que alcance por sí solo** el `ResizeObserver` de
+  `invalidar-al-redimensionar.tsx` (agregado en el Hallazgo #11) — los dos mecanismos conviven: el
+  observer cubre redimensionados continuos (rotar el teléfono), el explícito cubre puntualmente esta
+  transición de mostrar/ocultar. No se pudo confirmar en este entorno si el observer solo ya
+  alcanzaba para este caso — se agregó el explícito directamente como refuerzo, tal como permitía la
+  spec.
+- **Interacciones del panel con efecto visible en el mapa, confirmadas contra el código real antes
+  de escribir nada** (`ControladorVista` en `mapa-flota.tsx`): seleccionar un chofer dispara
+  `map.flyTo(...)`, y "Ver ruta" activa `<RutaHistorica>` (dibuja el trazado). Las dos cambian
+  automáticamente a la vista de mapa (`mapa/page.tsx` decide esto al envolver
+  `onSeleccionar`/`onToggleRuta`, `PanelChoferes` no cambió). "Ocultar ruta" (la misma acción,
+  desactivando) no cambia de vista — no hay nada nuevo que mostrar ahí.
+- **El panel de choferes tenía el mismo riesgo que el mapa, corregido de entrada, no después de una
+  regresión**: al reemplazar `max-h-[40dvh]` por `max-lg:flex-1` (para que la vista activa llene el
+  alto disponible), el `h-full` interno de `PanelChoferes` habría quedado colgando de un alto
+  resuelto por `flex-grow` — exactamente el patrón que causó el Hallazgo #11 en el mapa. Se aplicó el
+  mismo fix de entrada: `aside` es `relative` y envuelve a `PanelChoferes` en un
+  `<div className="max-lg:absolute max-lg:inset-0">` — apoya el alto en el valor YA renderizado, no
+  en resolución por porcentaje. Desde `lg`, `aside` sigue siendo un bloque normal sin este wrapper
+  especial — ese `h-full` ya estaba confirmado definido ahí (estiramiento de eje cruzado en la fila).
+
+Verificación: `tsc --noEmit`/`lint`/`format:check` limpios en `dashboard/`. **Pendiente, sin poder
+verificar en este entorno**: confirmar en un teléfono real que la Lista se ve completa sin scroll
+anidado, que cambiar Lista→Mapa→Lista varias veces no deja el mapa en gris ni pierde el zoom/centro,
+que "Ver ruta" desde la Lista lleva al mapa con la ruta dibujada, y que en escritorio `/mapa` se ve
+exactamente igual que antes (sin el switch).
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

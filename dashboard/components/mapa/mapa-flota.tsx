@@ -63,16 +63,40 @@ function ControladorVista({
   return null;
 }
 
+/** Fuerza a Leaflet a recalcular su tamaño al volver a mostrarse — el switch
+ * móvil "Mapa/Lista" (Hallazgo #12) mantiene este mapa MONTADO pero oculto
+ * (`display: none`) en vez de desmontarlo, así no se pierde el zoom/centro
+ * ni hay que volver a pedir los tiles. Mientras está oculto, su contenedor
+ * mide 0 — el `ResizeObserver` de `InvalidarAlRedimensionar` cubre el caso
+ * general de redimensionado, pero acá se llama `invalidateSize()` de forma
+ * explícita justo al activarse la vista, sin depender de que el observer
+ * dispare de forma oportuna para esta transición puntual. Va como hijo de
+ * <MapContainer /> porque useMap() solo funciona dentro de su contexto. */
+function RecalcularAlMostrar({ activo }: { activo: boolean }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (activo) map.invalidateSize();
+  }, [activo, map]);
+
+  return null;
+}
+
 interface MapaFlotaProps {
   posiciones: PosicionChofer[];
   choferSeleccionado?: string | null;
   jornadaRutaActiva?: string | null;
+  /** true = esta es la vista actualmente visible (relevante solo en el
+   * switch móvil "Mapa/Lista" de mapa/page.tsx) — por defecto true, para no
+   * afectar a ningún otro lugar que renderice este componente. */
+  vistaActiva?: boolean;
 }
 
 export default function MapaFlota({
   posiciones,
   choferSeleccionado = null,
   jornadaRutaActiva = null,
+  vistaActiva = true,
 }: MapaFlotaProps) {
   const marcadores = useMemo(
     () =>
@@ -101,6 +125,7 @@ export default function MapaFlota({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <InvalidarAlRedimensionar />
+      <RecalcularAlMostrar activo={vistaActiva} />
       <ControladorVista posiciones={posiciones} choferSeleccionado={choferSeleccionado} />
       {jornadaRutaActiva && <RutaHistorica jornadaId={jornadaRutaActiva} />}
       {marcadores.map(({ posicion, estado }) => (

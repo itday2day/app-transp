@@ -3,7 +3,9 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 import { PanelChoferes } from "@/components/mapa/panel-choferes";
+import { Button } from "@/components/ui/button";
 import { useUltimasPosiciones } from "@/lib/hooks/use-ultimas-posiciones";
+import { cn } from "@/lib/utils";
 
 // Leaflet necesita `window`, así que el mapa solo se carga en el cliente.
 const MapaFlota = dynamic(() => import("@/components/mapa/mapa-flota"), {
@@ -20,41 +22,108 @@ export default function MapaPage() {
   const [choferSeleccionado, setChoferSeleccionado] = useState<string | null>(null);
   // jornada_id cuyo trazado histórico está visible en el mapa — null = ninguna.
   const [jornadaRutaActiva, setJornadaRutaActiva] = useState<string | null>(null);
+  // Por debajo de `lg`, mapa y panel de choferes no entran juntos en una
+  // pantalla de teléfono (Hallazgo #12) — se muestra uno u otro, nunca los
+  // dos repartidos. Por defecto "mapa": la pantalla se llama "Mapa en vivo"
+  // en la navegación. Sin persistencia ni parámetro de URL — estado local,
+  // se resetea a "mapa" cada vez que se entra a la pantalla. Desde `lg` este
+  // estado no se usa: mapa y panel van lado a lado, como siempre.
+  const [vistaMobile, setVistaMobile] = useState<"mapa" | "lista">("mapa");
 
   const listaPosiciones = posiciones ?? [];
 
+  function seleccionarChofer(choferId: string) {
+    setChoferSeleccionado(choferId);
+    // Seleccionar un chofer dispara un flyTo en el mapa (ControladorVista,
+    // mapa-flota.tsx) — un efecto que solo se ve si la vista activa es el
+    // mapa, así que cambia a esa vista.
+    setVistaMobile("mapa");
+  }
+
+  function alternarRutaHistorica(jornadaId: string) {
+    const activando = jornadaRutaActiva !== jornadaId;
+    setJornadaRutaActiva(activando ? jornadaId : null);
+    // "Ver ruta" dibuja el trazado histórico en el mapa (RutaHistorica) —
+    // cambia a la vista de mapa para que se vea. "Ocultar ruta" no agrega
+    // nada nuevo que mostrar ahí, así que no cambia de vista.
+    if (activando) setVistaMobile("mapa");
+  }
+
   return (
-    <div className="flex min-h-[600px] flex-1 flex-col lg:flex-row">
-      <div className="relative order-2 min-h-[50dvh] flex-1 lg:order-1 lg:min-h-0">
-        {isError && (
-          <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 rounded-md border border-danger/30 bg-card px-3 py-2 text-sm text-danger shadow">
-            No se pudieron cargar las posiciones. Reintentando…
-          </div>
-        )}
-        <MapaFlota
-          posiciones={listaPosiciones}
-          choferSeleccionado={choferSeleccionado}
-          jornadaRutaActiva={jornadaRutaActiva}
-        />
+    <div className="flex min-h-[600px] flex-1 flex-col">
+      <div className="flex gap-2 border-b border-border bg-card p-2 lg:hidden">
+        <Button
+          type="button"
+          variant={vistaMobile === "mapa" ? "default" : "outline"}
+          aria-pressed={vistaMobile === "mapa"}
+          className="flex-1"
+          onClick={() => setVistaMobile("mapa")}
+        >
+          Mapa
+        </Button>
+        <Button
+          type="button"
+          variant={vistaMobile === "lista" ? "default" : "outline"}
+          aria-pressed={vistaMobile === "lista"}
+          className="flex-1"
+          onClick={() => setVistaMobile("lista")}
+        >
+          Lista
+        </Button>
       </div>
-      {/* Sin altura fija: el panel crece con su contenido (2-3 choferes no
-          deja hueco vacío) hasta max-h-[40dvh] — a partir de ahí, PanelChoferes
-          ya scrollea internamente su lista (mantiene el header "Choferes
-          activos" fijo) porque a esa altura clampeada el h-full interno pasa a
-          resolver contra un valor definido. El mapa mantiene su propio piso de
-          altura (min-h-[50dvh] arriba) sin cambios. */}
-      <aside className="order-1 max-h-[40dvh] w-full shrink-0 border-b border-border bg-card lg:order-2 lg:h-full lg:max-h-none lg:w-80 lg:border-b-0 lg:border-l">
-        <PanelChoferes
-          posiciones={listaPosiciones}
-          cargando={isLoading}
-          choferSeleccionado={choferSeleccionado}
-          onSeleccionar={setChoferSeleccionado}
-          jornadaRutaActiva={jornadaRutaActiva}
-          onToggleRuta={(jornadaId) =>
-            setJornadaRutaActiva((actual) => (actual === jornadaId ? null : jornadaId))
-          }
-        />
-      </aside>
+
+      <div className="flex flex-1 flex-col lg:flex-row">
+        <div
+          className={cn(
+            "relative flex-1 lg:order-1 lg:min-h-0",
+            vistaMobile === "mapa" ? "" : "hidden lg:block"
+          )}
+        >
+          {isError && (
+            <div className="absolute left-1/2 top-4 z-[1000] -translate-x-1/2 rounded-md border border-danger/30 bg-card px-3 py-2 text-sm text-danger shadow">
+              No se pudieron cargar las posiciones. Reintentando…
+            </div>
+          )}
+          {/* vistaActiva: el mapa queda MONTADO todo el tiempo (nunca se
+              desmonta al cambiar a "Lista" — perdería zoom/centro y volvería a
+              pedir tiles) — invalidateSize() explícito al volver a mostrarse,
+              porque su contenedor mide 0 mientras está oculto (ver
+              contexto_proyecto.md §4). */}
+          <MapaFlota
+            posiciones={listaPosiciones}
+            choferSeleccionado={choferSeleccionado}
+            jornadaRutaActiva={jornadaRutaActiva}
+            vistaActiva={vistaMobile === "mapa"}
+          />
+        </div>
+
+        {/* relative + hijo max-lg:absolute max-lg:inset-0 (no depender de que
+            PanelChoferes resuelva su propio h-full contra el alto que este
+            aside saca de max-lg:flex-1 — flex-grow no cuenta como "alto
+            definido" en CSS para que un `%` de un hijo resuelva contra él,
+            exactamente el bug medido del Hallazgo #11/#12 en el mapa; con
+            inset-0 se apoya en el alto YA renderizado, no en resolución por
+            porcentaje). Desde `lg`, aside sigue siendo un bloque normal —
+            ese h-full ya se confirmó definido ahí (align-items: stretch en
+            la fila). */}
+        <aside
+          className={cn(
+            "relative w-full border-b border-border bg-card lg:order-2 lg:h-full lg:w-80 lg:shrink-0 lg:border-b-0 lg:border-l",
+            vistaMobile === "lista" ? "max-lg:flex-1" : "hidden lg:block"
+          )}
+        >
+          <div className="max-lg:absolute max-lg:inset-0">
+            <PanelChoferes
+              posiciones={listaPosiciones}
+              cargando={isLoading}
+              choferSeleccionado={choferSeleccionado}
+              onSeleccionar={seleccionarChofer}
+              jornadaRutaActiva={jornadaRutaActiva}
+              onToggleRuta={alternarRutaHistorica}
+            />
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
