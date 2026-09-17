@@ -1062,6 +1062,52 @@ trampa (mismo tipo de problema, en el otro sentido, que el `h-full` sobre un pad
   pero justo; si en el teléfono real se ve demasiado apretado, evaluar compactar el header o el
   selector en horizontal en una spec aparte, después de verlo, no antes.
 
+**Hallazgo #14 — en `/mapa` horizontal, header + nav + selector se comían casi la mitad de la
+pantalla (2026-09-17)**: confirmado lo que el Hallazgo #13 dejó anotado para después — medido en el
+dispositivo, header (69px) + nav (53px) + selector Mapa/Lista (61px) sumaban 183px de un viewport de
+~390px, sin alto usable para el mapa o la lista. **Presupuesto de alto para esta pantalla, a
+respetar de acá en más si alguien agrega otra barra**: en teléfono horizontal (`landscape:max-lg:`),
+las barras de arriba no deberían superar ~100-110px en conjunto — cualquier barra nueva tiene que
+salir de ese total, no sumarse aparte.
+
+- **El piso de 44px de área de toque (Hallazgo #11) es matemáticamente incompatible con 3 filas
+  separadas dentro de ~100px**: 3 filas, cada una con un control de 44px, no pueden sumar menos de
+  132px aunque el padding baje a 0. Compactar el padding de las dos filas por separado (opción 1 de
+  la spec) no alcanzaba — hubo que **fusionar la nav ("Mapa en vivo"/"Jornadas") con el selector
+  ("Mapa"/"Lista") en una sola fila**, quedando 2 filas en vez de 3.
+- **La nav vive en `app/(dashboard)/layout.tsx` y el selector en `app/(dashboard)/mapa/page.tsx`**
+  — ramas distintas del árbol, compartidas además por `/jornadas` (que no tiene selector con el que
+  fusionarse). Se resolvió con un **portal** (la alternativa más liviana de las 3 que la spec
+  autorizaba — estado levantado, contexto, o portal): `layout.tsx` siempre renderiza un
+  `<div id="selector-movil-horizontal" className="contents" />` vacío dentro de la fila de nav (no
+  necesita saber en qué ruta está — en `/jornadas` ese slot simplemente no recibe nada). `mapa/
+  page.tsx` resuelve ese nodo con `useSyncExternalStore` (mismo patrón que `ThemeToggle` ya usa para
+  leer algo que solo se conoce en el cliente, sin el `setState` síncrono dentro de un efecto que
+  bloquea el lint de este repo) y hace `createPortal` de sus botones "Mapa"/"Lista" ahí — **solo**
+  visibles en `landscape:max-lg:` (`hidden landscape:max-lg:flex`); la fila original del selector,
+  dentro de `mapa/page.tsx`, se esconde en esa misma condición (`landscape:max-lg:hidden`) y sigue
+  igual que siempre en vertical y escritorio. Los botones son literalmente el mismo JSX (una
+  constante `botonesSelectorVista`) reusado en las dos ubicaciones — mismo estado, sin
+  desincronización posible.
+- **La fusión también reveló que los pills de `SidebarNav` (`px-3 py-2`, ~36px) ya estaban por
+  debajo del piso de 44px** — no lo tocó ninguna spec anterior porque no estaban en su alcance. Al
+  compactar justo esta fila, se corrigió de una vez con `landscape:max-lg:h-11` en el pill (alto
+  explícito, no más padding — el padding se comparte con el sidebar vertical de escritorio, que no
+  se tocó). Se quitó también el `w-full` que tenía `SidebarNav` en modo horizontal (ocupaba todo el
+  ancho de la fila y no dejaba espacio para el selector fusionado al lado).
+- **Compactado, sin fusionar**: el header (`landscape:max-lg:py-1`, con el texto "app-transp" oculto
+  en esa misma condición) y el padding de la fila de nav (`landscape:max-lg:py-1`).
+- **Alturas finales, en teléfono horizontal**: header ≈ 44-52px (según si el ancho del dispositivo
+  ya cruzó `md` y el `Button` compartido pasó a su tamaño de escritorio) + fila nav/selector
+  fusionada ≈ 52px → **~96-104px de barras en total** (antes 183px), dejando **~286-294px para el
+  mapa o la lista** — dentro del objetivo de "~100px de barras, ~290px de contenido" que pedía la
+  spec.
+- **`/jornadas` en horizontal**: comparte el mismo header y la misma fila de nav (ahora compactos),
+  pero sin nada que fusionar — queda en sus 2 filas de siempre (header + nav, ~96-104px en total),
+  sin ningún cambio de código propio de esa pantalla.
+- **No se tocó** el `absolute inset-0` del `MapContainer` (#11), el `max-lg:absolute max-lg:inset-0`
+  del panel de choferes (#12), ni el `lg:min-h-[600px]` (#13).
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

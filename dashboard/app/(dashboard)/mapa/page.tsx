@@ -1,11 +1,27 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 import { PanelChoferes } from "@/components/mapa/panel-choferes";
 import { Button } from "@/components/ui/button";
 import { useUltimasPosiciones } from "@/lib/hooks/use-ultimas-posiciones";
 import { cn } from "@/lib/utils";
+
+const suscribirSinCambios = () => () => {};
+
+// El slot es markup estático de layout.tsx (siempre presente, nunca
+// desmontado), así que su existencia no "cambia" — mismo motivo por el que
+// ThemeToggle usa useSyncExternalStore (no useState+useEffect) para leer un
+// valor que solo se conoce en el cliente, sin disparar un setState síncrono
+// dentro de un efecto (ver components/theme-toggle.tsx).
+function useSlotSelectorHorizontal(): HTMLElement | null {
+  return useSyncExternalStore(
+    suscribirSinCambios,
+    () => document.getElementById("selector-movil-horizontal"),
+    () => null
+  );
+}
 
 // Leaflet necesita `window`, así que el mapa solo se carga en el cliente.
 const MapaFlota = dynamic(() => import("@/components/mapa/mapa-flota"), {
@@ -30,7 +46,39 @@ export default function MapaPage() {
   // estado no se usa: mapa y panel van lado a lado, como siempre.
   const [vistaMobile, setVistaMobile] = useState<"mapa" | "lista">("mapa");
 
+  // En teléfono horizontal, header + nav + este selector no entran cómodos
+  // en los ~390px de alto disponibles (Hallazgo #14) — se fusiona con la fila
+  // de navegación de app/(dashboard)/layout.tsx (que vive en otra rama del
+  // árbol) vía un portal a un slot con `id` fijo, en vez de levantar estado o
+  // duplicar la navegación: layout.tsx no necesita saber que está en /mapa,
+  // y en cualquier otra ruta (ej. /jornadas) el slot simplemente no recibe
+  // nada.
+  const slotSelectorHorizontal = useSlotSelectorHorizontal();
+
   const listaPosiciones = posiciones ?? [];
+
+  const botonesSelectorVista = (
+    <>
+      <Button
+        type="button"
+        variant={vistaMobile === "mapa" ? "default" : "outline"}
+        aria-pressed={vistaMobile === "mapa"}
+        className="flex-1"
+        onClick={() => setVistaMobile("mapa")}
+      >
+        Mapa
+      </Button>
+      <Button
+        type="button"
+        variant={vistaMobile === "lista" ? "default" : "outline"}
+        aria-pressed={vistaMobile === "lista"}
+        className="flex-1"
+        onClick={() => setVistaMobile("lista")}
+      >
+        Lista
+      </Button>
+    </>
+  );
 
   function seleccionarChofer(choferId: string) {
     setChoferSeleccionado(choferId);
@@ -58,26 +106,19 @@ export default function MapaPage() {
     // mapa, al capturar el gesto de arrastre, no dejaba forma de volver
     // arriba. Ver contexto_proyecto.md §4.
     <div className="flex min-h-0 flex-1 flex-col lg:min-h-[600px]">
-      <div className="flex gap-2 border-b border-border bg-card p-2 lg:hidden">
-        <Button
-          type="button"
-          variant={vistaMobile === "mapa" ? "default" : "outline"}
-          aria-pressed={vistaMobile === "mapa"}
-          className="flex-1"
-          onClick={() => setVistaMobile("mapa")}
-        >
-          Mapa
-        </Button>
-        <Button
-          type="button"
-          variant={vistaMobile === "lista" ? "default" : "outline"}
-          aria-pressed={vistaMobile === "lista"}
-          className="flex-1"
-          onClick={() => setVistaMobile("lista")}
-        >
-          Lista
-        </Button>
+      {/* landscape:max-lg:hidden — en teléfono horizontal este selector se
+          fusiona con la nav de layout.tsx vía el portal de abajo, para no
+          sumar una tercera barra (Hallazgo #14); en vertical y en escritorio
+          (donde `lg:hidden` ya lo ocultaba) no cambia nada. */}
+      <div className="flex gap-2 border-b border-border bg-card p-2 landscape:max-lg:hidden lg:hidden">
+        {botonesSelectorVista}
       </div>
+
+      {slotSelectorHorizontal &&
+        createPortal(
+          <div className="hidden shrink-0 gap-2 landscape:max-lg:flex">{botonesSelectorVista}</div>,
+          slotSelectorHorizontal
+        )}
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div

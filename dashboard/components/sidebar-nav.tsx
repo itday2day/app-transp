@@ -14,7 +14,7 @@ export function SidebarNav({ horizontal = false }: { horizontal?: boolean }) {
   const pathname = usePathname();
 
   return (
-    <nav className={cn("flex gap-1", horizontal ? "w-full flex-row p-0" : "flex-1 flex-col p-2")}>
+    <nav className={cn("flex gap-1", horizontal ? "flex-row p-0" : "flex-1 flex-col p-2")}>
       {ENLACES.map(({ href, label, icon: Icon }) => {
         const activo = pathname === href || pathname.startsWith(`${href}/`);
         return (
@@ -22,7 +22,13 @@ export function SidebarNav({ horizontal = false }: { horizontal?: boolean }) {
             key={href}
             href={href}
             className={cn(
-              "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              // landscape:max-lg:h-11 — con el header+nav+selector compactados
+              // en teléfono horizontal (Hallazgo #14), el padding de este pill
+              // ya no alcanza por sí solo para el piso de 44px de área de
+              // toque (Hallazgo #11, Parte D) — se fuerza el alto explícito en
+              // vez de inflar el padding, que además se comparte con el modo
+              // vertical del sidebar de escritorio (sin tocar).
+              "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors landscape:max-lg:h-11",
               activo
                 ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
