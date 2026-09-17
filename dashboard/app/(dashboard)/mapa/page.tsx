@@ -50,7 +50,14 @@ export default function MapaPage() {
   }
 
   return (
-    <div className="flex min-h-[600px] flex-1 flex-col">
+    // `lg:min-h-[600px]` (no un piso incondicional): por debajo de `lg` este
+    // piso, pensado para que el mapa no quede aplastado en una ventana de
+    // escritorio alta, sumado al header + selector, superaba el alto real
+    // del teléfono (medido: 722px de contenido contra 549px de viewport en
+    // vertical, y peor en horizontal) — la página quedaba scrolleable y el
+    // mapa, al capturar el gesto de arrastre, no dejaba forma de volver
+    // arriba. Ver contexto_proyecto.md §4.
+    <div className="flex min-h-0 flex-1 flex-col lg:min-h-[600px]">
       <div className="flex gap-2 border-b border-border bg-card p-2 lg:hidden">
         <Button
           type="button"
@@ -72,10 +79,10 @@ export default function MapaPage() {
         </Button>
       </div>
 
-      <div className="flex flex-1 flex-col lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div
           className={cn(
-            "relative flex-1 lg:order-1 lg:min-h-0",
+            "relative min-h-0 flex-1 lg:order-1",
             vistaMobile === "mapa" ? "" : "hidden lg:block"
           )}
         >
@@ -109,7 +116,7 @@ export default function MapaPage() {
         <aside
           className={cn(
             "relative w-full border-b border-border bg-card lg:order-2 lg:h-full lg:w-80 lg:shrink-0 lg:border-b-0 lg:border-l",
-            vistaMobile === "lista" ? "max-lg:flex-1" : "hidden lg:block"
+            vistaMobile === "lista" ? "min-h-0 max-lg:flex-1" : "hidden lg:block"
           )}
         >
           <div className="max-lg:absolute max-lg:inset-0">

@@ -1027,6 +1027,41 @@ anidado, que cambiar Lista→Mapa→Lista varias veces no deja el mapa en gris n
 que "Ver ruta" desde la Lista lleva al mapa con la ruta dibujada, y que en escritorio `/mapa` se ve
 exactamente igual que antes (sin el switch).
 
+**Hallazgo #13 — en `/mapa` móvil, la página scrolleaba y el mapa atrapaba el gesto (2026-09-17,
+causa medida)**: en el teléfono en horizontal, scrollear hacia abajo dejaba el mapa cubriendo toda
+la pantalla, sin forma de volver arriba — cualquier arrastre sobre el mapa lo captura Leaflet para
+paneo, así que no quedaba ninguna zona desde la que scrollear la página de vuelta; la única salida
+era rotar a vertical. **Criterio general, ya aplicado en el fix**: en móvil, `/mapa` es una pantalla
+de alto fijo que no scrollea — un mapa a pantalla completa dentro de una página scrolleable es una
+trampa (mismo tipo de problema, en el otro sentido, que el `h-full` sobre un padre flex del Hallazgo
+#11: obvio una vez visto en el dispositivo, invisible leyendo código).
+
+- **Causa (medida sobre la página desplegada, no inferida)**: la raíz de `app/(dashboard)/
+  mapa/page.tsx` tenía `min-h-[600px]` **sin condicionar a ningún breakpoint** — un piso pensado
+  para que el mapa no quedara aplastado en una ventana de escritorio alta. Sumado al header y al
+  selector Mapa/Lista (~122px), el contenido total medía 722px contra un viewport de apenas 549px en
+  vertical (peor en horizontal, ~390px) — la página desbordaba y scrolleaba.
+- **Fix**: `min-h-[600px]` pasa a `lg:min-h-[600px]` (mismo archivo, mismo elemento — no hacía falta
+  tocar ningún otro lugar de la cadena; no había otro piso parecido en `layout.tsx` ni en
+  `mapa-flota.tsx`). Además, `min-h-0` explícito en la raíz de la página y en el contenedor
+  mapa+panel (`flex min-h-0 flex-1 flex-col lg:flex-row`) y en los dos wrappers (mapa y `aside`) —
+  no estrictamente necesario en este caso puntual (el contenido de ambos ya es 0 porque tanto
+  `MapContainer` como `PanelChoferes` cuelgan de un wrapper `absolute inset-0`/`max-lg:absolute
+  max-lg:inset-0`, fuera del flujo normal, así que no aportan una altura mínima de contenido que
+  compita), pero se agregó igual como refuerzo explícito contra el `min-height: auto` por defecto de
+  un ítem flex — sin eso, cualquier contenido en flujo normal que se agregue después en esa cadena
+  volvería a poder forzar el mismo desborde.
+- **La vista Lista comparte la misma raíz** (`min-h-[600px]` estaba en el contenedor común a las dos
+  vistas, no en uno específico), así que el mismo fix la cubre — no hizo falta ningún cambio aparte
+  para que la Lista tampoco scrollee de página.
+- **Nada de lo del Hallazgo #11 (`absolute inset-0` del `MapContainer`) ni del #12 (`max-lg:absolute
+  max-lg:inset-0` del panel, el switch Mapa/Lista) se tocó** — esta spec cambió el alto disponible
+  de la cadena, no cómo cada panel lo ocupa dentro de ese alto.
+- **Nota para más adelante, no resuelta acá**: con la página ya sin scroll, en horizontal el mapa
+  queda con poco alto real (viewport de ~390px menos header y selector, ~270px para el mapa) — usable
+  pero justo; si en el teléfono real se ve demasiado apretado, evaluar compactar el header o el
+  selector en horizontal en una spec aparte, después de verlo, no antes.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
