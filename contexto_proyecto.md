@@ -907,41 +907,55 @@ usuario confirme, ahora explícitamente en horizontal además de vertical, en `/
 que el panel de choferes no deje hueco vacío con pocos choferes ni rompa el layout con una lista
 larga.
 
-**Regresión: el mapa dejó de verse en `/mapa` tras el commit de arriba (2026-09-17), y ajuste a los
-filtros de fecha de `/jornadas`**: al desplegar en Render, `/mapa` quedó en blanco. Diagnóstico
-**sin poder abrir DevTools en este entorno** — inferido leyendo la cadena de CSS real, no
-reproducido visualmente:
+**Regresión: el mapa dejó de verse en `/mapa` (2026-09-17) — causa real, medida (no inferida)**: al
+desplegar en Render, `/mapa` quedó en blanco. Un primer diagnóstico (sin poder abrir DevTools en
+este entorno, solo leyendo la cadena de CSS) apuntó a `main` no siendo un contenedor flex y cambió
+`main`/`mapa/page.tsx` de `h-full` a una cadena `flex-1` continua — **ese diagnóstico era
+incorrecto**. La causa real se confirmó recién cuando se midió la página real ya desplegada con el
+navegador conectado a la sesión (no en este entorno):
 
-- **Causa real (escenario "alto 0", confirmado por diseño)**: `mapa/page.tsx` le daba a su `<div>`
-  raíz `h-full` (un `height: 100%`), y su padre es `<main className="min-w-0 flex-1">` en
-  `layout.tsx` — `main` **no era un contenedor flex**, solo un ítem flex de la fila de arriba. Un
-  `height: 100%` necesita que su contenedor tenga un alto ya resuelto en términos de CSS
-  ("definido"); el alto que Flexbox le da a un ítem vía `flex-grow` (como tenía `main`) no está
-  garantizado por la spec como "definido" para que los HIJOS de ese ítem resuelvan un `%` contra él
-  — es la combinación específica de intercalar un `height: 100%` entre dos saltos `flex-1` (uno
-  arriba, en `main`; otro abajo, en el propio mapa) la que es ambigua/inconsistente entre
-  navegadores, no cualquiera de los dos saltos por separado (`flex-1` dentro de `flex-1`, o `h-full`
-  colgando directo de un padre con `flex-1` ya resuelto, funcionan bien solos — es la mezcla la que
-  falla). Fix: `main` pasa a ser `flex flex-col` y el `<div>` raíz de `mapa/page.tsx` cambia
-  `h-full` → `flex-1` — la cadena entera queda en `flex-1` continuo (el mismo mecanismo, sin cruzar
-  nunca a resolución por porcentaje), igual que ya usa el patrón "sticky footer" de
-  `min-h-dvh`/`min-h-screen` + `flex-col` + `flex-1` que sí es un patrón bien establecido.
-- **No se pudo confirmar en qué contextos fallaba exactamente** (¿solo mobile, también escritorio?
-  ¿vertical, horizontal, ambos?) sin poder reproducir visualmente — el razonamiento de arriba aplica
-  igual en cualquier ancho, porque `main` deja de ser un contenedor flex-col independientemente del
-  breakpoint, así que el fix no depende de `lg`/`md` ni de `dvh`.
-- **Además, como refuerzo (escenario "invalidateSize", puede ser el mismo problema o uno aparte, no
-  se pudo descartar sin poder rotar un teléfono real)**: se agregó `components/mapa/invalidar-al-
-  redimensionar.tsx` — un componente hijo de `<MapContainer>` (mismo patrón que
-  `ControladorVista`/`ClickParaMover`/`Recentrador` ya existentes) que usa `useMap()` +
-  `ResizeObserver` sobre `map.getContainer()` para llamar `map.invalidateSize()` cada vez que el
-  contenedor cambia de tamaño — cubre rotación, cruce de breakpoint y recálculo de `dvh` con un solo
-  mecanismo, sin `setTimeout` con un número inventado. Se agregó a los 3 `MapContainer` de este
-  Dashboard: `mapa-flota.tsx` (`/mapa`), `mapa-ubicacion-picker.tsx` (dentro del modal "Corregir" —
-  su alto es fijo en px, pero su ANCHO cambia al rotar el teléfono con el modal ya abierto) y
-  `mapa-ruta-jornada.tsx` (el trazado de una jornada puntual desde "Ver ruta" en `/jornadas`, no
-  nombrado en la spec pero con el mismo riesgo al compartir el mismo componente `Dialog`).
-- No se revirtió ninguna decisión de las specs anteriores (`dvh`, corte en `lg`, panel sin alto fijo).
+- **El elemento que colapsaba no era ningún ancestro — era el propio `.leaflet-container`**, el
+  `<div>` donde Leaflet dibuja el mapa, dentro de `MapaFlota` (`components/mapa/mapa-flota.tsx`).
+  Medido en la rama móvil: el wrapper (`mapa/page.tsx`, `relative ... min-h-[50dvh] flex-1`) medía
+  **295px** (correcto — 50dvh), pero el `MapContainer` con `className="h-full w-full"` medía
+  **0px** de alto. Un `height: 100%` necesita que su padre tenga un alto CSS "definido"; el alto que
+  Flexbox le da al wrapper vía `flex: 1 1 0%` + `min-height` no cuenta como "definido" para que UN
+  HIJO resuelva un `%` contra él — el `100%` del mapa resolvía a `auto`, y sin ningún otro alto que
+  lo sostuviera, colapsaba a 0. Explica también por qué andaba en escritorio: ahí la raíz de la
+  página es `lg:flex-row`, así que el wrapper es un ítem en una FILA y su alto sale del estiramiento
+  en el eje cruzado (`align-items: stretch`, que sí es definido) — en mobile la raíz es `flex-col`,
+  el alto del wrapper sale de `flex-grow` en el eje PRINCIPAL, y ahí deja de serlo. Y por qué se veía
+  el hueco oscuro vacío bajo el panel de choferes en las capturas: el wrapper (295px) SÍ ocupaba su
+  espacio; lo que faltaba era el mapa DENTRO de él, recortado por el `overflow: hidden` que Leaflet
+  aplica a su propio contenedor.
+- **Por qué los intentos anteriores (arreglar `main`, cambiar `h-full`→`flex-1` en la raíz de la
+  página, el `ResizeObserver`) no lo arreglaron**: los tres trabajaron sobre los ANCESTROS del mapa.
+  El `h-full` que realmente rompía estaba un nivel más abajo, en el propio `.leaflet-container`, que
+  ninguno de esos cambios tocó — no aparecía descrito en ningún resumen anterior porque nunca se
+  había medido, solo inferido.
+- **Fix (verificado en vivo, 0px → 295px)**: `mapa-flota.tsx` — el `MapContainer` pasa de
+  `className="h-full w-full"` a `className="absolute inset-0"`. El wrapper ya es `relative`, así que
+  esto le da al contenedor de Leaflet una caja definida por posicionamiento, sin depender de cómo
+  Flexbox resuelve alturas — patrón habitual para Leaflet, más robusto que perseguir la cadena de
+  ancestros. **Ningún ancestro se tocó de vuelta** (`main`, la raíz de la página, `min-h-[50dvh]`,
+  `min-h-[600px]`, `dvh`, el corte en `lg` quedaron como estaban del intento anterior — ese cambio
+  era inocuo, solo insuficiente).
+- **Los otros 2 mapas Leaflet de este Dashboard se revisaron con el mismo criterio y NO tenían el
+  patrón** — no se tocaron: `mapa-ubicacion-picker.tsx` (modal "Corregir") cuelga de un padre con
+  `h-56` (píxeles fijos, un alto genuinamente definido, no derivado de Flexbox); `mapa-ruta-jornada.tsx`
+  (modal "Ver ruta" desde `/jornadas`) cuelga de un padre con `h-[70vh]` (unidad de viewport, también
+  definida, no un porcentaje). El `ResizeObserver`/`invalidateSize()` agregado en el intento anterior
+  (`components/mapa/invalidar-al-redimensionar.tsx`, en los 3 mapas) no se revirtió — sigue siendo
+  correcto para el caso de rotación, y ahora que el contenedor tiene alto real es cuando de verdad
+  hace efecto.
+- **Nota de método**: los primeros tres intentos de arreglar esto fallaron por diagnosticar leyendo
+  código sin poder observar la página real — un razonamiento de CSS internamente consistente (la
+  cadena `main`→`flex-1` SÍ era ambigua, y arreglarla no era incorrecto) puede apuntar al eslabón
+  equivocado de una cadena larga cuando hay varios candidatos plausibles. **Patrón a respetar de acá
+  en más: el contenedor de un `MapContainer` de Leaflet nunca debe depender de `h-full` si su padre
+  inmediato saca el alto de Flexbox** (`flex-1`/`flex-grow`, sin una `height` propia) — usar
+  `absolute inset-0` contra un padre `relative`, o confirmar que el padre tenga un alto realmente
+  fijo/en unidades de viewport antes de usar `h-full` sobre él.
 
 Filtros de `/jornadas`: confirmado contra `filtros-jornadas.tsx` — la causa real del solapamiento
 era la sospechada por la spec: la grilla mobile era `grid-cols-2`, y con 6 controles (Empresa,

@@ -84,11 +84,17 @@ export default function MapaFlota({
   );
 
   return (
+    // `absolute inset-0` (no `h-full w-full`): el padre (mapa/page.tsx) ya es
+    // `relative`, así que esto le da al contenedor de Leaflet una caja
+    // DEFINIDA sin depender de que Flexbox resuelva el alto del padre como
+    // "definido" para un `height: 100%` — en la rama móvil (flex-col) ese
+    // alto sale de flex-grow, y un `%` contra eso resuelve a `auto` (0px de
+    // alto real, medido en producción). Ver contexto_proyecto.md §4.
     <MapContainer
       center={CENTRO_DEFECTO}
       zoom={ZOOM_DEFECTO}
       scrollWheelZoom
-      className="h-full w-full"
+      className="absolute inset-0"
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
