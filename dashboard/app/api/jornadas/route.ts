@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { finDiaEspanaUtcExclusivo, inicioDiaEspanaUtc } from "@/lib/rango-fechas-espana";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { EstadoJornada, JornadaRow, JornadasResponse } from "@/lib/types";
 
@@ -7,10 +8,14 @@ const PAGE_SIZE_MAX = 100;
 
 // GET /api/jornadas?empresa=&chofer=&estado=&desde=&hasta=&page=&pageSize=
 //
-// `desde`/`hasta` son fechas YYYY-MM-DD (inclusive) filtradas sobre
-// fecha_check_in. `chofer` hace un ILIKE sobre chofer_nombre (no tenemos
-// búsqueda por numero_empleado desde esta tabla sin un join a `choferes`,
-// y para la lista de jornadas el nombre alcanza).
+// `desde`/`hasta` son días de calendario de ESPAÑA (YYYY-MM-DD, inclusive
+// en los dos extremos) filtrados sobre fecha_check_in — se convierten a los
+// instantes UTC equivalentes acá (ver lib/rango-fechas-espana.ts, Hallazgo
+// #17); antes se comparaban como cadena sin zona horaria, que Postgres
+// interpretaba en la zona de la sesión (UTC), no en la de España. `chofer`
+// hace un ILIKE sobre chofer_nombre (no tenemos búsqueda por
+// numero_empleado desde esta tabla sin un join a `choferes`, y para la
+// lista de jornadas el nombre alcanza).
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
@@ -43,8 +48,8 @@ export async function GET(request: Request) {
   if (empresa) query = query.ilike("empresa", `%${empresa}%`);
   if (chofer) query = query.ilike("chofer_nombre", `%${chofer}%`);
   if (estado) query = query.eq("estado", estado);
-  if (desde) query = query.gte("fecha_check_in", `${desde}T00:00:00`);
-  if (hasta) query = query.lte("fecha_check_in", `${hasta}T23:59:59.999`);
+  if (desde) query = query.gte("fecha_check_in", inicioDiaEspanaUtc(desde));
+  if (hasta) query = query.lt("fecha_check_in", finDiaEspanaUtcExclusivo(hasta));
 
   const desdeIndice = (page - 1) * pageSize;
   const hastaIndice = desdeIndice + pageSize - 1;

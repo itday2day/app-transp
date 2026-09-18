@@ -33,13 +33,28 @@ function obtenerTransportador() {
   return transportadorPromesa;
 }
 
+// timeZone fijo: Render corre en UTC, así que sin esto las horas del Excel
+// quedaban en UTC en vez de en la hora real de España en la que el chofer
+// hizo check-in/check-out (Hallazgo #17) — mismo criterio que el rango de
+// fechas del reporte, que ya se interpreta siempre en Europe/Madrid.
+const ZONA_ESPANA = "Europe/Madrid";
+
 function formatearHora(iso) {
   if (!iso) return "-";
-  return new Date(iso).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("es-MX", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: ZONA_ESPANA,
+  });
 }
 
 function formatearFecha(iso) {
-  return new Date(iso).toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(iso).toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: ZONA_ESPANA,
+  });
 }
 
 function calcularHorasTotales(fechaCheckIn, fechaCheckOut) {

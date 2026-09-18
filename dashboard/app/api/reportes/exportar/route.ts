@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { finDiaEspanaUtcExclusivo, inicioDiaEspanaUtc } from "@/lib/rango-fechas-espana";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { EstadoJornada, ExportarReporteResponse, JornadaRow } from "@/lib/types";
 
@@ -116,11 +117,16 @@ export async function POST(request: Request) {
 
   const supabase = crearClienteSupabaseAdmin();
 
+  // rangoInicio/rangoFin son días de calendario de ESPAÑA (Hallazgo #17,
+  // decisión de negocio: un reporte significa siempre días de calendario de
+  // Europe/Madrid, sin importar desde dónde ni con qué dispositivo se pida)
+  // — se convierten acá a los instantes UTC equivalentes, mismo mecanismo
+  // que /api/jornadas (ver lib/rango-fechas-espana.ts).
   let query = supabase
     .from("jornadas")
     .select("*, choferes(numero_empleado)")
-    .gte("fecha_check_in", `${rangoInicio}T00:00:00`)
-    .lte("fecha_check_in", `${rangoFin}T23:59:59.999`)
+    .gte("fecha_check_in", inicioDiaEspanaUtc(rangoInicio))
+    .lt("fecha_check_in", finDiaEspanaUtcExclusivo(rangoFin))
     .order("fecha_check_in", { ascending: false })
     .limit(MAX_JORNADAS_POR_REPORTE);
 

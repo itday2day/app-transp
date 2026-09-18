@@ -36,7 +36,18 @@ export function RutaJornadaDialog({ jornadaId, titulo, onClose }: RutaJornadaDia
 
   return (
     <Dialog open={jornadaId != null} onClose={onClose} title={titulo} className="max-w-4xl">
-      <div className="h-[70vh] w-full overflow-hidden rounded-md border border-border">
+      {/* dvh, no vh (Hallazgo #11): en un navegador móvil, vh salta de tamaño
+          al mostrarse/ocultarse la barra de direcciones. No se convirtió a
+          flex-1/min-h-0 (la alternativa que prefiere la spec si desbordara):
+          el panel del modal en mobile es h-full (ocupa el viewport real,
+          inmune al salto de vh) con un header sticky (~50px) + p-4 (32px)
+          alrededor de este mapa — 70dvh + ~82px de contenido contra un
+          modal de 100% del viewport solo desborda por debajo de ~273px de
+          alto, muy por debajo de cualquier teléfono real incluso en
+          horizontal (~390px, ~30% de margen) — no es el mismo caso del
+          Hallazgo #11 (ese padre nunca tuvo un alto genuinamente definido;
+          este sí). Ver contexto_proyecto.md §4. */}
+      <div className="h-[70dvh] w-full overflow-hidden rounded-md border border-border">
         {isLoading ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />

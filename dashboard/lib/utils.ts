@@ -46,12 +46,34 @@ export function formatHaceTiempo(iso: string | null | undefined): string {
   return `hace ${dias} d`;
 }
 
-export function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
+const ZONA_ESPANA = "Europe/Madrid";
+
+// Día de calendario "YYYY-MM-DD" tal como se ve en España — el locale sv-SE
+// de Intl ya formatea en ese orden, así que alcanza con fijar `timeZone`.
+// Funciona igual sin importar la zona horaria del dispositivo (Intl aplica
+// `timeZone` explícito, no la zona del sistema) — a propósito NO se usa
+// `toISOString()` (UTC): cerca de medianoche en España eso devuelve el día
+// siguiente o anterior al real (Hallazgo #17). Los rangos de fecha de
+// reportes siempre son días de calendario de España, nunca UTC ni la zona
+// del dispositivo del administrador — ver contexto_proyecto.md §4.
+function fechaEnEspana(fecha: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: ZONA_ESPANA }).format(fecha);
 }
 
+export function todayIsoDate(): string {
+  return fechaEnEspana(new Date());
+}
+
+// setUTCDate (no setDate): resta los días en el calendario UTC, que no tiene
+// horario de verano — evita que el resultado dependa de en qué zona horaria
+// esté el navegador del administrador, antes de reformatear en España.
 export function daysAgoIsoDate(days: number): string {
   const fecha = new Date();
-  fecha.setDate(fecha.getDate() - days);
-  return fecha.toISOString().slice(0, 10);
+  fecha.setUTCDate(fecha.getUTCDate() - days);
+  return fechaEnEspana(fecha);
+}
+
+/** Primer día del mes actual, en España — "YYYY-MM-01". */
+export function firstDayOfMonthIsoDate(): string {
+  return `${todayIsoDate().slice(0, 7)}-01`;
 }

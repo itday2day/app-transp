@@ -1205,6 +1205,73 @@ gastar alto**: reordenar, no agregar una barra.
 - **No se tocó** ningún mecanismo de los Hallazgos #11-#15 (`absolute inset-0`, el portal y su slot,
   `lg:min-h-[600px]`, el wrapper de agrupación, `env(safe-area-inset-right)`).
 
+**Hallazgo #17 — los rangos de fecha de un reporte se interpretan siempre como días de calendario de
+España (2026-09-18)**: **regla, a respetar en cualquier filtro/reporte por fecha que se agregue de
+acá en más — un rango de fechas significa siempre días de calendario de `Europe/Madrid`, con
+intervalo semiabierto (`>= inicio`, `< finExclusivo`), y la conversión de día de calendario a
+instante UTC ocurre siempre del lado del servidor.**
+
+- **Diagnóstico (Fase 1, recorrida completa antes de tocar código)**: la interpretación del rango
+  real estaba en los Route Handlers, no en el navegador ni en el mock server. `exportar-reporte-
+  dialog.tsx` manda las cadenas `"YYYY-MM-DD"` tal cual (sin convertir) a `POST /api/reportes/
+  exportar`; ese Route Handler (y, **con el mismo mecanismo**, `GET /api/jornadas` — los filtros de
+  la tabla) armaban `` `${fecha}T00:00:00` ``/`` `${fecha}T23:59:59.999` `` **sin offset** y los
+  comparaban contra `fecha_check_in` (`timestamptz`, confirmado en `supabase/schema.sql`) — Postgres
+  interpreta una cadena así en la zona de la **sesión** (la de Supabase, UTC), no en la de España.
+  Una jornada que arrancó a las 00:30 de Madrid quedaba fuera de su propio día. El mock server
+  (`server/mock/reportes.js`) no hace ningún filtrado propio — solo recibe el arreglo ya filtrado —
+  pero **sí tenía el mismo tipo de bug en la salida**: `formatearHora`/`formatearFecha` usaban
+  `toLocaleTimeString`/`toLocaleDateString` **sin `timeZone`**, así que en Render (que corre en UTC)
+  el Excel mostraba las horas de check-in/check-out en UTC, no en la hora real en que ocurrieron en
+  España — confirmado con una prueba empírica forzando el proceso a `TZ=UTC`: sin el fix, una
+  jornada de las 10:30 de Madrid aparecía como "09:30"; con `timeZone: "Europe/Madrid"` agregado,
+  aparece correcta.
+- **Fix — conversión centralizada, un solo lugar**: `dashboard/lib/rango-fechas-espana.ts` (nuevo)
+  expone `inicioDiaEspanaUtc(fechaIso)`/`finDiaEspanaUtcExclusivo(fechaIso)` — reciben un día de
+  calendario español y devuelven el instante UTC equivalente, calculando el desfase vigente
+  (`+01:00`/`+02:00`) con `Intl.DateTimeFormat` (formatear un instante COMO SI se mostrara en
+  España, interpretar esa hora de pared como si fuera UTC, y comparar contra el instante original —
+  la diferencia es el desfase real ese día; nunca un número fijo a mano). Usado desde `GET /api/
+  jornadas` y `POST /api/reportes/exportar`, los dos con `.gte()`/`.lt()` (antes `.lte()` con
+  `23:59:59.999`, el borde que pierde la última fracción de segundo que la spec pedía evitar) —
+  **confirmado que ambos comparten el mecanismo, se corrigieron en la misma pasada**, así que la
+  tabla y el reporte vuelven a coincidir exactamente para el mismo rango. Verificado con un script
+  Node aparte (no solo razonado): los dos casos de borde de la spec (jornada a las 00:30 y a las
+  23:30 de Madrid) caen en el día español correcto, y el desfase cambia correctamente de +02:00 a
+  +01:00 entre el 24 y el 26 de octubre de 2026 (el cambio de horario real de ese año).
+- **`todayIsoDate()`/`daysAgoIsoDate()` (`dashboard/lib/utils.ts`)**: seguían usando `toISOString()`
+  (UTC) — pasan a `Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Madrid" })` (el locale `sv-SE`
+  da `"YYYY-MM-DD"` directo). Corre en el navegador pero el resultado no depende de la zona del
+  dispositivo del administrador — `Intl` con `timeZone` explícito ignora la zona del sistema. Se
+  agregó `firstDayOfMonthIsoDate()` (nuevo, para el atajo "Este mes"). Los tres siguen usándose
+  únicamente para **prellenar** un `<input type="date">` — la interpretación real/autoritativa del
+  rango es la del servidor, arriba.
+- **Los atajos de rango del Hallazgo #11 (Hoy / Últimos 7 días / Este mes) se unificaron con estos
+  helpers** — antes tenían su propio cálculo con los getters locales del navegador (`fechaLocalIso`
+  en `filtros-jornadas.tsx`, ya eliminado), un criterio distinto y por su cuenta correcto pero
+  redundante ahora que `lib/utils.ts` también calcula en España.
+- **Encontrado de paso, fuera de alcance de esta spec, sin tocar**: `formatFechaHora`/`formatFecha`
+  (`dashboard/lib/utils.ts`) — las que usa toda la tabla/detalle de jornadas del Dashboard para
+  MOSTRAR check-in/check-out al administrador — tampoco fijan `timeZone`, así que muestran la hora
+  en la zona del **dispositivo del administrador**, no necesariamente la de España. Distinto del bug
+  de esta spec (ese es sobre qué jornadas entran en un rango/reporte y las horas DENTRO del Excel;
+  esto es sobre cómo se ve un timestamp puntual en la pantalla) y con una superficie mucho mayor
+  (toca casi cualquier vista de una jornada) — si se decide que también debe fijarse siempre en hora
+  de España, es una spec propia.
+- **Fuera de alcance, no tocado**: la app móvil; cualquier zona horaria que no sea `Europe/Madrid`
+  fija.
+
+**Hallazgo #17, Parte B — el modal "Ver ruta" usaba `vh` en vez de `dvh`**: `h-[70vh]` en
+`ruta-jornada-dialog.tsx` → `h-[70dvh]` — mismo criterio que el resto del Dashboard (Hallazgo #11).
+Confirmado por cálculo (no se pudo medir en un dispositivo real desde este entorno) que **no
+desbordaba** dentro del modal a pantalla completa: el panel del modal en mobile es `h-full` (ocupa
+el viewport real vía `fixed inset-0`, inmune al salto de `vh`) con un header `sticky` (~50px) + `p-4`
+(32px) alrededor del mapa — `70dvh` + ~82px de contenido contra un modal de 100% del viewport solo
+desborda por debajo de ~273px de alto, muy por debajo de cualquier teléfono real incluso en
+horizontal (~390px, ~30% de margen). No es el mismo patrón del Hallazgo #11 (ese padre nunca tuvo un
+alto genuinamente definido; este sí lo tiene) — **no** se convirtió a `flex-1`/`min-h-0` ni a
+`absolute inset-0`, tal como pedía la spec no hacer si no hacía falta.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

@@ -6,40 +6,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { FILTROS_INICIALES, type FiltrosJornadas } from "@/lib/hooks/use-jornadas";
+import { daysAgoIsoDate, firstDayOfMonthIsoDate, todayIsoDate } from "@/lib/utils";
 
 interface FiltrosJornadasFormProps {
   filtros: FiltrosJornadas;
   onChange: (filtros: FiltrosJornadas) => void;
 }
 
-// Fechas locales YYYY-MM-DD (mismo valor que ya espera <input type="date">
-// y el resto del filtrado) calculadas con los getters LOCALES de Date
-// (getFullYear/getMonth/getDate) — mismo patrón ya establecido en
-// editar-jornada-dialog.tsx (isoAFechaLocal/isoAHoraLocal), a propósito NO
-// se reusan todayIsoDate()/daysAgoIsoDate() de lib/utils.ts porque esas usan
-// toISOString() (zona horaria UTC): cerca de medianoche, en la zona horaria
-// del admin, pueden devolver el día siguiente o anterior al real.
-function fechaLocalIso(fecha: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}-${pad(fecha.getDate())}`;
-}
-
 type AtajoRango = "hoy" | "7dias" | "mes";
 
+// Un rango de fechas siempre significa días de calendario de España
+// (Hallazgo #17, decisión de negocio) — todayIsoDate()/daysAgoIsoDate()/
+// firstDayOfMonthIsoDate() (lib/utils.ts) ya calculan en Europe/Madrid, sin
+// importar la zona horaria del navegador del administrador. Antes esta
+// función tenía su propio cálculo con los getters LOCALES del navegador,
+// distinto del de esos helpers (que en ese momento sí usaban UTC) — ya
+// unificados los dos casos, no hay dos criterios de fecha conviviendo.
 function calcularAtajoRango(atajo: AtajoRango): { desde: string; hasta: string } {
-  const hoy = new Date();
-  const hasta = fechaLocalIso(hoy);
-
+  const hasta = todayIsoDate();
   if (atajo === "hoy") return { desde: hasta, hasta };
-
-  if (atajo === "7dias") {
-    const hace6Dias = new Date(hoy);
-    hace6Dias.setDate(hoy.getDate() - 6);
-    return { desde: fechaLocalIso(hace6Dias), hasta };
-  }
-
-  const primerDiaDelMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  return { desde: fechaLocalIso(primerDiaDelMes), hasta };
+  if (atajo === "7dias") return { desde: daysAgoIsoDate(6), hasta };
+  return { desde: firstDayOfMonthIsoDate(), hasta };
 }
 
 export function FiltrosJornadasForm({ filtros, onChange }: FiltrosJornadasFormProps) {
