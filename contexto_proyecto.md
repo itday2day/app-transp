@@ -1173,6 +1173,38 @@ columna se ven y se tocan sin errar, que la columna nunca queda debajo del notch
 ninguno de los dos sentidos de rotación, que rotar con el mapa abierto no lo deja gris ni pierde el
 centro, y que `/jornadas` en horizontal se ve bien con la misma columna.
 
+**Hallazgo #16 — jerarquía visual dentro de la columna lateral (2026-09-18)**: confirmado en el
+teléfono que la columna del Hallazgo #15 funciona (controles tocables, mapa con alto completo), pero
+mezclar alternar tema/cerrar sesión (utilidades) en la misma tira que la navegación se veía
+desprolijo. Se evaluó volver a una barra delgada arriba con esos dos controles y **se descartó por su
+costo**: respetando el piso de 44px (#11), esa barra mide ~48px mínimo — casi la mitad del alto que
+la columna acababa de recuperar (mapa de ~390px a ~342px). Se resolvió **dentro de la columna, sin
+gastar alto**: reordenar, no agregar una barra.
+
+- **Orden final de la columna, de arriba abajo**: (1) el ícono del logo (`Truck`, sin el texto
+  "app-transp" — no entra legible en 128px), decorativo — confirmado contra el header real que ese
+  logo **nunca fue un enlace** (`<div>` sin `href`/`onClick`), así que se mantuvo decorativo, sin
+  forzarlo a cumplir 44px (no se toca, no es un control); (2) navegación (`SidebarNav horizontal`) +
+  el slot del selector "Mapa/Lista" (`#selector-movil-horizontal`, sigue vacío en `/jornadas`), igual
+  que en el Hallazgo #15; (3) al pie, empujadas con `mt-auto` y separadas por `border-t`: alternar
+  tema y cerrar sesión — utilidades de la aplicación, no navegación. `mt-auto` (no un alto fijo ni un
+  spacer) las mantiene pegadas abajo sin importar cuántos ítems tenga la nav ni si el slot está
+  vacío.
+- **`ThemeToggle` necesitó un wrapper `flex justify-center`** que `LogoutButton` no necesitó: el
+  botón de `ThemeToggle` es `size="icon"` (ancho fijo `w-11`), y un ancho fijo no se estira con
+  `align-items: stretch` por defecto — quedaba pegado al borde izquierdo de la columna en vez de
+  centrado. `LogoutButton` (`size="sm"`, sin ancho propio) sí se estira solo, y su contenido ya
+  queda centrado por las clases base del `Button` compartido — no necesitó nada extra.
+- **Presupuesto revisado**: con el logo y el divisor sumados, ~340px de controles en `/mapa` (2 pills
+  de nav + 2 botones del selector + logo + tema + cierre de sesión) sobre los ~390px disponibles —
+  entra con ~50px de margen, más el `overflow-y-auto` que ya existía como red de seguridad. En
+  `/jornadas` (sin selector) son ~244px — bastante más margen todavía.
+- **Ancho de la columna (128px) y alto del contenido (~390px) sin cambios** — esta spec es
+  exclusivamente reordenar y separar visualmente, no tocó ninguna medida de las que fijó el
+  Hallazgo #15.
+- **No se tocó** ningún mecanismo de los Hallazgos #11-#15 (`absolute inset-0`, el portal y su slot,
+  `lg:min-h-[600px]`, el wrapper de agrupación, `env(safe-area-inset-right)`).
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

@@ -57,20 +57,35 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         </div>
 
         {/* Columna vertical de controles — SOLO teléfono horizontal
-            (Hallazgo #15). De arriba abajo: navegación, selector "Mapa/
-            Lista" (el slot solo recibe algo en /mapa — createPortal desde
-            mapa/page.tsx, mismo mecanismo del Hallazgo #14, ahora orientado
-            en columna en vez de fila), alternar tema, cerrar sesión.
-            overflow-y-auto: si algún día no entran los ~6 controles en el
-            alto disponible, esta columna scrollea por dentro — nunca
-            reintroduce scroll de página (invariante del Hallazgo #13).
+            (Hallazgo #15). Jerarquía de arriba abajo (Hallazgo #16):
+            identidad (icono del logo) → navegación + selector "Mapa/Lista"
+            (el slot solo recibe algo en /mapa — createPortal desde
+            mapa/page.tsx, mismo mecanismo del Hallazgo #14) → utilidades
+            (tema/sesión) empujadas al pie con `mt-auto` y separadas por un
+            divisor, porque no son navegación y mezcladas con la nav se veían
+            desprolijas. overflow-y-auto: si algún día no entran los
+            controles, esta columna scrollea por dentro — nunca reintroduce
+            scroll de página (invariante del Hallazgo #13).
             pr-[env(safe-area-inset-right)]: columna pegada al borde
             derecho, mismo motivo que el padding izquierdo de `main` arriba. */}
         <div className="hidden landscape:max-lg:order-2 landscape:max-lg:flex landscape:max-lg:w-32 landscape:max-lg:shrink-0 landscape:max-lg:flex-col landscape:max-lg:gap-1 landscape:max-lg:overflow-y-auto landscape:max-lg:border-l landscape:max-lg:border-border landscape:max-lg:bg-card landscape:max-lg:p-2 landscape:max-lg:pr-[calc(0.5rem+env(safe-area-inset-right))]">
+          {/* Icono del logo, decorativo — igual que en el header de arriba
+              (no es un enlace, no tiene onClick), así que no necesita
+              cumplir 44px: no se toca. Sin el texto "app-transp", que no
+              entra legible en 128px de ancho. */}
+          <div className="flex items-center justify-center py-1" aria-hidden="true">
+            <Truck className="h-5 w-5 text-primary" />
+          </div>
+
           <SidebarNav horizontal />
           <div id="selector-movil-horizontal" className="contents" />
-          <ThemeToggle />
-          <LogoutButton />
+
+          <div className="mt-auto flex flex-col gap-1 border-t border-border pt-2">
+            <div className="flex justify-center">
+              <ThemeToggle />
+            </div>
+            <LogoutButton />
+          </div>
         </div>
       </div>
     </div>
