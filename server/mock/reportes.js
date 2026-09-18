@@ -39,17 +39,28 @@ function obtenerTransportador() {
 // fechas del reporte, que ya se interpreta siempre en Europe/Madrid.
 const ZONA_ESPANA = "Europe/Madrid";
 
+// Locale explícito "es-ES" (no "es-MX", que sí se pasaba pero cuyo formato
+// de hora por defecto es 12h con AM/PM — confirmado, no era falta de
+// locale) + hour12: false explícito además del locale: mismo criterio del
+// Hallazgo #7 (24 horas forzado en el Dashboard sin depender del locale del
+// navegador) aplicado del lado del servidor — no depender de un valor
+// ambiente (ni la zona horaria, ya resuelta en el Hallazgo #17, ni ahora el
+// locale) es lo que evita que esto se rompa en silencio si algún día
+// cambia el locale por defecto del proceso.
+const LOCALE_REPORTE = "es-ES";
+
 function formatearHora(iso) {
   if (!iso) return "-";
-  return new Date(iso).toLocaleTimeString("es-MX", {
+  return new Date(iso).toLocaleTimeString(LOCALE_REPORTE, {
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
     timeZone: ZONA_ESPANA,
   });
 }
 
 function formatearFecha(iso) {
-  return new Date(iso).toLocaleDateString("es-MX", {
+  return new Date(iso).toLocaleDateString(LOCALE_REPORTE, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

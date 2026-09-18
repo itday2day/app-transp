@@ -1272,6 +1272,44 @@ horizontal (~390px, ~30% de margen). No es el mismo patrón del Hallazgo #11 (es
 alto genuinamente definido; este sí lo tiene) — **no** se convirtió a `flex-1`/`min-h-0` ni a
 `absolute inset-0`, tal como pedía la spec no hacer si no hacía falta.
 
+**Hallazgo #18 — formato de fecha/hora del Excel: 24 horas y locale explícitos, no ambientales
+(2026-09-18)**: con el Hallazgo #17 ya resuelta la zona horaria, las horas del Excel coincidían con
+las del Dashboard pero se veían en formato 12h (AM/PM). **Regla, ahora en los dos lados del
+sistema**: fecha y hora se formatean siempre con locale y zona horaria explícitos (`es-ES`,
+`Europe/Madrid`, `hour12: false`), nunca dependiendo de la configuración del entorno — ni la del
+navegador del administrador (Dashboard, Hallazgo #7) ni la del proceso en Render (`server/mock`).
+
+- **La causa real no era la que suponía la spec**: `formatearHora`/`formatearFecha` en
+  `server/mock/reportes.js` **ya pasaban un locale explícito** (`"es-MX"`, no ausente) — confirmado
+  leyendo el código antes de asumir. El problema es que `es-MX` usa 12 horas con AM/PM por defecto;
+  `es-ES` da 24 horas directo. Se cambió a `es-ES` **y además** `hour12: false` explícito (los dos,
+  no uno — mismo criterio que el Hallazgo #7: no depender de que el default de un locale se
+  mantenga).
+- **La fecha ya salía bien, verificado empíricamente (no asumido)**: simulando las condiciones de
+  Render (`TZ=UTC`, `render.yaml` fija Node 20.18.0), `formatearFecha` con `es-MX` **ya daba**
+  `DD/MM/YYYY` (`"15/01/2026"`) — el orden estadounidense que temía la spec no estaba pasando. No se
+  tocó ninguna lógica de fecha más allá de alinear el locale a `es-ES` por consistencia con la hora.
+- **Verificado con el Excel real generado, no solo las funciones sueltas**: se invocó
+  `generarLibroExcel()` (la función interna, sin mandar ningún correo), se leyó el `.xlsx` resultante
+  con `ExcelJS` de vuelta, y se confirmaron los valores tal como quedan en la celda — `"15/01/2026"`,
+  `"10:30"`, `"19:15"` (una jornada de 09:30 a 18:15 UTC = 10:30 a 19:15 en Madrid, invierno) — con
+  `TZ=UTC` forzado, igual que Render.
+- **Barrido el archivo completo**: no queda ningún otro `toLocale*` en `server/mock/` — el cuerpo del
+  correo y el nombre del archivo (`construirHtmlCorreo`, el `filename` de los adjuntos) solo
+  reinsertan `rangoInicio`/`rangoFin` tal como llegan del Dashboard (`"YYYY-MM-DD"`, sin reformatear),
+  no había otra omisión que corregir.
+- **ICU completo, no reducido**: confirmado que Node no cae a `en-US` en silencio —
+  `Intl.NumberFormat("es-ES").resolvedOptions().locale` devuelve `"es-ES"` — probado en Node 26 local
+  (Render usa 20.18.0, per `render.yaml`); los builds oficiales de Node traen ICU completo por
+  defecto desde la v13, así que esto no debería depender de la versión exacta, pero no se pudo
+  confirmar contra el Node 20.18.0 real de Render desde este entorno.
+- **Fuera de alcance, sin tocar**: el cálculo/contenido del reporte (mismas columnas, mismos
+  valores), `formatFechaHora`/`formatFecha` del Dashboard (la deuda de zona horaria anotada en el
+  Hallazgo #17, distinta de esto).
+- **Pregunta abierta de la spec, sin resolver todavía**: si las celdas de fecha/hora del Excel
+  deberían ser valores de fecha reales (para poder ordenarlos/calcular con ellos) en vez de texto
+  formateado como hoy — pendiente de decidir aparte, no se tocó.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
