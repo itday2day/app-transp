@@ -1108,6 +1108,71 @@ salir de ese total, no sumarse aparte.
 - **No se tocó** el `absolute inset-0` del `MapContainer` (#11), el `max-lg:absolute max-lg:inset-0`
   del panel de choferes (#12), ni el `lg:min-h-[600px]` (#13).
 
+**Hallazgo #15 — en horizontal, los controles pasan a una columna a la derecha, no arriba
+(2026-09-18)**: compactar las barras (#14) no alcanzó — probado en el teléfono, el mapa seguía sin
+alto cómodo. **Criterio general, para la próxima pantalla que alguien adapte a horizontal**: en un
+teléfono acostado el alto es el recurso escaso (~390px) y el ancho sobra (~850px) — los controles
+van al costado en una columna vertical, no arriba en barras horizontales, que es exactamente el
+recurso que falta.
+
+- **Sí alcanzó con reorientar el contenedor de la nav** (la plomería del portal del Hallazgo #14 no
+  cambió) — pero **también hizo falta mover el header ahí**: sus controles (alternar tema, cerrar
+  sesión) no tenían ningún contenedor reutilizable para reorientar, así que
+  `app/(dashboard)/layout.tsx` pasó de 3 hijos (`header`, fila de nav, `main`) a una estructura con
+  un wrapper nuevo agrupando `header`+fila de nav+`main`, hermano de una **columna nueva**
+  (`landscape:max-lg:flex landscape:max-lg:w-32`, con `landscape:max-lg:order-2` mientras el wrapper
+  es `landscape:max-lg:order-1`). ⚠️ **El wrapper EN SÍ no se oculta nunca** — solo cambia de orden
+  (`order-1`) y sigue mostrando a `main`/`{children}` siempre. Lo que se oculta en horizontal son
+  **`header` y la fila de nav, cada uno con su propio `landscape:max-lg:hidden` individual** (no uno
+  compartido en el wrapper) — `main` no lleva esa clase en ningún lado, por diseño: si el wrapper
+  entero se ocultara, el contenido (mapa/lista/tabla) desaparecería al rotar, que es exactamente el
+  bug que había que evitar. `header`/`main` no se movieron DENTRO de la columna (`<main>` es un
+  elemento semántico, no debe contener nav/controles). El único mecanismo nuevo fue ese wrapper de
+  agrupación — nada de estado levantado ni contexto.
+- **Qué contiene la columna, de arriba abajo**: `<SidebarNav horizontal />` (segunda instancia del
+  mismo componente — la primera, dentro de la fila de nav ahora oculta en horizontal, deja de
+  importar en esa condición; no hizo falta un tercer modo/prop, el componente ya sabía reorientarse
+  solo con clases `landscape:max-lg:`), el
+  slot `#selector-movil-horizontal` (el mismo del Hallazgo #14, reubicado acá — sigue siendo un solo
+  slot con `id` único, `mapa/page.tsx` no cambió cómo lo busca), `ThemeToggle`, `LogoutButton` —
+  estos dos también se duplican (segunda instancia cada uno) en vez de portalizarse, mismo criterio
+  que `SidebarNav`: son componentes sin estado propio relevante fuera de sí mismos, dos instancias
+  behaving igual y sincronizadas por el estado global que ya comparten (`next-themes`, la sesión).
+- **Etiquetas en la columna angosta (`w-32`, 128px)**: los pills de `SidebarNav` pasan a ícono
+  solo (`landscape:max-lg:hidden` en el `<span>` de texto) con `aria-label` agregado incondicional
+  en el `<Link>` — nombre accesible sin depender de qué esté visible. `ThemeToggle` y `LogoutButton`
+  no necesitaron cambios: ya eran ícono-solo o ya ocultaban su texto por su cuenta (`aria-label`
+  propio en los dos).
+- **Áreas seguras**: `pr-[calc(0.5rem+env(safe-area-inset-right))]` en la columna,
+  `pl-[env(safe-area-inset-left)]` en `main` — valores de `env()`, sin números inventados. La
+  columna scrollea por dentro (`overflow-y-auto`) si algún día no entran los controles, nunca
+  reintroduce scroll de página (invariante del #13).
+- **Medido/estimado — columna vs. contenido en horizontal**: columna 128px de ancho (dentro del
+  presupuesto de 120-140px pedido) con 6 controles a 44px + `gap-1` + `p-2` ≈ 300px de los ~390px de
+  alto disponibles (con margen, y `overflow-y-auto` como red de seguridad) — contenido (mapa o
+  lista) pasa a ocupar el alto **completo** del viewport (~390px, sin ninguna barra arriba), contra
+  ~290px que dejaba el Hallazgo #14 y los ~207px originales.
+- **`/jornadas` en horizontal** comparte el mismo `layout.tsx` — recibe la misma columna
+  automáticamente (con solo 4 controles, el slot ahí queda vacío) sin ningún código propio de esa
+  pantalla; la tabla/tarjetas y los filtros no se tocaron.
+- **Nota aparte de la spec, resuelta en este mismo commit**: los pills de `SidebarNav` en
+  **vertical** también estaban por debajo del piso de 44px (Hallazgo #11) — quedó pendiente porque
+  no estaba en el alcance de esa spec. Se corrigió de una vez (`landscape:max-lg:h-11` → `max-lg:h-11`,
+  cubre las dos orientaciones sin tocar escritorio) — costo estimado ~8px en vertical (mapa de 366 a
+  ~358px), aceptado sin problema dado el margen que ya tenía esa medición.
+- **No se tocó** el `absolute inset-0` del `MapContainer` (#11), el `max-lg:absolute max-lg:inset-0`
+  del panel de choferes (#12), el `lg:min-h-[600px]` (#13), ni la lógica del portal en sí — de esta
+  última solo cambió dónde vive el slot y la dirección (`flex-col` en vez de `flex-row`) de lo que se
+  porta ahí.
+
+Verificación: `tsc --noEmit`/`lint`/`format:check` limpios en `dashboard/`. El servidor de desarrollo
+sigue respondiendo sin error 500 tras todos estos cambios. **Pendiente, sin poder verificar en este
+entorno**: confirmar en el teléfono real, en las dos orientaciones de rotación, que no queda ninguna
+barra horizontal arriba, que el mapa/la lista ocupan el alto completo, que los ~4-6 controles de la
+columna se ven y se tocan sin errar, que la columna nunca queda debajo del notch/la cámara en
+ninguno de los dos sentidos de rotación, que rotar con el mapa abierto no lo deja gris ni pierde el
+centro, y que `/jornadas` en horizontal se ve bien con la misma columna.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

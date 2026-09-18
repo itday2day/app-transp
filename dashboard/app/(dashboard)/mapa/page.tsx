@@ -57,13 +57,19 @@ export default function MapaPage() {
 
   const listaPosiciones = posiciones ?? [];
 
+  // landscape:max-lg:flex-none landscape:max-lg:w-full — en la fila
+  // horizontal de siempre (portrait) se reparten 50/50 con flex-1; en la
+  // columna vertical del Hallazgo #15 (mismo elemento, otro contenedor vía
+  // portal) flex-1 los estiraría para ocupar todo el alto libre de la
+  // columna, deformados frente al resto de los controles — se cancela ahí y
+  // pasan a ancho completo, alto natural, como el resto de la columna.
   const botonesSelectorVista = (
     <>
       <Button
         type="button"
         variant={vistaMobile === "mapa" ? "default" : "outline"}
         aria-pressed={vistaMobile === "mapa"}
-        className="flex-1"
+        className="flex-1 landscape:max-lg:w-full landscape:max-lg:flex-none"
         onClick={() => setVistaMobile("mapa")}
       >
         Mapa
@@ -72,7 +78,7 @@ export default function MapaPage() {
         type="button"
         variant={vistaMobile === "lista" ? "default" : "outline"}
         aria-pressed={vistaMobile === "lista"}
-        className="flex-1"
+        className="flex-1 landscape:max-lg:w-full landscape:max-lg:flex-none"
         onClick={() => setVistaMobile("lista")}
       >
         Lista
@@ -116,7 +122,11 @@ export default function MapaPage() {
 
       {slotSelectorHorizontal &&
         createPortal(
-          <div className="hidden shrink-0 gap-2 landscape:max-lg:flex">{botonesSelectorVista}</div>,
+          // La columna (layout.tsx, Hallazgo #15) es flex-col — este wrapper
+          // se apila igual, no en fila como antes de esa spec.
+          <div className="hidden w-full shrink-0 flex-col gap-1 landscape:max-lg:flex">
+            {botonesSelectorVista}
+          </div>,
           slotSelectorHorizontal
         )}
 
