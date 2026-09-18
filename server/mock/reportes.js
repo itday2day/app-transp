@@ -39,39 +39,71 @@ function obtenerTransportador() {
 // fechas del reporte, que ya se interpreta siempre en Europe/Madrid.
 const ZONA_ESPANA = "Europe/Madrid";
 
-// Locale explícito "es-ES" (no "es-MX", que sí se pasaba pero cuyo formato
-// de hora por defecto es 12h con AM/PM — confirmado, no era falta de
-// locale) + hour12: false explícito además del locale: mismo criterio del
-// Hallazgo #7 (24 horas forzado en el Dashboard sin depender del locale del
-// navegador) aplicado del lado del servidor — no depender de un valor
-// ambiente (ni la zona horaria, ya resuelta en el Hallazgo #17, ni ahora el
-// locale) es lo que evita que esto se rompa en silencio si algún día
-// cambia el locale por defecto del proceso.
-const LOCALE_REPORTE = "es-ES";
+// Excel guarda una fecha/hora como un NÚMERO — días desde el 30/12/1899,
+// con la hora como fracción de ese día — sin ninguna zona horaria propia.
+// Si se le entrega un objeto Date a la librería y se deja que ella decida
+// cómo convertirlo, lo más probable es que use UTC o la zona del proceso
+// (en Render, UTC): reintroduciría el Hallazgo #17 por la puerta de atrás,
+// esta vez sin AM/PM que lo delate (se vería "07:30" en vez de "09:30", con
+// pinta de dato correcto). El número se arma a mano a partir de los
+// COMPONENTES de reloj de pared en Madrid — Date.UTC acá es solo una
+// calculadora de días, nunca una zona horaria (Hallazgo #19).
+const EPOCH_EXCEL = Date.UTC(1899, 11, 30);
+const MS_POR_DIA = 86_400_000;
+const FORMATO_FECHA_EXCEL = "dd/mm/yyyy";
+const FORMATO_HORA_EXCEL = "hh:mm";
+// Los corchetes en [h] no son decorativos: con "h:mm" a secas, una suma que
+// pase de 24 horas vuelve a cero (25:30 se muestra "01:30"); con "[h]:mm"
+// acumula sin dar la vuelta, que es lo que hace falta al totalizar una
+// semana o un mes en Excel.
+const FORMATO_DURACION_EXCEL = "[h]:mm";
 
-function formatearHora(iso) {
-  if (!iso) return "-";
-  return new Date(iso).toLocaleTimeString(LOCALE_REPORTE, {
+// Mismo mecanismo del Hallazgo #17 (Intl con timeZone explícito), pero acá
+// hacen falta los componentes sueltos (año/mes/día/hora/minuto/segundo) en
+// vez de una cadena ya formateada, porque hay que construir un número, no
+// texto.
+function componentesEnEspana(iso) {
+  const formateador = new Intl.DateTimeFormat("en-US", {
+    timeZone: ZONA_ESPANA,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
-    timeZone: ZONA_ESPANA,
+    second: "2-digit",
   });
+  const partes = Object.fromEntries(
+    formateador.formatToParts(new Date(iso)).map(({ type, value }) => [type, value])
+  );
+  return {
+    anio: Number(partes.year),
+    mes: Number(partes.month),
+    dia: Number(partes.day),
+    hora: Number(partes.hour),
+    minuto: Number(partes.minute),
+    segundo: Number(partes.second),
+  };
 }
 
-function formatearFecha(iso) {
-  return new Date(iso).toLocaleDateString(LOCALE_REPORTE, {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: ZONA_ESPANA,
-  });
+/** Serial de fecha de Excel (sin parte de hora) — columna "Fecha". */
+function serialFechaExcel(iso) {
+  const { anio, mes, dia } = componentesEnEspana(iso);
+  return (Date.UTC(anio, mes - 1, dia) - EPOCH_EXCEL) / MS_POR_DIA;
 }
 
+/** Fracción de día (0 a 1) — columnas de hora del día (Check-In/Check-Out/Incidencia). */
+function fraccionHoraExcel(iso) {
+  const { hora, minuto, segundo } = componentesEnEspana(iso);
+  return (hora * 3600 + minuto * 60 + segundo) / 86400;
+}
+
+// Devuelve la duración en HORAS decimales (no un string ya formateado) —
+// quien arma la celda la convierte a fracción de día (÷24) sin volver a
+// parsear texto. null cuando la jornada sigue abierta (sin check-out).
 function calcularHorasTotales(fechaCheckIn, fechaCheckOut) {
-  if (!fechaCheckOut) return "-";
-  const horas = (new Date(fechaCheckOut).getTime() - new Date(fechaCheckIn).getTime()) / 3_600_000;
-  return horas.toFixed(2);
+  if (!fechaCheckOut) return null;
+  return (new Date(fechaCheckOut).getTime() - new Date(fechaCheckIn).getTime()) / 3_600_000;
 }
 
 function calcularKmRecorrido(kmInicial, kmFinal) {
@@ -81,15 +113,21 @@ function calcularKmRecorrido(kmInicial, kmFinal) {
 
 // Hoy una jornada solo puede tener 0 o 1 incidencia (se captura una única vez
 // al hacer check-out), pero esto se arma como arreglo para que, si en el
-// futuro una jornada admite varias, las columnas de tipo/descripción/hora ya
-// las muestren concatenadas por salto de línea sin tocar este archivo.
+// futuro una jornada admite varias, las columnas de tipo/descripción ya las
+// muestren concatenadas por salto de línea sin tocar este archivo.
+// ⚠️ "hora" queda como el ISO crudo (no una cadena ya formateada) a
+// propósito: quien arma la fila la convierte a número de Excel. Eso además
+// significa que esta concatenación por salto de línea NO puede extenderse a
+// "hora" si el día de mañana una jornada admite varias incidencias (una
+// celda numérica no puede llevar dos valores) — ese caso, cuando exista,
+// necesita su propio rediseño de esta columna.
 function obtenerIncidencias(jornada) {
   if (!jornada.tuvoIncidencia) return [];
   return [
     {
       tipo: jornada.tipoIncidencia || "N/A",
       detalle: jornada.detalleIncidencia || "N/A",
-      hora: formatearHora(jornada.fechaCheckOut),
+      horaIso: jornada.fechaCheckOut,
     },
   ];
 }
@@ -165,15 +203,21 @@ async function generarLibroExcel(jornadas) {
   for (const jornada of jornadas) {
     const incidencias = obtenerIncidencias(jornada);
     const tieneIncidencias = incidencias.length > 0;
+    // Ver el comentario en obtenerIncidencias(): hoy nunca hay más de una.
+    const incidencia = incidencias[0] ?? null;
+    const horasTotalesNumero = calcularHorasTotales(jornada.fechaCheckIn, jornada.fechaCheckOut);
 
     const fila = hoja.addRow({
       idUsuario: jornada.choferNumeroEmpleado ?? jornada.choferId,
       nombreChofer: jornada.choferNombre,
       empresa: jornada.empresa,
-      fecha: formatearFecha(jornada.fechaCheckIn),
-      horaCheckIn: formatearHora(jornada.fechaCheckIn),
-      horaCheckOut: formatearHora(jornada.fechaCheckOut),
-      horasTotales: calcularHorasTotales(jornada.fechaCheckIn, jornada.fechaCheckOut),
+      fecha: serialFechaExcel(jornada.fechaCheckIn),
+      horaCheckIn: fraccionHoraExcel(jornada.fechaCheckIn),
+      horaCheckOut: jornada.fechaCheckOut ? fraccionHoraExcel(jornada.fechaCheckOut) : "-",
+      // Minutos totales ÷ 1440 = horas decimales ÷ 24 (mismo cálculo, ya
+      // partiendo del número de horas que devuelve calcularHorasTotales en
+      // vez de reconstruirlo).
+      horasTotales: horasTotalesNumero != null ? horasTotalesNumero / 24 : "-",
       ruta: jornada.ruta,
       matricula: jornada.matricula,
       kmInicial: jornada.kmInicial,
@@ -184,13 +228,24 @@ async function generarLibroExcel(jornadas) {
       tieneIncidencias: tieneIncidencias ? "SÍ" : "NO",
       tipoIncidencia: tieneIncidencias ? incidencias.map((i) => i.tipo).join("\n") : "N/A",
       descripcionIncidencia: tieneIncidencias ? incidencias.map((i) => i.detalle).join("\n") : "N/A",
-      horaIncidencia: tieneIncidencias ? incidencias.map((i) => i.hora).join("\n") : "N/A",
+      horaIncidencia: incidencia ? fraccionHoraExcel(incidencia.horaIso) : "N/A",
     });
+
+    // numFmt solo en las celdas que de verdad llevan un número — aplicarlo
+    // sobre el "-"/"N/A" de texto no rompe nada (Excel lo ignora en una
+    // celda de texto), pero declararlo solo donde corresponde es más claro.
+    fila.getCell("fecha").numFmt = FORMATO_FECHA_EXCEL;
+    fila.getCell("horaCheckIn").numFmt = FORMATO_HORA_EXCEL;
+    if (jornada.fechaCheckOut) fila.getCell("horaCheckOut").numFmt = FORMATO_HORA_EXCEL;
+    if (horasTotalesNumero != null) fila.getCell("horasTotales").numFmt = FORMATO_DURACION_EXCEL;
+    if (incidencia) fila.getCell("horaIncidencia").numFmt = FORMATO_HORA_EXCEL;
 
     if (tieneIncidencias) {
       fila.getCell("tieneIncidencias").fill = RELLENO_INCIDENCIA;
       fila.getCell("tieneIncidencias").font = { bold: true, color: COLOR_TEXTO_INCIDENCIA };
-      ["tipoIncidencia", "descripcionIncidencia", "horaIncidencia"].forEach((clave) => {
+      // horaIncidencia ya no es texto potencialmente largo (era el join por
+      // salto de línea) — el wrap solo tiene sentido para tipo/descripción.
+      ["tipoIncidencia", "descripcionIncidencia"].forEach((clave) => {
         fila.getCell(clave).alignment = { wrapText: true, vertical: "top" };
       });
     }

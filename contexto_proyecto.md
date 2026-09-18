@@ -1310,6 +1310,59 @@ navegador del administrador (Dashboard, Hallazgo #7) ni la del proceso en Render
   deberían ser valores de fecha reales (para poder ordenarlos/calcular con ellos) en vez de texto
   formateado como hoy — pendiente de decidir aparte, no se tocó.
 
+**Hallazgo #19 — el Excel exportado escribe fechas, horas y duraciones como valores reales, no texto
+(2026-09-18)** — responde la pregunta abierta del Hallazgo #18: **las celdas de fecha, hora del día
+y duración del reporte (`server/mock/reportes.js`, `exceljs` v4.4.0) son valores numéricos con
+formato declarado, no texto** — se pueden sumar, ordenar y usar en tablas dinámicas sin convertirlas
+antes.
+
+- **El número se construye a mano a partir de los componentes de reloj de pared en `Europe/Madrid`
+  (`componentesEnEspana()`, mismo mecanismo `Intl`+`timeZone` del Hallazgo #17) — nunca entregando un
+  `Date` a `exceljs`.** Una fecha de Excel es solo un número (días desde el 30/12/1899, sin ninguna
+  zona horaria propia); si se delega la conversión en la librería, lo más probable es que use UTC o
+  la zona del proceso (Render = UTC) y reintroduzca el Hallazgo #17 por la puerta de atrás — esta vez
+  sin AM/PM que lo delate (`"07:30"` en vez de `"09:30"`, con pinta de dato correcto).
+- **Una duración es una fracción de día — para pagar una tarifa por hora hay que multiplicar
+  `horas * 24 * tarifa`** (`=A2*24*tarifa` en Excel). Es la línea que le va a hacer falta a quien
+  arme la planilla de pagos.
+- **Formato `[h]:mm` (con corchetes) en la columna de duración, no `h:mm`** — sin los corchetes, una
+  suma que pasa de 24 horas vuelve a cero (25:30 se ve `01:30`); con `[h]:mm` acumula sin dar la
+  vuelta, que es lo que hace falta al totalizar una semana o un mes.
+- **Columnas que cambiaron** (de las 23 del reporte): `fecha` (`dd/mm/yyyy`), `horaCheckIn`/
+  `horaCheckOut` (`hh:mm`), `horasTotales` (`[h]:mm`) y — no estaba en la spec original, encontrada
+  al revisar el archivo completo — **`horaIncidencia`** (`hh:mm`), la hora de la incidencia que
+  también se mostraba como texto formateado. El resto (nombres, empresa, ruta, matrícula, combustible
+  con `%`, los hipervínculos a fotos/ubicación, `kmInicial`/`kmFinal`/`kmRecorrido` que ya eran
+  numéricos) no se tocó.
+- **`calcularHorasTotales()` ya calculaba el número en horas decimales** antes de convertirlo a texto
+  con `.toFixed(2)` — se usa ese número directo (dividido por 24), sin reconstruirlo parseando nada.
+- **`horaIncidencia` no podía seguir el patrón de "concatenar por salto de línea" que ya tenían
+  `tipoIncidencia`/`descripcionIncidencia`** (pensado para cuando una jornada admita más de una
+  incidencia, algo que hoy nunca pasa) — una celda numérica no puede llevar dos valores. Se usa la
+  primera incidencia (hoy la única); si en el futuro una jornada admite varias, esta columna
+  puntual necesita su propio rediseño, documentado en el código.
+- **Celdas sin dato siguen en texto** (`"-"`/`"N/A"`: sin check-out todavía, jornada abierta; sin
+  incidencia) — no es "quedar a medias" (lo que la spec pedía evitar), es la ausencia legítima de un
+  valor, mismo criterio que ya usaba `kmFinal` antes de esta spec.
+- **Sin fila de totales** — no existía antes, y agregarla era opcional en la spec; se mantuvo fuera
+  para no ampliar qué contiene el archivo.
+- **Verificado empíricamente sobre el `.xlsx` real** (no solo mirado): se generó el archivo, se leyó
+  de vuelta con `exceljs`, y se confirmó que las celdas son de tipo numérico con formato (no `String`)
+  — con `TZ=UTC` forzado (igual que Render), una jornada de 09:30 a 18:15 UTC (invierno) se reconstruye
+  como `10:30`/`19:15`, una duración de `08:45` (= 8.75h), y una jornada de verano (octubre,
+  `+02:00`) como `07:00`/`15:00` — coincide con lo que ya muestra el Dashboard para las mismas
+  jornadas, porque la conversión a España es la misma del Hallazgo #17, sin tocar. El orden
+  cronológico de los seriales de fecha se confirmó correcto cruzando septiembre→octubre.
+  **No se pudo verificar en este entorno** que la suma de varias duraciones en Excel real supere las
+  24 horas sin dar la vuelta (`exceljs` no evalúa fórmulas ni renderiza — esa prueba necesita abrir
+  el archivo en Excel/LibreOffice de verdad) ni que ninguna columna muestre `########` por ancho
+  insuficiente — los anchos existentes ya eran generosos para el contenido anterior (p. ej. incluían
+  margen para `"10:30 a.m."`) y el contenido nuevo es igual o más corto, así que no deberían
+  necesitar ajuste, pero queda pendiente abrir el archivo para confirmarlo a ojo.
+- **No se tocó** nada de los Hallazgos #17/#18 (`rango-fechas-espana.ts`, el filtro semiabierto, la
+  conversión a `Europe/Madrid`) — esta spec los consume como fuente de los componentes de reloj de
+  pared, no los modifica.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
