@@ -8,6 +8,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { componentesEnEspana, instanteEnEspanaComoUtc } from "@/lib/hora-espana";
 import type {
   EditarJornadaRequest,
   EditarJornadaResponse,
@@ -93,26 +94,27 @@ const TIPOS_INCIDENCIA: TipoIncidencia[] = [
   "Otro",
 ];
 
-// Convierte un ISO (UTC, tal como lo guarda Supabase) a la hora LOCAL del
-// navegador, separado en fecha ("YYYY-MM-DD", para <input type="date">) y
-// hora ("HH:mm", para el input de texto de abajo) — Date ya hace la
-// conversión de zona horaria al leer los componentes con los getters
-// locales (getFullYear/getHours/...), así que no hace falta ninguna lógica
-// de huso horario a mano.
-function isoAFechaLocal(iso: string | null): string {
+// Convierte un ISO (UTC, tal como lo guarda Supabase) a la hora de ESPAÑA
+// (no la del navegador — Hallazgo #20), separado en fecha ("YYYY-MM-DD",
+// para <input type="date">) y hora ("HH:mm", para el input de texto de
+// abajo). Antes usaba los getters LOCALES del navegador
+// (getFullYear/getHours/...); eso es lo que hacía que la tabla mostrara la
+// jornada en hora de España pero este formulario la precargara en la zona
+// del dispositivo del administrador — dos relojes distintos para la misma
+// jornada. componentesEnEspana() (lib/hora-espana.ts) usa Intl con
+// timeZone explícito en vez de la zona del sistema.
+function isoAFechaEspana(iso: string | null): string {
   if (!iso) return "";
   const fecha = new Date(iso);
   if (Number.isNaN(fecha.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${fecha.getFullYear()}-${pad(fecha.getMonth() + 1)}-${pad(fecha.getDate())}`;
+  return componentesEnEspana(iso).fecha;
 }
 
-function isoAHoraLocal(iso: string | null): string {
+function isoAHoraEspana(iso: string | null): string {
   if (!iso) return "";
   const fecha = new Date(iso);
   if (Number.isNaN(fecha.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(fecha.getHours())}:${pad(fecha.getMinutes())}`;
+  return componentesEnEspana(iso).hora;
 }
 
 function SelectorImagen({
@@ -304,8 +306,8 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
   // cualquier otro campo en una jornada ya cerrada le truncaría en silencio
   // los segundos/milisegundos a fecha_check_out. Comparando contra el valor
   // inicial, solo se manda si hubo un cambio real.
-  const fechaCheckOutFechaInicial = isoAFechaLocal(jornada.fecha_check_out);
-  const fechaCheckOutHoraInicial = isoAHoraLocal(jornada.fecha_check_out);
+  const fechaCheckOutFechaInicial = isoAFechaEspana(jornada.fecha_check_out);
+  const fechaCheckOutHoraInicial = isoAHoraEspana(jornada.fecha_check_out);
   const [fechaCheckOutFecha, setFechaCheckOutFecha] = useState(fechaCheckOutFechaInicial);
   const [fechaCheckOutHora, setFechaCheckOutHora] = useState(fechaCheckOutHoraInicial);
 
@@ -379,7 +381,14 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
     if (kmFinal.trim()) campos.kmFinal = Number(kmFinal);
     if (combustibleFinal.trim()) campos.combustibleFinal = Number(combustibleFinal);
     if (fechaCheckOutCambio && fechaCheckOutFecha && fechaCheckOutHora) {
-      campos.fechaCheckOut = new Date(`${fechaCheckOutFecha}T${fechaCheckOutHora}`).toISOString();
+      // Antes: new Date(`${fecha}T${hora}`).toISOString() — sin offset, el
+      // motor de JS interpreta esa cadena en la zona del NAVEGADOR (Hallazgo
+      // #20). La tabla ya muestra la jornada en hora de España; un admin
+      // fuera de España vería "10:30", escribiría "10:30" en este campo y
+      // guardaría un instante distinto. instanteEnEspanaComoUtc interpreta
+      // lo tipeado como hora de pared en Europe/Madrid, igual que lo que se
+      // le muestra.
+      campos.fechaCheckOut = instanteEnEspanaComoUtc(fechaCheckOutFecha, fechaCheckOutHora);
     }
     if (ubicacionFinal) {
       campos.latFinal = ubicacionFinal.lat;

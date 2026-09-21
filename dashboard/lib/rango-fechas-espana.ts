@@ -18,6 +18,13 @@ const ZONA_ESPANA = "Europe/Madrid";
 // de pared como si fuera UTC, y compara contra el instante original — la
 // diferencia es el desfase vigente ese día. Evita sumar/restar horas a
 // mano, que falla la mitad del año con el horario de verano.
+// ⚠️ Si cambiás este cálculo, cambialo también en dashboard/lib/hora-
+// espana.ts (su propia desfaseMinutos, mismo algoritmo) — una divergencia
+// entre las dos copias no tira ningún error: da una hora corrida durante
+// parte del año, y recién se nota en el cambio de horario de marzo/octubre.
+// Pendiente con disparador: extraer a un módulo compartido la próxima vez
+// que se toque cualquiera de los dos archivos — la firma de ESTA función
+// (`instante, zona`) es la que sobrevive esa fusión. Ver contexto_proyecto.md §4.
 function desfaseMinutos(instante: Date, zona: string): number {
   const formateador = new Intl.DateTimeFormat("en-US", {
     timeZone: zona,

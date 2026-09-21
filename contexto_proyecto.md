@@ -1363,6 +1363,74 @@ antes.
   conversión a `Europe/Madrid`) — esta spec los consume como fuente de los componentes de reloj de
   pared, no los modifica.
 
+**Hallazgo #20 — toda fecha/hora que el Dashboard MUESTRA (no solo filtra o exporta) se presenta en
+hora de España, y toda hora que RECIBE de un formulario se interpreta con el mismo criterio
+(2026-09-21)**. La regla del Hallazgo #17 ahora cubre las tres etapas: filtrado, reporte, y
+presentación — **siempre `Europe/Madrid`, `es-ES` y `hour12: false` explícitos, nunca heredados del
+navegador ni del proceso.**
+
+- **Dónde se producía el valor (navegador, no servidor) — confirmado rastreando el código, no
+  adivinando**: `useJornadas()` (`lib/hooks/use-jornadas.ts`) usa TanStack Query sin ningún
+  `prefetchQuery`/`HydrationBoundary` — `app/providers.tsx` crea el `QueryClient` vacío dentro de un
+  `useState`, así que durante el SSR `data` es `undefined` y `TablaJornadas` renderiza con un arreglo
+  vacío: `formatFechaHora` nunca llega a ejecutarse con datos reales del lado del servidor.
+  `JornadaDetalleDialog` recibe la jornada desde un `useState` que arranca en `null`.
+  `trazado-ruta.tsx` cuelga de un mapa cargado con `dynamic(..., { ssr: false })`. Los tres caminos de
+  entrada de una fecha a la pantalla confirman lo mismo — es un caso de borde (solo afecta a un
+  administrador fuera de España), no la situación grave de "la tabla viene mostrando horas corridas
+  desde el día uno" que habría sido si el valor se produjera en el servidor.
+- **`formatFechaHora`/`formatFecha` (`lib/utils.ts`)**: pasan a declarar `timeZone: "Europe/Madrid"`,
+  locale `"es-ES"` y (solo `formatFechaHora`, que tiene componente de hora) `hour12: false` — mismo
+  trío del Hallazgo #18, mismo motivo: los tres dependen de un valor ambiente (zona del dispositivo,
+  idioma del navegador) si no se declaran. Verificado forzando el proceso a una zona distinta de
+  España (`TZ=UTC` — esta shell no propaga bien valores de `TZ` con `/` como
+  `America/Mexico_City`, usado como equivalente): antes del fix, una jornada de las 10:30 de Madrid
+  se mostraba como `"09:30"`; después, `"10:30"` sin importar la zona del proceso. Confirmado también
+  invierno/verano y el caso de madrugada (00:30 Madrid cae en su propio día).
+  **`formatFecha` no la llama nadie hoy** (código muerto, confirmado con una búsqueda exhaustiva) —
+  se corrigió igual porque la spec la nombra explícitamente, pero queda anotado por si en algún
+  momento se decide eliminarla en vez de mantenerla sin uso.
+- **El camino de entrada estaba inconsistente, confirmado y corregido en la misma pasada**: el editor
+  de check-out (`editar-jornada-dialog.tsx`) prellenaba con `isoAFechaLocal`/`isoAHoraLocal` (getters
+  LOCALES del navegador — `getFullYear`/`getHours`/...) y, al guardar, interpretaba lo tipeado con
+  `` new Date(`${fecha}T${hora}`).toISOString() `` (sin offset, también zona del navegador). Los dos
+  caminos eran consistentes ENTRE SÍ (por eso la guarda anti-truncado de segundos, Hallazgo #6, nunca
+  se rompió), pero quedaban inconsistentes con la pantalla, que ahora muestra España: un admin fuera
+  de España iba a ver `"10:30"` en la tabla, escribir `"10:30"` en este campo, y guardar un instante
+  distinto. `dashboard/lib/hora-espana.ts` (nuevo) expone `componentesEnEspana()` (para prellenar) e
+  `instanteEnEspanaComoUtc()` (para el envío) — **no se tocó ni se reusó `rango-fechas-espana.ts`**
+  (explícitamente cerrado, Hallazgo #17): ese módulo resuelve un problema más angosto (límites de un
+  día completo para filtrar un rango), y acá hace falta cualquier hora dentro del día, en las dos
+  direcciones — se aceptó duplicar el mecanismo de desfase (~15 líneas, ya verificado) antes que
+  tocar un archivo cerrado. La guarda anti-truncado sigue funcionando porque prellenado y comparación
+  usan la MISMA función (`componentesEnEspana`), determinística — cambió QUÉ criterio de zona usa,
+  no que los dos caminos dejen de coincidir entre sí.
+  ⚠️ **Pendiente con disparador, no para resolver ahora**: `desfaseMinutos()` es el mismo algoritmo
+  de ~20 líneas escrito dos veces (`rango-fechas-espana.ts` y `hora-espana.ts`) — no solo la cadena
+  `"Europe/Madrid"` en común, es justamente el pedazo difícil de acertar (el manejo del horario de
+  verano/invierno). **Costo concreto de dejarlo así**: si el día de mañana se corrige un bug en una
+  copia y no en la otra, la divergencia no tira ningún error — da una hora corrida durante parte del
+  año, y recién se nota en el cambio de horario de marzo/octubre, cuando ya hace tiempo que se hizo
+  el cambio. **Disparador**: extraer `desfaseMinutos()` a un módulo compartido la próxima vez que se
+  toque cualquiera de los dos archivos (no antes — mezclar esa extracción con un cambio que todavía
+  no pasó su propia verificación en la app real mezclaría dos riesgos que conviene mantener
+  separados). La firma que sobrevive esa fusión es la de `rango-fechas-espana.ts`
+  (`desfaseMinutos(instante, zona)`), ya general — la de `hora-espana.ts` es la que se descarta.
+  **Un tercer archivo comparte la misma decisión de negocio sin compartir este algoritmo**:
+  `server/mock/reportes.js` (Hallazgo #18) también sabe de `Europe/Madrid`, pero usa `Intl`
+  directamente para *formatear* una hora, no para *calcular un desfase* — no hay código duplicado
+  ahí, pero son 3 archivos en 2 sub-proyectos (`dashboard/` y `server/mock/`) que tienen que seguir
+  de acuerdo sobre la misma zona horaria.
+- **Verificado con un script Node aparte** (mismo método que los Hallazgos #17-#19): conversión
+  ida y vuelta (fecha+hora de España → instante UTC → fecha+hora de España) exacta en 4 casos,
+  incluyendo el día del cambio de horario de octubre 2026; desfase +01:00/+02:00 correcto en
+  invierno/verano.
+- **No se agregó ninguna etiqueta "hora de España" en pantalla** — decisión ya tomada en la spec, no
+  hace falta hoy porque todos los administradores están en España.
+- **No hace falta ninguna advertencia sobre horarios históricos mal mostrados** — el diagnóstico dio
+  "navegador", no "servidor": para un administrador ubicado en España (la situación real hoy), la
+  hora que vio siempre fue la correcta.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

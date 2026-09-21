@@ -5,28 +5,45 @@ export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-/** Formatea un ISO 8601 a fecha+hora corta en es-ES. */
+// Las tres cosas se declaran explícito, no solo la zona: timeZone fija QUÉ
+// instante de reloj de pared se muestra (sin esto, cada navegador usa la
+// zona de su propio dispositivo — el mismo bug de fondo que los Hallazgos
+// #17/#18, ahora en la presentación); locale fija el ORDEN de la fecha (sin
+// esto, un navegador en inglés puede mostrar mes antes que día — "09/10"
+// sin poder saber si es 9 de octubre o 10 de septiembre, en una pantalla
+// que sustenta pagos); hour12 fija 12 vs. 24 horas (sin esto, un locale
+// distinto puede mostrar AM/PM). Los tres dependen de un valor AMBIENTE del
+// entorno si no se declaran — mismo criterio que ya se aplicó en el
+// Hallazgo #18 del lado del servidor (Excel), acá del lado del cliente.
+const ZONA_ESPANA_PRESENTACION = "Europe/Madrid";
+const LOCALE_ESPANA = "es-ES";
+
+/** Formatea un ISO 8601 a fecha+hora corta, siempre en hora de España. */
 export function formatFechaHora(iso: string | null | undefined): string {
   if (!iso) return "—";
   const fecha = new Date(iso);
   if (Number.isNaN(fecha.getTime())) return "—";
-  return fecha.toLocaleString("es-ES", {
+  return fecha.toLocaleString(LOCALE_ESPANA, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
+    timeZone: ZONA_ESPANA_PRESENTACION,
   });
 }
 
+/** Formatea un ISO 8601 a fecha corta (sin hora), siempre en el día de calendario de España. */
 export function formatFecha(iso: string | null | undefined): string {
   if (!iso) return "—";
   const fecha = new Date(iso);
   if (Number.isNaN(fecha.getTime())) return "—";
-  return fecha.toLocaleDateString("es-ES", {
+  return fecha.toLocaleDateString(LOCALE_ESPANA, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: ZONA_ESPANA_PRESENTACION,
   });
 }
 
