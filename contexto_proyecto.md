@@ -1431,6 +1431,96 @@ navegador ni del proceso.**
   "navegador", no "servidor": para un administrador ubicado en España (la situación real hoy), la
   hora que vio siempre fue la correcta.
 
+**Hallazgo #21 — el reporte exportado tiene que contener exactamente lo que la tabla muestra
+(2026-09-21)**. Detectado por el usuario con datos reales: filtró `/jornadas` por chofer "cesar", la
+tabla mostró 18, el Excel trajo 8. **Regla, de acá en más**: lo que se exporta es siempre lo que la
+pantalla está mostrando; el diálogo de exportar no tiene ningún criterio propio ni memoria entre
+aperturas; y el archivo declara sus propios filtros y su total, para que una futura divergencia
+(la que sea) se vea **abriendo el archivo**, no solo confiando en que el Dashboard mandó lo correcto.
+
+- **La causa real no era la que suponía la spec**: no hay ningún `useState` ni valor persistido a
+  nivel de módulo en `exportar-reporte-dialog.tsx` — nunca hubo "memoria de una exportación
+  anterior". Lo que pasaba: el diálogo recalculaba `rangoInicio`/`rangoFin` en cada render con
+  `filtros.desde || daysAgoIsoDate(7)` — cuando la tabla no tenía fecha filtrada (`desde`/`hasta`
+  vacíos = "todo el tiempo"), el diálogo sustituía en silencio ese "todo el tiempo" por un default
+  de "últimos 7 días" que la tabla nunca usó, porque `POST /api/reportes/exportar` **exigía** un
+  rango (400 si faltaba) mientras que `GET /api/jornadas` ya lo trataba como **opcional**. Filtrar
+  por "cesar" sin fecha → tabla: 18 (todo el tiempo) → diálogo: solo los últimos 7 días de esas 18 →
+  8. Confirmado leyendo el código, no el resultado, tal como pedía la spec.
+- **`POST /api/reportes/exportar` sí recibía y aplicaba el filtro de chofer** (y empresa y estado) —
+  confirmado en el código antes de asumir nada. No era el escenario grave (jornadas de otro chofer
+  filtrándose adentro); era el reportado (jornadas propias quedando afuera).
+- **Las jornadas abiertas ya se incluían por defecto** en el reporte (sin filtro de estado = todos
+  los estados) — coincide con lo que ya hacía la tabla. **Cuántas de las 18 de "cesar" estaban
+  abiertas no se pudo determinar desde este entorno** — requiere consultar la base real, que no
+  tengo acceso a consultar directamente; si hace falta ese número puntual, es una consulta rápida en
+  Supabase (`estado = 'abierta'` sobre esas 18 filas).
+- **`GET /api/jornadas` y `POST /api/reportes/exportar` ahora comparten el armado del filtro** —
+  `dashboard/lib/jornadas-filtro.ts` (nuevo) expone `aplicarFiltrosJornadas(query, filtros)`,
+  reusada por los dos Route Handlers en vez de que cada uno arme su propia consulta Supabase por su
+  cuenta (que fue, estructuralmente, lo que permitió que los dos contratos divergieran). ⚠️ Nota de
+  tipos: un genérico propio sobre el builder de supabase-js (probado con auto-referencia y con
+  `this`) dispara "Type instantiation is excessively deep" — limitación conocida de supabase-js sin
+  un `Database` generado, no un error de modelado. Se resolvió con `Q` sin restricción + un cast
+  interno (`as unknown as`) — la firma pública sigue siendo `Q -> Q`, sin perder tipado para quien
+  llama a la función.
+- **`POST /api/reportes/exportar` pasa a tratar `rangoInicio`/`rangoFin` como opcionales**, igual
+  que `desde`/`hasta` en `/api/jornadas` — "sin fecha" es "sin límite de ese lado", nunca un default
+  inventado.
+- **El diálogo pasa de ser de solo lectura a editable**: arranca con los filtros ACTIVOS de la tabla
+  (vía el remount por `key` que ya existía, Hallazgo previo — sin memoria entre aperturas) pero se
+  pueden ajustar sin tocar la tabla.
+- ⚠️ **La pieza más importante de la spec**: el diálogo muestra "Se exportarán N jornada(s)" **antes**
+  de exportar, recalculado con cada cambio de filtro — reusa `useJornadas()` (el mismo hook que ya
+  usa la tabla) con `pageSize: 1`, así el número sale de la MISMA fuente que la tabla, no de un
+  cálculo aparte. Si el conjunto queda vacío, el botón de enviar se deshabilita y se avisa en
+  pantalla — **y además**, del lado del servidor, `/api/reportes/exportar` devuelve 400 sin llamar al
+  mock server si la consulta da 0 filas (defensa en profundidad: protege aunque alguien pegue
+  directo al endpoint sin pasar por el diálogo).
+- **El archivo declara sus filtros**: nueva hoja "Filtros" (segunda hoja del libro, después de
+  "Jornadas" — la hoja de datos no se tocó, sigue siendo la misma del Hallazgo #19) con el rango de
+  fechas efectivo, empresa/chofer/estado aplicados (o "Todas"/"Todos"), la fecha y hora de
+  generación (hora de España, mismo criterio del Hallazgo #20) y el total de jornadas — verificado
+  generando el `.xlsx` real y leyéndolo de vuelta, con las 4 combinaciones de filtros (rango
+  completo, sin ningún filtro, solo "desde", solo estado).
+- **Verificado con un script Node aparte** (mismo método que los Hallazgos #17-#20): la función
+  compartida `aplicarFiltrosJornadas`, contra una consulta simulada que registra las llamadas —
+  confirmado que "chofer sin fecha" (el caso que fallaba) ya NO aplica ningún `gte`/`lt`, y que
+  "sin ningún filtro" no aplica nada en absoluto, igual que la tabla.
+- **No se pudo reproducir el bug original ni verificar el fix contra datos reales** desde este
+  entorno (no hay acceso a Supabase ni a la app desplegada) — queda para que el usuario confirme el
+  caso "cesar" (18 = 18 = 18: tabla, contador del diálogo, filas del archivo) y las demás pruebas de
+  la Fase 3 de la spec.
+- ✅ **Resuelto en el mismo commit: tope de 5000 jornadas por reporte, sin dejar un truncamiento
+  silencioso posible.** El contador del diálogo (punto anterior) atrapa la divergencia que ya se
+  había visto ("cesar" 18 vs 8), pero quedaba un hueco sin nombrar: `POST /api/reportes/exportar`
+  cortaba la consulta con `.limit(MAX_JORNADAS_POR_REPORTE)` (5000) sin comparar nunca ese número
+  contra el total real, y PostgREST tiene su **propio** tope de filas por respuesta (`db-max-rows`,
+  configurado del lado de Supabase, valor desconocido en este proyecto y no debería hacer falta
+  conocerlo) que puede recortar la respuesta por debajo incluso de ese `.limit()`, en silencio, sin
+  que ningún código local lo note. Dos capas, mismo criterio que el contador aplicado un nivel más
+  abajo:
+  - **Servidor** (`dashboard/app/api/reportes/exportar/route.ts`): el `.select()` ahora pide
+    `{ count: "exact" }` además de las filas; si `count > filas.length` (el `.limit()` propio actuó,
+    o `db-max-rows` actuó, o cualquier otra causa futura), el endpoint devuelve 400 sin llamar al
+    mock server — nunca se manda un reporte más corto de lo que dice ser.
+  - **Cliente** (`exportar-reporte-dialog.tsx`): el diálogo ya tiene el conteo en la mano (mismo
+    hook `useJornadas` de arriba), así que si `totalJornadas > MAX_JORNADAS_POR_REPORTE` bloquea el
+    envío ANTES de intentarlo y avisa "Son N jornadas — el máximo por reporte es 5000. Acotá el
+    rango o los filtros." — evita gastar tiempo armando un Excel que se sabe de antemano que el
+    servidor va a rechazar (defensa en profundidad: el servidor sigue siendo quien decide, esto es
+    solo una respuesta más rápida en el caso común).
+  - `MAX_JORNADAS_POR_REPORTE` vive en un solo lugar (`dashboard/lib/jornadas-filtro.ts`), usado por
+    las dos capas — mismo patrón que `aplicarFiltrosJornadas`.
+  - **Verificado con un script Node aparte** (mismo método que el resto de este Hallazgo): las dos
+    condiciones (`count > filas.length` del servidor, `totalJornadas > MAX_JORNADAS_POR_REPORTE` del
+    cliente) copiadas textualmente del código real, contra 7 escenarios — respuesta completa sin
+    truncar, el bug original reproducido (18/8), `.limit(5000)` recortando (6000/5000),
+    **`db-max-rows` recortando por debajo del `.limit()` sin que el cliente lo hubiera bloqueado
+    antes (4000 jornadas, pero solo 1000 llegan — el caso que motivó esta capa)**, el borde exacto
+    del límite (5000/5000, no debe bloquear), un excedente de una sola fila (5001/5000) y el caso de
+    cero resultados. Los 7 se comportaron como se esperaba.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
@@ -1455,6 +1545,37 @@ navegador ni del proceso.**
 
 ## 6. Deuda técnica y pendientes conocidos
 
+- ⚠️ **Sin `Database` generado para Supabase → sin chequeo de nombres de columna en NINGUNA consulta
+  del Dashboard, no solo en `aplicarFiltrosJornadas`.** Detectado revisando el escape de tipos usado
+  en Hallazgo #21 (`jornadas-filtro.ts`): los dos `createClient(...)` del proyecto
+  (`lib/supabase/client.ts:20`, `lib/supabase/server.ts:23`) se llaman sin pasar el genérico
+  `Database` de supabase-js, que por defecto es `any` (confirmado en
+  `node_modules/@supabase/supabase-js/dist/index.d.mts:797`) — con `Database = any`, `Row` colapsa a
+  `any` en `PostgrestFilterBuilder` y `eq/ilike/gte/lt` (`node_modules/@supabase/postgrest-js/src/
+  PostgrestFilterBuilder.ts:182-184`) aceptan cualquier string como nombre de columna, sin verificar
+  contra el esquema real. Vale para toda consulta Supabase del Dashboard, no solo para el filtro
+  compartido — y es silencioso: no hay error ni warning de compilación que lo delate.
+  - **Por qué importa**: un typo que no existe como columna da error de PostgREST en runtime — molesto
+    pero ruidoso, se nota enseguida. El caso malo es un typo que **coincida con otra columna real**:
+    ahí el filtro se aplica sobre el campo equivocado, sin ningún error, y el resultado (un reporte,
+    con el que se pagan sueldos) sale con las filas de otra cosa, en silencio.
+  - **Mitigado hoy, no en general**: los 4 nombres de columna de `aplicarFiltrosJornadas`
+    (`"empresa"`, `"chofer_nombre"`, `"estado"`, `"fecha_check_in"`) están verificados a mano contra
+    `supabase/schema.sql:31,32,43,56` — correctos ahora mismo. Eso cubre estas cuatro columnas hoy, no
+    la próxima que alguien agregue a este filtro o a cualquier otra consulta del Dashboard.
+  - **Arreglo concreto** (acotado y mecánico, no una refactorización): correr
+    `supabase gen types typescript` y pasar el `Database` resultante como genérico en los dos
+    `createClient(...)` de arriba. Devuelve chequeo de columnas en todas las consultas del Dashboard
+    de una sola vez.
+  - ⚠️ **Contrapartida a tener presente si se hace**: un tipo generado que queda desactualizado es
+    peor que no tenerlo — el compilador aprobaría con confianza una columna que ya no existe y
+    rechazaría una que sí existe. Si se genera, la regla "regenerar los tipos al cambiar el esquema"
+    tiene que quedar escrita junto a `supabase/schema.sql` (ver el comentario agregado ahí), no solo
+    acá, para que la vea quien toca el esquema — que es quien se puede olvidar.
+  - No se ata a "la próxima vez que se toque tal archivo" (a diferencia de la duplicación de
+    `desfaseMinutos` en §4) porque no hay un archivo puntual que dispare la necesidad — son las ~50
+    consultas Supabase del Dashboard. Conviene tratarlo como tarea chica y propia, antes de sumar más
+    choferes al piloto: barata, y cierra el hueco de una sola vez.
 - Nominatim, desde 2026-09-10 (ver §4), corre contra su servidor demo público y gratuito, no una
   instancia propia — ver la advertencia en esa sección. Si el uso crece mucho, evaluar alojar una
   instancia propia o un proveedor pago. (El trazado de rutas ya no depende de un servidor demo desde

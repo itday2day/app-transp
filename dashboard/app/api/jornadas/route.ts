@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { finDiaEspanaUtcExclusivo, inicioDiaEspanaUtc } from "@/lib/rango-fechas-espana";
+import { aplicarFiltrosJornadas } from "@/lib/jornadas-filtro";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { EstadoJornada, JornadaRow, JornadasResponse } from "@/lib/types";
 
@@ -40,16 +40,13 @@ export async function GET(request: Request) {
 
   const supabase = crearClienteSupabaseAdmin();
 
-  let query = supabase
-    .from("jornadas")
-    .select("*", { count: "exact" })
-    .order("fecha_check_in", { ascending: false });
-
-  if (empresa) query = query.ilike("empresa", `%${empresa}%`);
-  if (chofer) query = query.ilike("chofer_nombre", `%${chofer}%`);
-  if (estado) query = query.eq("estado", estado);
-  if (desde) query = query.gte("fecha_check_in", inicioDiaEspanaUtc(desde));
-  if (hasta) query = query.lt("fecha_check_in", finDiaEspanaUtcExclusivo(hasta));
+  let query = aplicarFiltrosJornadas(supabase.from("jornadas").select("*", { count: "exact" }), {
+    empresa,
+    chofer,
+    estado: estado ?? undefined,
+    desde,
+    hasta,
+  }).order("fecha_check_in", { ascending: false });
 
   const desdeIndice = (page - 1) * pageSize;
   const hastaIndice = desdeIndice + pageSize - 1;

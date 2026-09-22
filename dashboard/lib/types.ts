@@ -121,10 +121,15 @@ export interface JornadasResponse {
   pageSize: number;
 }
 
+// rangoInicio/rangoFin pasaron a ser opcionales (Hallazgo #21): "sin
+// filtro de fecha" significa lo mismo acá que en /api/jornadas (desde/
+// hasta), sin fecha = sin límite de ese lado — antes este endpoint los
+// exigía, y el diálogo sustituía en silencio un rango que la tabla nunca
+// tuvo. Ver contexto_proyecto.md §4.
 export interface ExportarReporteRequest {
   correo: string;
-  rangoInicio: string; // YYYY-MM-DD
-  rangoFin: string; // YYYY-MM-DD
+  rangoInicio?: string; // YYYY-MM-DD
+  rangoFin?: string; // YYYY-MM-DD
   empresa?: string;
   chofer?: string;
   estado?: EstadoJornada;

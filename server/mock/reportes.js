@@ -111,6 +111,75 @@ function calcularKmRecorrido(kmInicial, kmFinal) {
   return Math.round(kmFinal - kmInicial);
 }
 
+function pad2(n) {
+  return String(n).padStart(2, "0");
+}
+
+// rangoInicio/rangoFin ya son días de calendario "YYYY-MM-DD" (no un
+// instante) — reordenar nomás, sin ninguna conversión de zona horaria.
+function formatearFechaLegible(fechaIso) {
+  const [anio, mes, dia] = fechaIso.split("-");
+  return `${dia}/${mes}/${anio}`;
+}
+
+// A diferencia de lo de arriba, ESTE sí es un instante real ("ahora") — usa
+// componentesEnEspana() (mismo mecanismo Intl+timeZone de siempre) para
+// mostrar la hora de generación en hora de España, no la del proceso.
+function formatearFechaHoraLegible(instanteIso) {
+  const { anio, mes, dia, hora, minuto } = componentesEnEspana(instanteIso);
+  return `${pad2(dia)}/${pad2(mes)}/${anio} ${pad2(hora)}:${pad2(minuto)}`;
+}
+
+// rangoInicio/rangoFin son opcionales desde el Hallazgo #21 ("sin fecha" =
+// sin límite de ese lado, igual que la tabla del Dashboard) — este texto es
+// lo que declara qué rango se aplicó de verdad, en el correo y en la hoja
+// de filtros del Excel.
+function describirRangoFechas(rangoInicio, rangoFin) {
+  if (rangoInicio && rangoFin) {
+    return `${formatearFechaLegible(rangoInicio)} a ${formatearFechaLegible(rangoFin)}`;
+  }
+  if (rangoInicio) return `Desde ${formatearFechaLegible(rangoInicio)}`;
+  if (rangoFin) return `Hasta ${formatearFechaLegible(rangoFin)}`;
+  return "Todas las fechas";
+}
+
+// Mismo criterio que describirRangoFechas() pero para el nombre de archivo
+// (sin espacios/acentos, y sin que quede literalmente "undefined" si algún
+// extremo del rango falta).
+function tokenArchivoRango(rangoInicio, rangoFin) {
+  if (rangoInicio && rangoFin) return `${rangoInicio}-a-${rangoFin}`;
+  if (rangoInicio) return `desde-${rangoInicio}`;
+  if (rangoFin) return `hasta-${rangoFin}`;
+  return "todas-las-fechas";
+}
+
+const ESTADOS_LEGIBLES = { abierta: "Abierta", cerrada: "Cerrada" };
+
+// Segunda hoja del libro (nunca filas por encima de los datos — el
+// Hallazgo #19 recién convirtió la hoja de datos en valores reales
+// justamente para que se pueda ordenar/llevar a una tabla dinámica sin que
+// nada estorbe arriba): declara con qué filtros se generó el reporte, para
+// que "la tabla decía 18 y el archivo trajo 8" sea visible ABRIENDO EL
+// PROPIO ARCHIVO, no solo confiando en que el Dashboard mandó lo correcto
+// (Hallazgo #21).
+function agregarHojaFiltros(libro, { rangoInicio, rangoFin, empresa, chofer, estado, totalJornadas }) {
+  const hoja = libro.addWorksheet("Filtros");
+  hoja.columns = [
+    { header: "Campo", key: "campo", width: 22 },
+    { header: "Valor", key: "valor", width: 40 },
+  ];
+  hoja.getRow(1).font = { bold: true };
+
+  hoja.addRows([
+    { campo: "Rango de fechas", valor: describirRangoFechas(rangoInicio, rangoFin) },
+    { campo: "Empresa", valor: empresa || "Todas" },
+    { campo: "Chofer", valor: chofer || "Todos" },
+    { campo: "Estado", valor: ESTADOS_LEGIBLES[estado] || "Todos" },
+    { campo: "Generado el", valor: formatearFechaHoraLegible(new Date().toISOString()) },
+    { campo: "Total de jornadas", valor: totalJornadas },
+  ]);
+}
+
 // Hoy una jornada solo puede tener 0 o 1 incidencia (se captura una única vez
 // al hacer check-out), pero esto se arma como arreglo para que, si en el
 // futuro una jornada admite varias, las columnas de tipo/descripción ya las
@@ -164,7 +233,7 @@ const COLUMNAS_UBICACION = [
 // en el detalle de jornada del Dashboard).
 const MAX_FOTOS_INCIDENCIA_EXCEL = 3;
 
-async function generarLibroExcel(jornadas) {
+async function generarLibroExcel(jornadas, filtros) {
   const libro = new ExcelJS.Workbook();
   const hoja = libro.addWorksheet("Jornadas");
 
@@ -296,6 +365,8 @@ async function generarLibroExcel(jornadas) {
     }
   }
 
+  agregarHojaFiltros(libro, { ...filtros, totalJornadas: jornadas.length });
+
   return libro.xlsx.writeBuffer();
 }
 
@@ -303,7 +374,7 @@ function construirHtmlCorreo(rangoInicio, rangoFin, cantidadJornadas) {
   return `
     <div style="font-family: Arial, sans-serif; color: #1A1F29;">
       <h2 style="color: #0B5FFF;">Tu reporte está listo</h2>
-      <p>Adjunto encontrarás el reporte de jornadas del <strong>${rangoInicio}</strong> al <strong>${rangoFin}</strong>.</p>
+      <p>Adjunto encontrarás el reporte de jornadas — ${describirRangoFechas(rangoInicio, rangoFin)}.</p>
       <p>Total de jornadas incluidas: <strong>${cantidadJornadas}</strong>.</p>
     </div>
   `;
@@ -328,12 +399,12 @@ async function enviarPorResend({ correo, rangoInicio, rangoFin, jornadas, buffer
   const payload = {
     from: process.env.RESEND_FROM_EMAIL || "Control de Jornada <onboarding@resend.dev>",
     to: [correo],
-    subject: `Reporte de jornadas (${rangoInicio} a ${rangoFin})`,
+    subject: `Reporte de jornadas (${describirRangoFechas(rangoInicio, rangoFin)})`,
     html: construirHtmlCorreo(rangoInicio, rangoFin, jornadas.length),
     attachments: [
       {
         content: buffer.toString("base64"),
-        filename: `reporte-jornadas-${rangoInicio}-a-${rangoFin}.xlsx`,
+        filename: `reporte-jornadas-${tokenArchivoRango(rangoInicio, rangoFin)}.xlsx`,
       },
     ],
   };
@@ -359,11 +430,11 @@ async function enviarPorSmtp({ correo, rangoInicio, rangoFin, jornadas, buffer }
   const info = await transportador.sendMail({
     from: '"Control de Jornada" <reportes@app-transp.local>',
     to: correo,
-    subject: `Reporte de jornadas (${rangoInicio} a ${rangoFin})`,
+    subject: `Reporte de jornadas (${describirRangoFechas(rangoInicio, rangoFin)})`,
     html: construirHtmlCorreo(rangoInicio, rangoFin, jornadas.length),
     attachments: [
       {
-        filename: `reporte-jornadas-${rangoInicio}-a-${rangoFin}.xlsx`,
+        filename: `reporte-jornadas-${tokenArchivoRango(rangoInicio, rangoFin)}.xlsx`,
         content: buffer,
         contentType: NOMBRE_ARCHIVO_XLSX,
       },
@@ -374,8 +445,8 @@ async function enviarPorSmtp({ correo, rangoInicio, rangoFin, jornadas, buffer }
   return previewUrl ? { previewUrl } : {};
 }
 
-async function generarYEnviarReporte({ correo, rangoInicio, rangoFin, jornadas }) {
-  const buffer = await generarLibroExcel(jornadas);
+async function generarYEnviarReporte({ correo, rangoInicio, rangoFin, empresa, chofer, estado, jornadas }) {
+  const buffer = await generarLibroExcel(jornadas, { rangoInicio, rangoFin, empresa, chofer, estado });
 
   if (process.env.RESEND_API_KEY) {
     await enviarPorResend({ correo, rangoInicio, rangoFin, jornadas, buffer });

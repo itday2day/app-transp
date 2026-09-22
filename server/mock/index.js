@@ -25,14 +25,27 @@ app.use(express.json({ limit: "20mb" }));
 // es sin estado — recibe el arreglo de jornadas completo en el body, no lee
 // nada propio del servidor.
 app.post("/reports/export-excel", async (req, res) => {
-  const { correo, rangoInicio, rangoFin, jornadas } = req.body ?? {};
+  // rangoInicio/rangoFin pasaron a ser opcionales (Hallazgo #21) — "sin
+  // fecha" significa "sin límite de ese lado", igual que el filtro de la
+  // tabla de Jornadas en el Dashboard. empresa/chofer/estado tampoco son
+  // obligatorios: solo se usan (si vienen) para declararlos en la hoja de
+  // filtros del Excel.
+  const { correo, rangoInicio, rangoFin, empresa, chofer, estado, jornadas } = req.body ?? {};
 
-  if (!correo || !rangoInicio || !rangoFin || !Array.isArray(jornadas)) {
+  if (!correo || !Array.isArray(jornadas)) {
     return res.status(400).json({ mensaje: "Faltan datos para generar el reporte." });
   }
 
   try {
-    const resultado = await generarYEnviarReporte({ correo, rangoInicio, rangoFin, jornadas });
+    const resultado = await generarYEnviarReporte({
+      correo,
+      rangoInicio,
+      rangoFin,
+      empresa,
+      chofer,
+      estado,
+      jornadas,
+    });
     console.log(
       `Reporte enviado -> correo=${correo} jornadas=${jornadas.length}`,
       resultado.previewUrl ?? ""

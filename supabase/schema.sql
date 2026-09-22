@@ -1,5 +1,12 @@
 -- Esquema inicial de app-transp para Supabase (Postgres + PostGIS + Auth + Storage).
 -- Ejecutar completo en el SQL Editor de un proyecto nuevo, en orden de arriba a abajo.
+--
+-- Si en algún momento se genera un tipo `Database` para el Dashboard (ver
+-- "Sin Database generado..." en contexto_proyecto.md §6, deuda técnica pendiente al escribir
+-- esto) y se lo pasa a los `createClient<Database>(...)` de dashboard/lib/supabase/, ese tipo
+-- HAY QUE REGENERARLO (`supabase gen types typescript`) cada vez que se modifique una tabla
+-- acá abajo. Un `Database` desactualizado es peor que no tenerlo: el compilador aprobaría con
+-- confianza una columna que ya no existe y rechazaría una que sí existe.
 
 create extension if not exists postgis;
 
