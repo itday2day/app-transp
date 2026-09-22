@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "types:supabase": "npx supabase gen types typescript --project-id tgmfopfekwlucofjlssn > lib/supabase/database.types.ts && prettier --write lib/supabase/database.types.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

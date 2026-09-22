@@ -1,5 +1,11 @@
 import { finDiaEspanaUtcExclusivo, inicioDiaEspanaUtc } from "@/lib/rango-fechas-espana";
+import type { Database } from "@/lib/supabase/database.types";
 import type { EstadoJornada } from "@/lib/types";
+
+/** Nombres reales de columna de `jornadas`, tomados del `Database` generado
+ * (ver `npm run types:supabase`) — no un `string` suelto. Es lo que hace que
+ * un typo acá (`"chofer_nombr"`) lo rechace `tsc`, no PostgREST en runtime. */
+type ColumnaJornadas = keyof Database["public"]["Tables"]["jornadas"]["Row"];
 
 // Una sola fuente de verdad sobre qué jornadas entran en un filtro por
 // empresa/chofer/estado/rango de fechas — GET /api/jornadas (la tabla) y
@@ -30,36 +36,43 @@ export interface FiltrosJornadasComunes {
   hasta?: string;
 }
 
-// `Q` sin restricción (`extends ConsultaFiltrable`) a propósito: el builder
-// de supabase-js es un tipo genérico ya de por sí muy anidado (cambia de
-// forma en cada `.select()`/`.returns()`, y este proyecto no tiene un
-// `Database` generado que lo simplifique), y CUALQUIER intento de acotarlo
-// con un genérico propio — probado con un genérico auto-referenciado y con
-// uno basado en `this` — dispara "Type instantiation is excessively deep"
-// del compilador. Es una limitación conocida de supabase-js sin schema
-// generado, no un error de modelado acá. La firma pública sigue siendo
-// `Q -> Q`: quien llama pasa su consulta y recibe exactamente ese mismo
-// tipo de vuelta, sin perder nada — el `as ConsultaFiltrable` de abajo es
-// interno, para poder invocar los 4 métodos sin repetir la lucha con el
-// tipo genérico en cada línea.
-interface ConsultaFiltrable {
-  ilike(columna: string, patron: string): ConsultaFiltrable;
-  eq(columna: string, valor: string): ConsultaFiltrable;
-  gte(columna: string, valor: string): ConsultaFiltrable;
-  lt(columna: string, valor: string): ConsultaFiltrable;
-}
-
+// `Q` con un genérico auto-referenciado (`Q extends {...}: Q`) — antes de
+// tener un `Database` generado, CUALQUIER intento de acotarlo así disparaba
+// "Type instantiation is excessively deep" del compilador (limitación
+// conocida de supabase-js sin schema, ver contexto_proyecto.md §6). Con el
+// `Database` ya generado, ese error no reaparece — probado quitando
+// cualquier cast y confirmado con `tsc --noEmit` limpio.
+//
+// ⚠️ Lo que SÍ hay que cuidar acá es que la constraint tipe `columna` como
+// `ColumnaJornadas`, no como `string` suelto: un primer intento con
+// `columna: string` en la constraint compilaba igual de limpio, pero NO
+// atrapaba un typo deliberado (`"chofer_nombr"` pasaba `tsc` sin quejarse) —
+// porque dentro del cuerpo de una función genérica, TypeScript solo ve la
+// constraint, nunca el tipo real con el que se instancia `Q` en cada
+// llamador. La constraint es la única verificación real que existe acá
+// adentro; si su `columna` es `string`, la función entera queda tan sin
+// chequear como antes de generar el `Database`, aunque compile limpio y
+// aunque el builder real de Supabase sí tenga sus propios nombres de columna
+// correctos — confirmado empíricamente con el mismo typo antes de escribir
+// esto.
 /** Aplica los filtros de empresa/chofer/estado/rango de fechas sobre
  * `fecha_check_in` a una consulta de Supabase ya armada (`.from("jornadas")
  * .select(...)`, antes de `.order()`/`.range()`) — mismo criterio en
  * cualquier lugar que filtre jornadas por estos campos. */
-export function aplicarFiltrosJornadas<Q>(query: Q, filtros: FiltrosJornadasComunes): Q {
-  let resultado = query as unknown as ConsultaFiltrable;
+export function aplicarFiltrosJornadas<
+  Q extends {
+    ilike(columna: ColumnaJornadas, patron: string): Q;
+    eq(columna: ColumnaJornadas, valor: string): Q;
+    gte(columna: ColumnaJornadas, valor: string): Q;
+    lt(columna: ColumnaJornadas, valor: string): Q;
+  },
+>(query: Q, filtros: FiltrosJornadasComunes): Q {
+  let resultado = query;
   if (filtros.empresa) resultado = resultado.ilike("empresa", `%${filtros.empresa}%`);
   if (filtros.chofer) resultado = resultado.ilike("chofer_nombre", `%${filtros.chofer}%`);
   if (filtros.estado) resultado = resultado.eq("estado", filtros.estado);
   if (filtros.desde) resultado = resultado.gte("fecha_check_in", inicioDiaEspanaUtc(filtros.desde));
   if (filtros.hasta)
     resultado = resultado.lt("fecha_check_in", finDiaEspanaUtcExclusivo(filtros.hasta));
-  return resultado as unknown as Q;
+  return resultado;
 }

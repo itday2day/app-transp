@@ -1592,37 +1592,60 @@ aperturas; y el archivo declara sus propios filtros y su total, para que una fut
 
 ## 6. Deuda técnica y pendientes conocidos
 
-- ⚠️ **Sin `Database` generado para Supabase → sin chequeo de nombres de columna en NINGUNA consulta
-  del Dashboard, no solo en `aplicarFiltrosJornadas`.** Detectado revisando el escape de tipos usado
-  en Hallazgo #21 (`jornadas-filtro.ts`): los dos `createClient(...)` del proyecto
-  (`lib/supabase/client.ts:20`, `lib/supabase/server.ts:23`) se llaman sin pasar el genérico
-  `Database` de supabase-js, que por defecto es `any` (confirmado en
-  `node_modules/@supabase/supabase-js/dist/index.d.mts:797`) — con `Database = any`, `Row` colapsa a
-  `any` en `PostgrestFilterBuilder` y `eq/ilike/gte/lt` (`node_modules/@supabase/postgrest-js/src/
-  PostgrestFilterBuilder.ts:182-184`) aceptan cualquier string como nombre de columna, sin verificar
-  contra el esquema real. Vale para toda consulta Supabase del Dashboard, no solo para el filtro
-  compartido — y es silencioso: no hay error ni warning de compilación que lo delate.
-  - **Por qué importa**: un typo que no existe como columna da error de PostgREST en runtime — molesto
-    pero ruidoso, se nota enseguida. El caso malo es un typo que **coincida con otra columna real**:
-    ahí el filtro se aplica sobre el campo equivocado, sin ningún error, y el resultado (un reporte,
-    con el que se pagan sueldos) sale con las filas de otra cosa, en silencio.
-  - **Mitigado hoy, no en general**: los 4 nombres de columna de `aplicarFiltrosJornadas`
-    (`"empresa"`, `"chofer_nombre"`, `"estado"`, `"fecha_check_in"`) están verificados a mano contra
-    `supabase/schema.sql:31,32,43,56` — correctos ahora mismo. Eso cubre estas cuatro columnas hoy, no
-    la próxima que alguien agregue a este filtro o a cualquier otra consulta del Dashboard.
-  - **Arreglo concreto** (acotado y mecánico, no una refactorización): correr
-    `supabase gen types typescript` y pasar el `Database` resultante como genérico en los dos
-    `createClient(...)` de arriba. Devuelve chequeo de columnas en todas las consultas del Dashboard
-    de una sola vez.
-  - ⚠️ **Contrapartida a tener presente si se hace**: un tipo generado que queda desactualizado es
-    peor que no tenerlo — el compilador aprobaría con confianza una columna que ya no existe y
-    rechazaría una que sí existe. Si se genera, la regla "regenerar los tipos al cambiar el esquema"
-    tiene que quedar escrita junto a `supabase/schema.sql` (ver el comentario agregado ahí), no solo
-    acá, para que la vea quien toca el esquema — que es quien se puede olvidar.
-  - No se ata a "la próxima vez que se toque tal archivo" (a diferencia de la duplicación de
-    `desfaseMinutos` en §4) porque no hay un archivo puntual que dispare la necesidad — son las ~50
-    consultas Supabase del Dashboard. Conviene tratarlo como tarea chica y propia, antes de sumar más
-    choferes al piloto: barata, y cierra el hueco de una sola vez.
+- ✅ **Resuelto (2026-09-22): `Database` generado y enganchado en los dos `createClient` — chequeo de
+  nombres de columna encendido en toda consulta Supabase del Dashboard.** Cerraba la deuda anotada
+  arriba en esta misma sección al revisar el escape de tipos del Hallazgo #21. `npm run
+  types:supabase` (`dashboard/package.json`) genera `dashboard/lib/supabase/database.types.ts`
+  contra el proyecto real (`npx supabase gen types typescript --project-id ... | prettier --write`)
+  y los dos `createClient<Database>(...)` (`lib/supabase/client.ts`, `lib/supabase/server.ts`) ya lo
+  usan.
+  - ⚠️ **El esquema versionado venía mintiendo — confirmado, no solo temido.** Comparando el
+    `Database` generado (la base real) contra `supabase/schema.sql`: a `jornadas` le faltaban ahí
+    `fue_editado`, `editado_por`, `editado_en`, `motivo_edicion` — agregadas por
+    `schema_v5_edicion_jornadas.sql`, nunca plegadas de vuelta al archivo base, a diferencia de
+    `schema_v3`/`schema_v4`, que sí lo estaban. El resto (`choferes`, `admins`,
+    `ubicaciones_tracking`, las vistas `ultimas_posiciones`/`ubicaciones_tracking_planas`, la función
+    `insertar_ubicacion`) coincide exacto. Nota agregada junto al esquema (`supabase/schema.sql`,
+    comentario inicial) — no se reconcilió el archivo en este commit, queda a criterio de quien lo
+    lea si vale la pena plegar esas 4 columnas ahí también.
+  - **1 solo error de compilación al encender el genérico** (mucho menos de lo esperado): en
+    `app/api/jornadas/editar/route.ts`, el objeto dinámico de `.update(...)` estaba tipado
+    `Record<string, unknown>` — demasiado laxo para el `Update` real de `jornadas`. Se tipó como
+    `TablesUpdate<"jornadas">` (del propio `database.types.ts`) en vez de silenciarlo — ahora cada
+    asignación dinámica a ese objeto (`actualizacion.foo = ...`) también verifica contra columnas
+    reales.
+  - ⚠️ **El `as unknown as` de `aplicarFiltrosJornadas` se pudo sacar del todo — pero no por las
+    buenas, a la primera.** Un primer intento (genérico auto-referenciado `Q extends {ilike(columna:
+    string, ...): Q, ...}`, sin ningún cast) compiló limpio — el error "excessively deep" que motivó
+    el cast original no reapareció con el `Database` ya generado. Probado con el mismo typo
+    deliberado que pide la Fase 3 de la spec (`"chofer_nombr"`): **`tsc` no lo atrapó.** Causa: la
+    constraint tipaba `columna` como `string` suelto — dentro del cuerpo de una función genérica,
+    TypeScript solo ve la constraint declarada, nunca el tipo real con el que el llamador instancia
+    `Q`, así que esa primera versión quedó tan sin verificar como antes de esta tarea entera, aunque
+    compilara limpio. Corregido tipando `columna` contra
+    `keyof Database["public"]["Tables"]["jornadas"]["Row"]` en la constraint — con eso, el mismo
+    typo SÍ lo rechaza `tsc` (confirmado de nuevo, y revertido). El cast desapareció igual: la
+    solución final no lo necesita.
+  - **Segunda prueba de typo, fuera de `jornadas`**: `"email"` → `"emial"` en la consulta a `admins`
+    de `app/api/auth/login/route.ts` (no pasa por `aplicarFiltrosJornadas`) — `tsc` lo rechazó igual,
+    confirmando que la verificación llegó a todo el Dashboard, no solo al filtro compartido.
+    Revertido.
+  - **Verificado además contra la base real, no solo contra tipos**: `.from("jornadas").select("*",
+    {count:"exact"})` y `.from("ultimas_posiciones").select("*")` corridos con la service_role key
+    real devolvieron datos (26 jornadas, 5 posiciones) — confirma que envolver `Database` en
+    `createClient` no cambió ningún comportamiento en runtime (los genéricos de TypeScript se borran
+    al compilar). Se probó también un login real: se insertó un admin de prueba temporal, se
+    verificó que la consulta + `bcrypt.compare` corrieron bien contra Supabase real (falló después,
+    al firmar la cookie, por `DASHBOARD_SESSION_SECRET` ausente del `.env.local` local — nada que ver
+    con este cambio, la variable solo está configurada en Render), y se borró el admin de prueba al
+    terminar.
+  - `npx tsc --noEmit`, `npm run lint`, `npm run format:check` limpios en `dashboard/` con todo lo
+    de arriba aplicado.
+  - **Mantenimiento operativo**: `npm run types:supabase` (regenera + formatea en un solo comando) y
+    la regla "regenerar al cambiar el esquema" escrita junto a `supabase/schema.sql`, no solo acá —
+    donde la vea quien lo cambie. `dashboard/.gitignore` y el `.gitignore` de la raíz ignoran
+    `supabase/.temp/` (caché local que deja el CLI al correr el comando, no es parte del esquema
+    versionado).
 - Nominatim, desde 2026-09-10 (ver §4), corre contra su servidor demo público y gratuito, no una
   instancia propia — ver la advertencia en esa sección. Si el uso crece mucho, evaluar alojar una
   instancia propia o un proveedor pago. (El trazado de rutas ya no depende de un servidor demo desde

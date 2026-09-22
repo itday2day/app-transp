@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/lib/supabase/database.types";
 
 /**
  * Cliente Supabase con la clave anon/publicable, pensado para el navegador.
@@ -17,5 +18,5 @@ export function crearClienteSupabaseBrowser() {
     );
   }
 
-  return createClient(url, anonKey);
+  return createClient<Database>(url, anonKey);
 }

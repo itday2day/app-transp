@@ -1,12 +1,27 @@
 -- Esquema inicial de app-transp para Supabase (Postgres + PostGIS + Auth + Storage).
 -- Ejecutar completo en el SQL Editor de un proyecto nuevo, en orden de arriba a abajo.
 --
--- Si en algún momento se genera un tipo `Database` para el Dashboard (ver
--- "Sin Database generado..." en contexto_proyecto.md §6, deuda técnica pendiente al escribir
--- esto) y se lo pasa a los `createClient<Database>(...)` de dashboard/lib/supabase/, ese tipo
--- HAY QUE REGENERARLO (`supabase gen types typescript`) cada vez que se modifique una tabla
--- acá abajo. Un `Database` desactualizado es peor que no tenerlo: el compilador aprobaría con
--- confianza una columna que ya no existe y rechazaría una que sí existe.
+-- ⚠️ El Dashboard tipa sus dos `createClient<Database>(...)` (dashboard/lib/supabase/client.ts
+-- y server.ts) contra `dashboard/lib/supabase/database.types.ts`, generado desde la base REAL
+-- (2026-09-22, cierra la deuda técnica que documentaba esto como pendiente). Ese archivo
+-- HAY QUE REGENERARLO cada vez que se modifique una tabla acá abajo — es un solo comando,
+-- corrido desde `dashboard/`:
+--
+--     npm run types:supabase
+--
+-- Un `Database` desactualizado es PEOR que no tenerlo: el compilador aprueba con confianza una
+-- columna que ya no existe y rechaza una que sí existe — no es una advertencia que se pueda
+-- ignorar "por ahora". Si migrás el esquema (un archivo `schema_vN_*.sql` nuevo, o un cambio
+-- directo en el SQL Editor), regenerar es el último paso de esa migración, no un aparte.
+--
+-- ⚠️ Esta base tiene migraciones incrementales fuera de este archivo (`schema_v2` a `schema_v7`
+-- en este mismo directorio) que en su momento NO se volcaron todas de vuelta acá — confirmado
+-- 2026-09-22 comparando este archivo contra el `Database` generado de la base real: a
+-- `jornadas` le faltaban acá `fue_editado`, `editado_por`, `editado_en`, `motivo_edicion`
+-- (agregadas por `schema_v5_edicion_jornadas.sql`, nunca reflejadas en la definición de arriba,
+-- a diferencia de `schema_v3`/`schema_v4`, que sí se habían plegado). Si este archivo es tu
+-- única referencia del esquema, verificá contra `npm run types:supabase` antes de confiar en él
+-- a ciegas — es una representación que puede haber quedado atrás, la base real siempre manda.
 
 create extension if not exists postgis;
 

@@ -40,3 +40,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Caché local que crea `npx supabase` cuando se corre con este directorio
+# como cwd (npm run types:supabase) — el esquema versionado real vive en
+# /supabase en la raíz del repo, no acá.
+/supabase/

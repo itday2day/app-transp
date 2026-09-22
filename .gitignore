@@ -7,3 +7,6 @@ web-build/
 !.env.example
 server/mock/uploads/
 .claude/
+# Caché local del CLI de Supabase (npm run types:supabase en dashboard/) — no
+# es parte del esquema versionado, se recrea solo en cada ejecución.
+supabase/.temp/

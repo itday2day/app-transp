@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
+import type { TablesUpdate } from "@/lib/supabase/database.types";
 import type { CamposEditablesJornada, JornadaRow, TipoIncidencia } from "@/lib/types";
 
 // POST /api/jornadas/editar
@@ -263,7 +264,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const actualizacion: Record<string, unknown> = {
+  const actualizacion: TablesUpdate<"jornadas"> = {
     fue_editado: true,
     editado_por: editadoPor,
     editado_en: new Date().toISOString(),
