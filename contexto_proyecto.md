@@ -1467,9 +1467,21 @@ aperturas; y el archivo declara sus propios filtros y su total, para que una fut
 - **`POST /api/reportes/exportar` pasa a tratar `rangoInicio`/`rangoFin` como opcionales**, igual
   que `desde`/`hasta` en `/api/jornadas` — "sin fecha" es "sin límite de ese lado", nunca un default
   inventado.
-- **El diálogo pasa de ser de solo lectura a editable**: arranca con los filtros ACTIVOS de la tabla
-  (vía el remount por `key` que ya existía, Hallazgo previo — sin memoria entre aperturas) pero se
-  pueden ajustar sin tocar la tabla.
+- 🔄 **Ajuste (2026-09-22), verificado en producción ("cesar" 18 = 18 = 18 y el resto de la Fase 3):
+  el diálogo vuelve a ser de solo lectura, salvo el correo de destino.** La versión original de este
+  Hallazgo dejaba empresa/chofer/estado/rango editables dentro del diálogo (arrancaban iguales a la
+  tabla pero se podían ajustar sin tocarla); en uso real se pidió lo contrario. Con los filtros
+  editables, que el archivo coincida con la pantalla dependía de mantener sincronizados DOS criterios
+  (el de la tabla y el que el usuario tocara en el diálogo); de solo lectura, hay un solo criterio —
+  el de la tabla — y la coincidencia es estructural, no algo que dependa de verificar que nadie
+  divergió. El diálogo sigue arrancando de los filtros ACTIVOS de la tabla (vía el remount por `key`
+  que ya existía) pero ahora los lee directo de la prop `filtros` sin `useState` propio para
+  empresa/chofer/estado/desde/hasta — no hay nada que editar, así que no hay nada que guardar. Los
+  filtros se siguen mostrando **a la vista** (nunca ocultos: `<dl>` de solo lectura, con el mismo
+  contraste que el resto del texto de la UI, no el gris apagado de un input `disabled`) — esconderlos
+  hubiera sido una regresión del sentido original del #21. Para exportar un rango distinto hay que
+  filtrar la tabla primero y volver a abrir "Exportar" — costo aceptado a cambio de la garantía más
+  fuerte.
 - ⚠️ **La pieza más importante de la spec**: el diálogo muestra "Se exportarán N jornada(s)" **antes**
   de exportar, recalculado con cada cambio de filtro — reusa `useJornadas()` (el mismo hook que ya
   usa la tabla) con `pageSize: 1`, así el número sale de la MISMA fuente que la tabla, no de un
@@ -1487,10 +1499,10 @@ aperturas; y el archivo declara sus propios filtros y su total, para que una fut
   compartida `aplicarFiltrosJornadas`, contra una consulta simulada que registra las llamadas —
   confirmado que "chofer sin fecha" (el caso que fallaba) ya NO aplica ningún `gte`/`lt`, y que
   "sin ningún filtro" no aplica nada en absoluto, igual que la tabla.
-- **No se pudo reproducir el bug original ni verificar el fix contra datos reales** desde este
-  entorno (no hay acceso a Supabase ni a la app desplegada) — queda para que el usuario confirme el
-  caso "cesar" (18 = 18 = 18: tabla, contador del diálogo, filas del archivo) y las demás pruebas de
-  la Fase 3 de la spec.
+- ✅ **Verificado en la app desplegada (confirmado por el usuario antes del 2026-09-22)**: el caso
+  "cesar" da 18 = 18 = 18 (tabla, contador del diálogo, filas del archivo) y el resto de la Fase 3 de
+  la spec pasó. No se pudo reproducir ni verificar desde este entorno (sin acceso a Supabase ni a la
+  app desplegada) — esta confirmación vino del usuario.
 - ✅ **Resuelto en el mismo commit: tope de 5000 jornadas por reporte, sin dejar un truncamiento
   silencioso posible.** El contador del diálogo (punto anterior) atrapa la divergencia que ya se
   había visto ("cesar" 18 vs 8), pero quedaba un hueco sin nombrar: `POST /api/reportes/exportar`
@@ -1506,10 +1518,12 @@ aperturas; y el archivo declara sus propios filtros y su total, para que una fut
     mock server — nunca se manda un reporte más corto de lo que dice ser.
   - **Cliente** (`exportar-reporte-dialog.tsx`): el diálogo ya tiene el conteo en la mano (mismo
     hook `useJornadas` de arriba), así que si `totalJornadas > MAX_JORNADAS_POR_REPORTE` bloquea el
-    envío ANTES de intentarlo y avisa "Son N jornadas — el máximo por reporte es 5000. Acotá el
-    rango o los filtros." — evita gastar tiempo armando un Excel que se sabe de antemano que el
+    envío ANTES de intentarlo — evita gastar tiempo armando un Excel que se sabe de antemano que el
     servidor va a rechazar (defensa en profundidad: el servidor sigue siendo quien decide, esto es
-    solo una respuesta más rápida en el caso común).
+    solo una respuesta más rápida en el caso común). ⚠️ El texto del aviso se corrigió el 2026-09-22:
+    decía "Acotá el rango o los filtros", redactado cuando esos campos eran editables ahí mismo; con
+    el diálogo de solo lectura (ver ajuste más arriba) esa instrucción quedó imposible de seguir
+    dentro del diálogo — ahora dice "Filtrá la tabla de Jornadas para acotarlo y volvé a exportar."
   - `MAX_JORNADAS_POR_REPORTE` vive en un solo lugar (`dashboard/lib/jornadas-filtro.ts`), usado por
     las dos capas — mismo patrón que `aplicarFiltrosJornadas`.
   - **Verificado con un script Node aparte** (mismo método que el resto de este Hallazgo): las dos
@@ -1520,6 +1534,13 @@ aperturas; y el archivo declara sus propios filtros y su total, para que una fut
     antes (4000 jornadas, pero solo 1000 llegan — el caso que motivó esta capa)**, el borde exacto
     del límite (5000/5000, no debe bloquear), un excedente de una sola fila (5001/5000) y el caso de
     cero resultados. Los 7 se comportaron como se esperaba.
+- **Ajuste de solo lectura (2026-09-22) — verificación**: `npx tsc --noEmit`, `npm run lint` y
+  `npm run format:check` en `dashboard/` limpios. Es un cambio de interfaz puro — no toca
+  `lib/jornadas-filtro.ts`, el guard de truncamiento de las dos capas, la hoja de filtros del
+  `.xlsx` ni el mecanismo de remount por `key` del diálogo. **No verificado desde este entorno** (sin
+  acceso a la app desplegada): que el bloque de filtros se vea bien encuadrado en móvil vertical y
+  horizontal (Hallazgo #11) y que el envío de punta a punta siga funcionando — queda para el usuario,
+  igual que el resto de la Fase 3 de esta spec.
 
 ## 5. Estándares de calidad y reglas de código
 

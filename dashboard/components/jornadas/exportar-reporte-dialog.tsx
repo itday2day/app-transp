@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { useJornadas } from "@/lib/hooks/use-jornadas";
 import type { FiltrosJornadas } from "@/lib/hooks/use-jornadas";
 import { MAX_JORNADAS_POR_REPORTE } from "@/lib/jornadas-filtro";
@@ -18,31 +17,61 @@ interface ExportarReporteDialogProps {
   filtros: FiltrosJornadas;
 }
 
-// El padre (JornadasPage) le pasa un `key` que cambia cada vez que se abre
-// el diálogo, forzando un remount: así los `useState` de abajo siempre
-// arrancan frescos, derivados de los filtros ACTIVOS de la tabla en ese
-// momento — nunca de una apertura anterior (Hallazgo #21). Antes los
-// campos eran de solo lectura (espejo de la tabla); ahora son editables —
-// arrancan iguales a la tabla pero se pueden ajustar acá sin tocarla, y el
-// contador de abajo se recalcula con cada cambio.
+const ESTADOS_LEGIBLES: Record<EstadoJornada, string> = { abierta: "Abierta", cerrada: "Cerrada" };
+
+/** "YYYY-MM-DD" (día de calendario de España, ver jornadas-filtro.ts) a "DD/MM/YYYY" — no
+ * pasa por Date/Intl porque ya es un día de calendario, no un instante a convertir. */
+function formatearFechaCorta(fechaIso: string): string {
+  const [anio, mes, dia] = fechaIso.split("-");
+  return `${dia}/${mes}/${anio}`;
+}
+
+/** Mismo criterio y misma redacción que describirRangoFechas() en
+ * server/mock/reportes.js (hoja "Filtros" del Excel) — a propósito: el
+ * diálogo y el archivo describen el mismo rango con las mismas palabras. */
+function formatearRangoFechas(desde: string, hasta: string): string {
+  if (desde && hasta) return `${formatearFechaCorta(desde)} a ${formatearFechaCorta(hasta)}`;
+  if (desde) return `Desde ${formatearFechaCorta(desde)}`;
+  if (hasta) return `Hasta ${formatearFechaCorta(hasta)}`;
+  return "Todas las fechas";
+}
+
+function FiltroAplicado({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{etiqueta}</dt>
+      <dd className="text-sm font-medium">{valor}</dd>
+    </div>
+  );
+}
+
+// El diálogo exporta EXACTAMENTE lo que la tabla está mostrando — el único
+// campo que se completa acá es el correo de destino; empresa/chofer/estado/
+// rango de fechas se muestran (nunca se ocultan: son lo que le dice al
+// usuario qué está por exportar) pero no se pueden tocar desde acá. Para
+// exportar otro conjunto hay que cambiar el filtro en la tabla y volver a
+// abrir "Exportar" — con un solo criterio de filtrado en juego (el de la
+// tabla), la coincidencia entre pantalla y archivo es estructural, no algo
+// que dependa de mantener sincronizados dos lugares (ver contexto_proyecto.md
+// §4, ajuste al Hallazgo #21). El padre (JornadasPage) sigue pasando un
+// `key` que cambia en cada apertura, para que el correo/error/resultado de
+// una exportación anterior no queden pegados en la siguiente.
 export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReporteDialogProps) {
   const [correo, setCorreo] = useState("");
-  const [empresa, setEmpresa] = useState(filtros.empresa);
-  const [chofer, setChofer] = useState(filtros.chofer);
-  const [estado, setEstado] = useState(filtros.estado);
-  const [desde, setDesde] = useState(filtros.desde);
-  const [hasta, setHasta] = useState(filtros.hasta);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<ExportarReporteResponse | null>(null);
+
+  const { empresa, chofer, estado, desde, hasta } = filtros;
 
   // ⚠️ La pieza más importante de esta spec: cuántas jornadas se van a
   // exportar, ANTES de exportar — mismo hook que ya usa la tabla
   // (useJornadas), con pageSize=1 (solo hace falta `count`, no las filas) —
   // así el número que ve el administrador viene de la MISMA fuente que la
-  // tabla, no de un cálculo aparte que pueda volver a divergir. Sin esto,
-  // el fix de abajo (rango opcional, filtros compartidos) corrige el caso
-  // conocido, pero una divergencia futura volvería a ser silenciosa.
+  // tabla, no de un cálculo aparte que pueda volver a divergir. Ahora que
+  // los filtros ya no se pueden editar acá, es también la única señal que
+  // podría delatar una divergencia futura entre lo que se ve y lo que se
+  // exporta.
   const {
     data: previewData,
     isLoading: cargandoConteo,
@@ -80,7 +109,7 @@ export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReport
     }
     if (excedeMaximo) {
       setError(
-        `Son ${totalJornadas} jornadas — el máximo por reporte es ${MAX_JORNADAS_POR_REPORTE}. Acotá el rango o los filtros.`
+        `Son ${totalJornadas} jornadas — el máximo por reporte es ${MAX_JORNADAS_POR_REPORTE}. Filtrá la tabla de Jornadas para acotarlo y volvé a exportar.`
       );
       return;
     }
@@ -138,64 +167,17 @@ export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReport
           />
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          Arrancan iguales a los filtros activos en la tabla de Jornadas — podés ajustarlos acá para
-          este reporte sin afectar la tabla.
-        </p>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="exp-desde">Desde</Label>
-            <Input
-              id="exp-desde"
-              type="date"
-              value={desde}
-              onChange={(e) => setDesde(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="exp-hasta">Hasta</Label>
-            <Input
-              id="exp-hasta"
-              type="date"
-              value={hasta}
-              onChange={(e) => setHasta(e.target.value)}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="exp-empresa">Empresa</Label>
-            <Input
-              id="exp-empresa"
-              placeholder="Todas"
-              value={empresa}
-              onChange={(e) => setEmpresa(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="exp-chofer">Chofer</Label>
-            <Input
-              id="exp-chofer"
-              placeholder="Todos"
-              value={chofer}
-              onChange={(e) => setChofer(e.target.value)}
-            />
-          </div>
-        </div>
-
         <div>
-          <Label htmlFor="exp-estado">Estado</Label>
-          <Select
-            id="exp-estado"
-            value={estado}
-            onChange={(e) => setEstado(e.target.value as FiltrosJornadas["estado"])}
-          >
-            <option value="">Todos</option>
-            <option value="abierta">Abierta</option>
-            <option value="cerrada">Cerrada</option>
-          </Select>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Se exporta exactamente lo que la tabla de Jornadas está mostrando — para cambiar estos
+            filtros, cerrá este diálogo, ajustá la tabla y volvé a abrir “Exportar”.
+          </p>
+          <dl className="grid grid-cols-2 gap-3 rounded-md border border-border bg-muted/30 p-3">
+            <FiltroAplicado etiqueta="Rango" valor={formatearRangoFechas(desde, hasta)} />
+            <FiltroAplicado etiqueta="Empresa" valor={empresa || "Todas"} />
+            <FiltroAplicado etiqueta="Chofer" valor={chofer || "Todos"} />
+            <FiltroAplicado etiqueta="Estado" valor={estado ? ESTADOS_LEGIBLES[estado] : "Todos"} />
+          </dl>
         </div>
 
         <p
@@ -213,7 +195,7 @@ export function ExportarReporteDialog({ open, onClose, filtros }: ExportarReport
               : sinResultados
                 ? "No hay jornadas que coincidan con estos filtros — no se va a generar ningún reporte."
                 : excedeMaximo
-                  ? `Son ${totalJornadas} jornadas — el máximo por reporte es ${MAX_JORNADAS_POR_REPORTE}. Acotá el rango o los filtros.`
+                  ? `Son ${totalJornadas} jornadas — el máximo por reporte es ${MAX_JORNADAS_POR_REPORTE}. Filtrá la tabla de Jornadas para acotarlo.`
                   : `Se exportarán ${totalJornadas} jornada${totalJornadas === 1 ? "" : "s"}.`}
         </p>
 
