@@ -14,14 +14,14 @@
 -- ignorar "por ahora". Si migrás el esquema (un archivo `schema_vN_*.sql` nuevo, o un cambio
 -- directo en el SQL Editor), regenerar es el último paso de esa migración, no un aparte.
 --
--- ⚠️ Esta base tiene migraciones incrementales fuera de este archivo (`schema_v2` a `schema_v7`
--- en este mismo directorio) que en su momento NO se volcaron todas de vuelta acá — confirmado
--- 2026-09-22 comparando este archivo contra el `Database` generado de la base real: a
--- `jornadas` le faltaban acá `fue_editado`, `editado_por`, `editado_en`, `motivo_edicion`
--- (agregadas por `schema_v5_edicion_jornadas.sql`, nunca reflejadas en la definición de arriba,
--- a diferencia de `schema_v3`/`schema_v4`, que sí se habían plegado). Si este archivo es tu
--- única referencia del esquema, verificá contra `npm run types:supabase` antes de confiar en él
--- a ciegas — es una representación que puede haber quedado atrás, la base real siempre manda.
+-- Esta base tiene migraciones incrementales fuera de este archivo (`schema_v2` a `schema_v7` en
+-- este mismo directorio) — cada una queda como documentación histórica, sin borrarse, aunque sus
+-- cambios de columna ya estén plegados acá abajo (mismo criterio que ya existía para
+-- `schema_v3_combustible_porcentaje.sql` y `schema_v4_fotos_incidencia.sql`; `schema_v5` se plegó
+-- recién el 2026-09-22, después de confirmar con `npm run types:supabase` que este archivo venía
+-- desactualizado en esas 4 columnas — ver `contexto_proyecto.md` §4). Si este archivo es tu única
+-- referencia del esquema, verificá contra `npm run types:supabase` antes de confiar en él a
+-- ciegas — es una representación que puede volver a quedar atrás, la base real siempre manda.
 
 create extension if not exists postgis;
 
@@ -74,6 +74,16 @@ create table public.jornadas (
   tipo_incidencia text check (tipo_incidencia in ('Avería vehículo', 'Tráfico/Retraso', 'Cliente ausente', 'Otro')),
   detalle_incidencia text,
   fotos_incidencia text[],
+
+  -- Auditoría de correcciones manuales desde el Dashboard (POST
+  -- /api/jornadas/editar). editado_por es texto libre con el nombre/correo
+  -- del admin autenticado (lib/auth.ts), no una FK a admins: se resolvió
+  -- así antes de que existieran cuentas individuales (ver
+  -- schema_v7_admins.sql) y no se migró después.
+  fue_editado boolean not null default false,
+  editado_por text,
+  editado_en timestamptz,
+  motivo_edicion text,
 
   estado text not null default 'abierta' check (estado in ('abierta', 'cerrada')),
   created_at timestamptz not null default now()

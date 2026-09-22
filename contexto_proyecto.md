@@ -1563,10 +1563,10 @@ aperturas; y el archivo declara sus propios filtros y su total, para que una fut
 - **Ajuste de solo lectura (2026-09-22) — verificación**: `npx tsc --noEmit`, `npm run lint` y
   `npm run format:check` en `dashboard/` limpios. Es un cambio de interfaz puro — no toca
   `lib/jornadas-filtro.ts`, el guard de truncamiento de las dos capas, la hoja de filtros del
-  `.xlsx` ni el mecanismo de remount por `key` del diálogo. **No verificado desde este entorno** (sin
-  acceso a la app desplegada): que el bloque de filtros se vea bien encuadrado en móvil vertical y
-  horizontal (Hallazgo #11) y que el envío de punta a punta siga funcionando — queda para el usuario,
-  igual que el resto de la Fase 3 de esta spec.
+  `.xlsx` ni el mecanismo de remount por `key` del diálogo. ✅ **Confirmado por el usuario contra la
+  app desplegada**: el bloque de filtros se ve bien encuadrado en móvil vertical y horizontal
+  (Hallazgo #11) y el envío de punta a punta (correo con el `.xlsx` adjunto) sigue funcionando —
+  cierra el resto de la Fase 3 de esta spec.
 
 ## 5. Estándares de calidad y reglas de código
 
@@ -1605,9 +1605,15 @@ aperturas; y el archivo declara sus propios filtros y su total, para que una fut
     `schema_v5_edicion_jornadas.sql`, nunca plegadas de vuelta al archivo base, a diferencia de
     `schema_v3`/`schema_v4`, que sí lo estaban. El resto (`choferes`, `admins`,
     `ubicaciones_tracking`, las vistas `ultimas_posiciones`/`ubicaciones_tracking_planas`, la función
-    `insertar_ubicacion`) coincide exacto. Nota agregada junto al esquema (`supabase/schema.sql`,
-    comentario inicial) — no se reconcilió el archivo en este commit, queda a criterio de quien lo
-    lea si vale la pena plegar esas 4 columnas ahí también.
+    `insertar_ubicacion`) coincide exacto.
+  - ✅ **Resuelto (2026-09-22, commit aparte)**: las 4 columnas se plegaron a la definición de
+    `jornadas` en `supabase/schema.sql`, siguiendo el mismo criterio ya usado con `schema_v3`/`v4`
+    — se pliega la columna al `create table`, y el archivo de migración (`schema_v5_edicion_
+    jornadas.sql`) queda donde está, sin tocar, como documentación histórica (no se borra ni se
+    anota "ya incorporado" — ninguno de los dos anteriores lo tenía tampoco). El motivo no era de
+    prolijidad: alguien reconstruyendo la base desde `schema.sql` en un entorno nuevo obtenía una
+    `jornadas` sin las columnas de auditoría, y `POST /api/jornadas/editar` se habría roto al
+    primer uso — son justo las columnas que registran quién corrigió qué en un sistema de pagos.
   - **1 solo error de compilación al encender el genérico** (mucho menos de lo esperado): en
     `app/api/jornadas/editar/route.ts`, el objeto dinámico de `.update(...)` estaba tipado
     `Record<string, unknown>` — demasiado laxo para el `Update` real de `jornadas`. Se tipó como
