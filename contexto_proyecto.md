@@ -1622,9 +1622,10 @@ etapa deliberadamente fuera de esta.
   método que #16 (aritmética de clases Tailwind, sin dispositivo real disponible en este entorno)
   — con la 3ª entrada de nav, ~340px pasaban a ~388px sobre los ~390px disponibles, dentro del
   margen de error de esas cifras aproximadas. Se sacó el logo decorativo de esa columna en el
-  mismo commit (el fallback que #16 ya había decidido de antemano), quedando ~356px. **No
-  confirmado en dispositivo real desde este entorno** — queda para el usuario, igual que el resto
-  del encuadre visual.
+  mismo commit (el fallback que #16 ya había decidido de antemano), quedando ~356px. ✅
+  **Confirmado por el usuario en dispositivo real**: la columna entra bien en horizontal y la
+  pantalla de Flota se ve bien en tarjetas en vertical — cierra el resto de la Fase 3 de esta
+  spec.
 - ⚠️ **Hueco encontrado, no de esta spec**: la spec asumía que `Input`/`Select`
   (`components/ui/`) ya cumplían el piso de 44px de alto en mobile (Hallazgo #11) — confirmado
   contra el código real que **no es así**: el #11 les corrigió la fuente (`text-base md:text-sm`,
