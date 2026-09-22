@@ -94,6 +94,31 @@ create index jornadas_estado_idx on public.jornadas (estado);
 create index jornadas_fecha_check_in_idx on public.jornadas (fecha_check_in desc);
 
 -- ============================================================
+-- VEHICULOS (flota)
+-- ============================================================
+-- Alta/edición/baja se administran desde el Dashboard (app/api/vehiculos/), no por SQL. Sin RLS:
+-- solo se lee/escribe con la service_role key, igual que `admins` — la app móvil no toca esta
+-- tabla en esta etapa. jornadas.matricula sigue siendo texto suelto; enlazar la jornada a un
+-- vehiculo_id es una segunda etapa deliberadamente fuera de esta.
+create table public.vehiculos (
+  id uuid primary key default gen_random_uuid(),
+  matricula text not null,
+  tipo_propiedad text not null check (tipo_propiedad in ('propio', 'alquilado', 'autonomo')),
+  capacidad_tanque_litros numeric check (capacidad_tanque_litros > 0),
+  marca text,
+  modelo text,
+  anio smallint check (anio between 1970 and 2100),
+  estado text not null default 'activo' check (estado in ('activo', 'baja')),
+  created_at timestamptz not null default now()
+);
+
+-- Único sobre la matrícula NORMALIZADA (mayúsculas, sin caracteres no alfanuméricos), vale
+-- también para los vehículos de baja — ver el razonamiento completo en
+-- schema_v8_flota_vehiculos.sql, que aplica esto mismo contra la base real.
+create unique index vehiculos_matricula_normalizada
+  on public.vehiculos (upper(regexp_replace(matricula, '[^a-zA-Z0-9]', '', 'g')));
+
+-- ============================================================
 -- TRACKING GPS (pings de posición en vivo, telemetría efímera)
 -- ============================================================
 create table public.ubicaciones_tracking (

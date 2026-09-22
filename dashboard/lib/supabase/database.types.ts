@@ -243,6 +243,42 @@ export type Database = {
           },
         ];
       };
+      vehiculos: {
+        Row: {
+          anio: number | null;
+          capacidad_tanque_litros: number | null;
+          created_at: string;
+          estado: string;
+          id: string;
+          marca: string | null;
+          matricula: string;
+          modelo: string | null;
+          tipo_propiedad: string;
+        };
+        Insert: {
+          anio?: number | null;
+          capacidad_tanque_litros?: number | null;
+          created_at?: string;
+          estado?: string;
+          id?: string;
+          marca?: string | null;
+          matricula: string;
+          modelo?: string | null;
+          tipo_propiedad: string;
+        };
+        Update: {
+          anio?: number | null;
+          capacidad_tanque_litros?: number | null;
+          created_at?: string;
+          estado?: string;
+          id?: string;
+          marca?: string | null;
+          matricula?: string;
+          modelo?: string | null;
+          tipo_propiedad?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       geography_columns: {

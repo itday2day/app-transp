@@ -179,3 +179,58 @@ export interface AdminRow {
   creado_en: string;
   ultimo_acceso: string | null;
 }
+
+export type TipoPropiedadVehiculo = "propio" | "alquilado" | "autonomo";
+
+export type EstadoVehiculo = "activo" | "baja";
+
+/** Fila cruda de la tabla public.vehiculos (ver supabase/schema_v8_flota_vehiculos.sql). */
+export interface VehiculoRow {
+  id: string;
+  matricula: string;
+  tipo_propiedad: TipoPropiedadVehiculo;
+  capacidad_tanque_litros: number | null;
+  marca: string | null;
+  modelo: string | null;
+  anio: number | null;
+  estado: EstadoVehiculo;
+  created_at: string;
+}
+
+/** Respuesta de GET /api/vehiculos. */
+export interface VehiculosResponse {
+  data: VehiculoRow[];
+}
+
+/** Campos que se pueden cargar/editar de un vehículo. */
+export interface CamposVehiculo {
+  matricula: string;
+  tipoPropiedad: TipoPropiedadVehiculo;
+  capacidadTanqueLitros?: number;
+  marca?: string;
+  modelo?: string;
+  anio?: number;
+}
+
+export type CrearVehiculoRequest = CamposVehiculo;
+
+export interface EditarVehiculoRequest extends Partial<CamposVehiculo> {
+  id: string;
+  estado?: EstadoVehiculo;
+}
+
+/** Devuelto con 409 cuando la matrícula (normalizada) ya existe — con lo necesario para que la
+ * pantalla ofrezca reactivar en vez de mostrar un error genérico de base de datos. */
+export interface VehiculoDuplicadoResponse {
+  mensaje: string;
+  vehiculoExistente: {
+    id: string;
+    matricula: string;
+    estado: EstadoVehiculo;
+  };
+}
+
+export interface VehiculoResponse {
+  mensaje: string;
+  vehiculo: VehiculoRow;
+}

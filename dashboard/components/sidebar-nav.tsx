@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 const ENLACES = [
   { href: "/mapa", label: "Mapa en vivo", icon: MapIcon },
   { href: "/jornadas", label: "Jornadas", icon: ClipboardList },
+  { href: "/flota", label: "Flota", icon: Truck },
 ];
 
 export function SidebarNav({ horizontal = false }: { horizontal?: boolean }) {

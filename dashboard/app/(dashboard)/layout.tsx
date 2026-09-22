@@ -69,14 +69,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             pr-[env(safe-area-inset-right)]: columna pegada al borde
             derecho, mismo motivo que el padding izquierdo de `main` arriba. */}
         <div className="hidden landscape:max-lg:order-2 landscape:max-lg:flex landscape:max-lg:w-32 landscape:max-lg:shrink-0 landscape:max-lg:flex-col landscape:max-lg:gap-1 landscape:max-lg:overflow-y-auto landscape:max-lg:border-l landscape:max-lg:border-border landscape:max-lg:bg-card landscape:max-lg:p-2 landscape:max-lg:pr-[calc(0.5rem+env(safe-area-inset-right))]">
-          {/* Icono del logo, decorativo — igual que en el header de arriba
-              (no es un enlace, no tiene onClick), así que no necesita
-              cumplir 44px: no se toca. Sin el texto "app-transp", que no
-              entra legible en 128px de ancho. */}
-          <div className="flex items-center justify-center py-1" aria-hidden="true">
-            <Truck className="h-5 w-5 text-primary" />
-          </div>
-
+          {/* El ícono del logo que vivía acá (decorativo, Hallazgo #16) se sacó al agregar
+              "Flota" como 3ª entrada de nav (spec_flota_vehiculos.md): calculado por el mismo
+              método de #16 (aritmética de clases Tailwind, sin dispositivo real), la columna
+              pasaba de ~340px a ~388px sobre los ~390px disponibles — dentro del margen de error
+              de esas cifras aproximadas. Sacar el logo (lo primero previsto para este caso,
+              nunca fue un control) devuelve ~32px, dejando ~356px. El icono del header de arriba
+              (visible siempre, no solo en esta columna) sigue cumpliendo el rol de identidad. */}
           <SidebarNav horizontal />
           <div id="selector-movil-horizontal" className="contents" />
 

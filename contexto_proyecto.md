@@ -1568,6 +1568,77 @@ aperturas; y el archivo declara sus propios filtros y su total, para que una fut
   (Hallazgo #11) y el envío de punta a punta (correo con el `.xlsx` adjunto) sigue funcionando —
   cierra el resto de la Fase 3 de esta spec.
 
+**Hallazgo #22 — el 429 del mock server era un bloqueo de borde (Cloudflare), no el cold start ya
+conocido (2026-09-22)**: detalle completo en §2 ("Cold start" y el bullet de 429 justo debajo).
+Resumen: un 429 "Too Many Requests" persistente en `app-transp-mock-server` (a diferencia del 502
+de cold start, que se resuelve en el segundo intento) resultó ser un bloqueo temporal en la capa
+Cloudflare que Render pone delante de todos sus servicios — invisible en Events/Logs/cuenta de
+Render. Se resolvió solo; queda documentado el método de diagnóstico rápido (`curl -i` contra la
+raíz y contra la ruta real con un body mínimo) para la próxima vez.
+
+**Hallazgo #23 — se generó el `Database` de Supabase y se encendió el chequeo de nombres de
+columna en toda consulta del Dashboard (2026-09-22)**: detalle completo en §6 (deuda técnica,
+ahora resuelta). Resumen: ningún `createClient` pasaba el genérico `Database` de supabase-js
+(default `any`), así que ningún nombre de columna de ninguna consulta se verificaba en
+compilación — un typo que coincidiera con otra columna real habría filtrado por el campo
+equivocado sin ningún error. `npm run types:supabase` (nuevo script) genera
+`dashboard/lib/supabase/database.types.ts` contra la base real y los dos `createClient<Database>`
+ya lo usan. Comparado contra `supabase/schema.sql`, el archivo venía desactualizado (le faltaban 4
+columnas de `jornadas` que agregó `schema_v5_edicion_jornadas.sql` y nunca se plegaron de vuelta)
+— plegado en commit aparte, mismo criterio que `schema_v3`/`v4`. Verificado con dos pruebas de
+typo deliberado (en `jornadas` y en `admins`, fuera del filtro compartido) y contra la app
+desplegada de punta a punta.
+
+**Hallazgo #24 — tabla y pantalla de flota, con matrícula normalizada como clave real
+(2026-09-22)**: primera etapa de darle entidad propia a los camiones (`spec_flota_vehiculos.md`).
+`jornadas.matricula` sigue siendo texto suelto — enlazar la jornada a un vehículo es una segunda
+etapa deliberadamente fuera de esta.
+
+- **Tabla `public.vehiculos`** (`supabase/schema_v8_flota_vehiculos.sql`, plegada también en
+  `schema.sql` desde el primer commit — mismo criterio que v3/v4, no el desfase que encontró el
+  #23): `matricula`, `tipo_propiedad` (`text` + `check`, mismo patrón que `jornadas.estado` — no
+  un enum de Postgres), `capacidad_tanque_litros`/`marca`/`modelo`/`anio` opcionales, `estado`
+  (`activo`/`baja`, nunca se borra — no hay ninguna acción de eliminar en la pantalla ni en la
+  API).
+- ⚠️ **La unicidad real vive en un índice de expresión sobre la matrícula normalizada**
+  (mayúsculas, sin caracteres no alfanuméricos — `vehiculos_matricula_normalizada`), no en la
+  columna cruda, y **vale también para los vehículos de baja** (sin `where estado = 'activo'` en
+  el índice): un vehículo de baja que "vuelve" se reactiva (`POST /api/vehiculos/editar` con
+  `estado: "activo"`), nunca se duplica.
+- **El Route Handler hace el chequeo de duplicado en JS** (trae toda la tabla — una flota son
+  decenas de filas, no miles como jornadas — y compara cada matrícula normalizada con la misma
+  función que usa el índice), no con una función RPC ni una columna generada extra: mantiene el
+  índice "sin columna extra" que pedía la spec, y el índice de Postgres queda como garantía real
+  (defensa en profundidad) si dos altas coinciden en la misma fracción de segundo — confirmado
+  insertando en paralelo por fuera del chequeo de JS: Postgres lo rechaza igual (`23505`).
+- **Verificado contra la base real, no simulado**: `1234ABC` creado; `1234 abc` (espacio) y
+  `1234-ABC` (guion) rechazados, los dos con mensaje que identifica el vehículo existente y si
+  está activo o de baja; dado de baja y confirmado que sigue en la lista; reintentado y ofrecida
+  la reactivación (no un duplicado); reactivado y confirmado que sigue siendo la misma fila
+  (mismo `id`); vehículo con todos los campos opcionales cargados y sin ellos; validaciones de
+  tipo de propiedad/capacidad/año probadas una por una. Regresión: `/jornadas`
+  (caso "cesar" sigue en 18), `/mapa` y `/flota` responden bien.
+- **Presupuesto de la columna lateral en horizontal (Hallazgo #16)**: calculado por el mismo
+  método que #16 (aritmética de clases Tailwind, sin dispositivo real disponible en este entorno)
+  — con la 3ª entrada de nav, ~340px pasaban a ~388px sobre los ~390px disponibles, dentro del
+  margen de error de esas cifras aproximadas. Se sacó el logo decorativo de esa columna en el
+  mismo commit (el fallback que #16 ya había decidido de antemano), quedando ~356px. **No
+  confirmado en dispositivo real desde este entorno** — queda para el usuario, igual que el resto
+  del encuadre visual.
+- ⚠️ **Hueco encontrado, no de esta spec**: la spec asumía que `Input`/`Select`
+  (`components/ui/`) ya cumplían el piso de 44px de alto en mobile (Hallazgo #11) — confirmado
+  contra el código real que **no es así**: el #11 les corrigió la fuente (`text-base md:text-sm`,
+  evita el zoom de iOS) pero no el alto, que sigue en `h-9` (36px) fijo, sin una variante mobile
+  como sí tiene `Button` (`h-11 md:h-9`). Es parejo en todo el Dashboard (mismo gap en
+  `editar-jornada-dialog.tsx`), así que `VehiculoDialog` los usa tal cual existen hoy — corregirlo
+  solo acá habría sido inconsistente con el resto de la app. Queda como deuda técnica separada
+  (ver §6).
+- `DASHBOARD_SESSION_SECRET` agregado a `dashboard/.env.local` (gitignored, nunca se commitea) —
+  faltaba para desarrollo local (solo estaba configurada en Render) y bloqueaba probar un login
+  real contra el servidor local; sin esto, la verificación de este Hallazgo (y la de varios
+  anteriores) dependía de golpear la app ya desplegada. Cualquier valor sirve como secreto HMAC
+  local — no necesita coincidir con el de producción.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
@@ -1592,6 +1663,16 @@ aperturas; y el archivo declara sus propios filtros y su total, para que una fut
 
 ## 6. Deuda técnica y pendientes conocidos
 
+- ⚠️ **`Input`/`Select` (`components/ui/`) no cumplen el piso de 44px de alto en mobile**
+  (encontrado 2026-09-22 revisando `spec_flota_vehiculos.md`, que daba esto por resuelto). El
+  Hallazgo #11 corrigió la FUENTE de los dos (`text-sm` → `text-base md:text-sm`, evita el zoom
+  automático de Safari/iOS al enfocar) pero no el ALTO, que sigue fijo en `h-9` (36px) en
+  cualquier tamaño de pantalla — a diferencia de `Button`, que sí tiene variante mobile (`h-11
+  md:h-9`). Es parejo en TODO el Dashboard (todo formulario que use estos dos componentes,
+  incluido `editar-jornada-dialog.tsx` desde antes de esta fecha), no algo nuevo de ninguna spec
+  puntual — por eso ninguna spec debería corregirlo en soledad (dejaría esa pantalla inconsistente
+  con el resto). Arreglo, si se decide hacerlo: sumar `h-11 md:h-9` a los dos componentes
+  compartidos, una vez, con el mismo criterio que ya tiene `Button`.
 - ✅ **Resuelto (2026-09-22): `Database` generado y enganchado en los dos `createClient` — chequeo de
   nombres de columna encendido en toda consulta Supabase del Dashboard.** Cerraba la deuda anotada
   arriba en esta misma sección al revisar el escape de tipos del Hallazgo #21. `npm run
