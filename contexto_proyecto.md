@@ -184,14 +184,35 @@ eliminaron por completo**, junto con todo lo que quedaba huérfano por su culpa:
 Ambos en plan `free`, con dos limitaciones reales de esa plataforma (no bugs de este código):
 
 - **Cold start**: un servicio sin tráfico ~15 min se duerme; la primera petición que le llega
-  después puede rebotar en el borde de Render mientras despierta (unos segundos), antes de llegar a
-  nuestra app — visto como **502**, y (confirmado 2026-09-22) también como **429 "Too Many
-  Requests"** con body de texto plano, no el JSON con `mensaje` que arma nuestro propio Express.
-  Descartado como bug de este código: `server/mock/index.js`/`reportes.js` solo devuelven
-  400/200/500 en toda su superficie (grepeado `res.status(`), nunca 429 ni 502 — cualquiera de los
-  dos códigos confirma que la respuesta no llegó al handler. El segundo intento normalmente
-  funciona. Pasa sobre todo con `app-transp-mock-server`, que solo recibe tráfico al exportar un
-  reporte.
+  después puede devolver **502** mientras despierta (unos segundos, resuelto: el segundo intento
+  normalmente funciona). Pasa sobre todo con `app-transp-mock-server`, que solo recibe tráfico al
+  exportar un reporte.
+- ⚠️ **429 "Too Many Requests" — NO es el mismo mecanismo que el cold start, aunque el síntoma se
+  parezca** (investigado 2026-09-22, mismo servicio, durante un export real). Diferencias que lo
+  distinguen: persistió a través de varios reintentos (el cold start se resuelve en el segundo
+  intento) y se resolvió solo un rato después, sin ninguna acción — consistente con un bloqueo
+  temporal a nivel de borde, no con el servicio despertando. Descartado como bug de este código por
+  el mismo argumento que el 502: `server/mock/index.js`/`reportes.js` solo devuelven 400/200/500 en
+  toda su superficie (grepeado `res.status(`) y sin ningún paquete de rate-limiting en
+  `package.json`; el body además es texto plano, no el JSON con `mensaje` que arma nuestro Express —
+  la respuesta nunca llegó al handler.
+  - **Dónde NO aparece**: ni en la pestaña "Events" de Render (no hay "suspended" ni aviso de cupo de
+    horas de instancia agotado), ni en "Logs" (vacío justo en el horario del 429 — confirma que el
+    proceso ni llegó a recibir el pedido), ni como aviso en el dashboard/cuenta.
+  - **Por qué no aparece en ningún lado de Render**: los servicios de Render corren detrás de
+    Cloudflare — confirmado con `curl -i` directo contra el servicio, que muestra `Server: cloudflare`
+    y un header `CF-RAY` en toda respuesta, incluida una exitosa. Es una capa de borde que gestiona
+    Render, invisible desde el dashboard del cliente — un bloqueo ahí no deja rastro en Events, Logs
+    ni facturación.
+  - **Diagnóstico rápido para la próxima vez** (no hace falta reproducir el export real): `curl -i`
+    contra la raíz del servicio (`GET /`, debería dar 404 de Express) y contra la ruta real con un
+    body mínimo (`POST /reports/export-excel` con `{}`, debería dar 400 "Faltan datos..."). Si los
+    dos responden rápido y con el JSON/HTML propio de la app, el servicio está sano y el 429 fue
+    puntual — probablemente ligado al tamaño real del payload (hasta 5000 jornadas con fotos/
+    incidencias embebidas) o a varios intentos seguidos en poco tiempo, no a un bloqueo persistente.
+  - Sin acceso a la cuenta de Cloudflare/Render no se pudo confirmar la causa exacta del lado de
+    ellos (regla de rate-limit por tamaño de payload, por IP de origen, o protección
+    anti-abuso genérica) — quedó resuelto por sí solo, sin cambio de código.
 - **SMTP bloqueado en el plan free** (ver "Envío de reportes" más arriba) — por eso el envío de
   correo en producción pasa por la API HTTPS de Resend, no por SMTP directo.
 
