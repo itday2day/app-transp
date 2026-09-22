@@ -184,7 +184,12 @@ eliminaron por completo**, junto con todo lo que quedaba huérfano por su culpa:
 Ambos en plan `free`, con dos limitaciones reales de esa plataforma (no bugs de este código):
 
 - **Cold start**: un servicio sin tráfico ~15 min se duerme; la primera petición que le llega
-  después puede devolver 502 mientras despierta (unos segundos). El segundo intento normalmente
+  después puede rebotar en el borde de Render mientras despierta (unos segundos), antes de llegar a
+  nuestra app — visto como **502**, y (confirmado 2026-09-22) también como **429 "Too Many
+  Requests"** con body de texto plano, no el JSON con `mensaje` que arma nuestro propio Express.
+  Descartado como bug de este código: `server/mock/index.js`/`reportes.js` solo devuelven
+  400/200/500 en toda su superficie (grepeado `res.status(`), nunca 429 ni 502 — cualquiera de los
+  dos códigos confirma que la respuesta no llegó al handler. El segundo intento normalmente
   funciona. Pasa sobre todo con `app-transp-mock-server`, que solo recibe tráfico al exportar un
   reporte.
 - **SMTP bloqueado en el plan free** (ver "Envío de reportes" más arriba) — por eso el envío de
