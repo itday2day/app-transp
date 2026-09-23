@@ -176,31 +176,18 @@
   },
   "registro": {
     "titulo": "Crear cuenta",
-    "subtitulo": "Completa tus datos para registrarte como chofer.",
-    "numeroEmpleadoEtiqueta": "Número de empleado",
-    "numeroEmpleadoPlaceholder": "Ej. 4821",
-    "nombreEtiqueta": "Nombre(s)",
-    "nombrePlaceholder": "Ej. Juan",
-    "apellidosEtiqueta": "Apellidos",
-    "apellidosPlaceholder": "Ej. Pérez López",
-    "dniEtiqueta": "DNI",
-    "dniPlaceholder": "Documento nacional de identidad",
-    "dniError": "El DNI debe tener entre 5 y 20 caracteres alfanuméricos.",
-    "sexoEtiqueta": "Sexo",
-    "fechaNacimientoEtiqueta": "Fecha de nacimiento",
-    "nacionalidadEtiqueta": "Nacionalidad",
-    "nacionalidadPlaceholder": "Selecciona tu país",
-    "contrasenaEtiqueta": "Contraseña",
+    "mensajeDeshabilitado": "El acceso lo crea tu empresa. Pedíselo a tu administrador de flota.",
+    "botonVolver": "Volver a iniciar sesión"
+  },
+  "cambiarContrasenaObligatorio": {
+    "titulo": "Cambiá tu contraseña",
+    "subtitulo": "Tu administrador te dio una contraseña temporal. Antes de continuar, elegí una nueva que solo vos conozcas.",
+    "contrasenaEtiqueta": "Contraseña nueva",
     "contrasenaPlaceholder": "Mínimo 6 caracteres",
-    "confirmarContrasenaEtiqueta": "Confirmar contraseña",
-    "confirmarContrasenaPlaceholder": "Repite tu contraseña",
+    "confirmarContrasenaEtiqueta": "Confirmar contraseña nueva",
+    "confirmarContrasenaPlaceholder": "Repite la contraseña nueva",
     "contrasenasNoCoinciden": "Las contraseñas no coinciden.",
-    "botonCrear": "Crear cuenta",
-    "botonVolver": "Volver a iniciar sesión",
-    "exitoTitulo": "Cuenta creada",
-    "exitoMensaje": "Ya puedes iniciar sesión con tu número de empleado y contraseña.",
-    "errorNumeroDuplicado": "Ese número de empleado ya tiene una cuenta registrada.",
-    "errorLimite": "Se registraron demasiadas cuentas en poco tiempo. Espera unos minutos y vuelve a intentarlo.",
-    "errorGenerico": "No pudimos crear la cuenta. Verifica tu conexión e intenta de nuevo."
+    "botonCambiar": "Cambiar contraseña",
+    "errorGenerico": "No pudimos cambiar la contraseña. Verifica tu conexión e intenta de nuevo."
   }
 }

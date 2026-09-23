@@ -11,6 +11,11 @@ interface AuthContextValor {
   cargando: boolean;
   iniciarSesion: (numeroEmpleado: string, contrasena: string) => Promise<void>;
   cerrarSesion: () => Promise<void>;
+  // Llamada por CambiarContrasenaObligatorioScreen tras un cambio exitoso — actualiza el usuario
+  // en memoria Y en SecureStore (si no se persistiera acá también, cerrar y reabrir la app antes
+  // de la próxima sincronización de sesión volvería a mostrar la pantalla obligatoria con una
+  // contraseña que ya cambió).
+  marcarContrasenaCambiada: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValor | undefined>(undefined);
@@ -46,8 +51,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUsuario(null);
   }, []);
 
+  const marcarContrasenaCambiada = useCallback(async () => {
+    setUsuario((actual) => {
+      if (!actual) return actual;
+      const actualizado = { ...actual, debeCambiarContrasena: false };
+      guardarValor(CLAVE_USUARIO, JSON.stringify(actualizado));
+      return actualizado;
+    });
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ usuario, cargando, iniciarSesion, cerrarSesion }}>
+    <AuthContext.Provider
+      value={{ usuario, cargando, iniciarSesion, cerrarSesion, marcarContrasenaCambiada }}
+    >
       {children}
     </AuthContext.Provider>
   );

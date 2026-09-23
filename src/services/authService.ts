@@ -1,6 +1,6 @@
 import { ErrorApi } from "./api";
 import { supabase } from "@/lib/supabase";
-import { NuevoRegistro, Usuario } from "@/types";
+import { Usuario } from "@/types";
 
 // Supabase Auth exige correo con dominio de MX real (dominios inventados como
 // "*.internal" o un ".com" sin registrar son rechazados por su validación),
@@ -8,6 +8,10 @@ import { NuevoRegistro, Usuario } from "@/types";
 // sigue identificándose por numeroEmpleado en toda la UI, esto solo se usa
 // para hablar con Auth, y como "Confirm email" está desactivado nunca se le
 // envía nada a esa dirección.
+//
+// ⚠️ COPIADA (no compartida) en dashboard/lib/choferes.ts, con el mismo comentario de costo del
+// otro lado — el Dashboard ahora crea choferes (spec_alta_choferes_dashboard.md) y tiene que
+// generar EXACTAMENTE esta misma cadena. Si se toca acá, tocar también allá en el mismo commit.
 function numeroEmpleadoAEmail(numeroEmpleado: string): string {
   return `apptransp.chofer.${numeroEmpleado}.f83a1c@gmail.com`;
 }
@@ -24,9 +28,15 @@ export async function iniciarSesion(numeroEmpleado: string, contrasena: string):
     throw new ErrorApi(401, "Número de empleado o contraseña incorrectos.");
   }
 
+  // debe_cambiar_contrasena decide si RootNavigator.tsx manda a
+  // CambiarContrasenaObligatorioScreen en vez de la app normal. No se chequea `activo` acá:
+  // Supabase Auth ya lo hizo arriba — un chofer dado de baja tiene su credencial baneada
+  // (ban_duration, ver dashboard/app/api/choferes/editar/route.ts) y signInWithPassword falla
+  // antes de llegar a esta consulta. Un segundo chequeo acá sería una segunda fuente de verdad
+  // que podría desincronizarse de la primera.
   const { data: perfil, error: errorPerfil } = await supabase
     .from("choferes")
-    .select("nombre")
+    .select("nombre, debe_cambiar_contrasena")
     .eq("id", data.user.id)
     .single();
 
@@ -34,42 +44,35 @@ export async function iniciarSesion(numeroEmpleado: string, contrasena: string):
     throw new ErrorApi(401, "No se pudo cargar el perfil del chofer.");
   }
 
-  return { id: data.user.id, nombre: perfil.nombre, numeroEmpleado };
+  return {
+    id: data.user.id,
+    nombre: perfil.nombre,
+    numeroEmpleado,
+    debeCambiarContrasena: perfil.debe_cambiar_contrasena,
+  };
 }
 
 export async function cerrarSesion(): Promise<void> {
   await supabase.auth.signOut();
 }
 
-export async function registrarCuenta(datos: NuevoRegistro): Promise<void> {
-  const { data, error } = await supabase.auth.signUp({
-    email: numeroEmpleadoAEmail(datos.numeroEmpleado),
-    password: datos.contrasena,
-  });
-
-  if (error) {
-    if (error.message.toLowerCase().includes("already registered")) {
-      throw new ErrorApi(409, "Ese número de empleado ya está registrado.");
-    }
-    if (error.status === 429) {
-      throw new ErrorApi(429, error.message);
-    }
-    throw new ErrorApi(500, error.message);
-  }
-  if (!data.user) {
-    throw new ErrorApi(500, "No se pudo crear la cuenta.");
+// El alta pasó a ser exclusiva del Dashboard (spec_alta_choferes_dashboard.md) — el registro
+// propio desde la app se deshabilitó, RegistroScreen.tsx ya no llama a nada de este archivo.
+//
+// Llamada obligatoria en el primer ingreso (o después de un reseteo) — CambiarContrasenaObligatorioScreen
+// es la única pantalla que la usa. Cambia la contraseña en Auth y apaga la bandera en el perfil;
+// las dos operaciones son sobre el propio usuario autenticado (RLS "chofer actualiza su propio
+// perfil" ya lo permite, sin cambios de política).
+export async function cambiarContrasenaObligatoria(nuevaContrasena: string): Promise<void> {
+  const { data, error } = await supabase.auth.updateUser({ password: nuevaContrasena });
+  if (error || !data.user) {
+    throw new ErrorApi(500, error?.message ?? "No se pudo cambiar la contraseña.");
   }
 
-  const { error: errorPerfil } = await supabase.from("choferes").insert({
-    id: data.user.id,
-    numero_empleado: datos.numeroEmpleado,
-    nombre: datos.nombre,
-    apellidos: datos.apellidos,
-    dni: datos.dni,
-    fecha_nacimiento: datos.fechaNacimiento,
-    pais_nacimiento: datos.paisNacimiento,
-    sexo: datos.sexo,
-  });
+  const { error: errorPerfil } = await supabase
+    .from("choferes")
+    .update({ debe_cambiar_contrasena: false })
+    .eq("id", data.user.id);
   if (errorPerfil) {
     throw new ErrorApi(500, errorPerfil.message);
   }

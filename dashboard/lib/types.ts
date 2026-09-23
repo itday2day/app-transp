@@ -234,3 +234,77 @@ export interface VehiculoResponse {
   mensaje: string;
   vehiculo: VehiculoRow;
 }
+
+export type SexoChofer = "Masculino" | "Femenino" | "Otro";
+
+/** Fila cruda de la tabla public.choferes (ver supabase/schema_v9_choferes_administrados.sql
+ * para `activo`/`debe_cambiar_contrasena` — las demás columnas son del esquema inicial). */
+export interface ChoferRow {
+  id: string;
+  numero_empleado: string;
+  nombre: string;
+  apellidos: string;
+  dni: string;
+  fecha_nacimiento: string;
+  pais_nacimiento: string;
+  sexo: SexoChofer;
+  activo: boolean;
+  debe_cambiar_contrasena: boolean;
+  created_at: string;
+}
+
+/** Respuesta de GET /api/choferes. */
+export interface ChoferesResponse {
+  data: ChoferRow[];
+}
+
+/** Campos que carga el administrador al crear un chofer — son los mismos que hoy exige
+ * `registrarCuenta()` en la app móvil (RegistroScreen.tsx), menos la contraseña: la genera el
+ * servidor (ver spec_alta_choferes_dashboard.md, Fase 1). */
+export interface CamposChofer {
+  numeroEmpleado: string;
+  nombre: string;
+  apellidos: string;
+  dni: string;
+  fechaNacimiento: string; // YYYY-MM-DD
+  paisNacimiento: string;
+  sexo: SexoChofer;
+}
+
+export type CrearChoferRequest = CamposChofer;
+
+/** `contrasenaTemporal` se devuelve UNA sola vez acá — nunca se guarda, nunca se vuelve a poder
+ * consultar (ni siquiera el propio backend la retiene después de esta respuesta). */
+export interface CrearChoferResponse {
+  mensaje: string;
+  chofer: ChoferRow;
+  contrasenaTemporal: string;
+}
+
+export interface EditarChoferRequest extends Partial<Omit<CamposChofer, "numeroEmpleado">> {
+  id: string;
+  activo?: boolean;
+}
+
+export interface EditarChoferResponse {
+  mensaje: string;
+  chofer: ChoferRow;
+}
+
+/** Devuelto con 409 cuando el número de empleado (comparación exacta, sin normalizar — ver
+ * spec_alta_choferes_dashboard.md, Fase 1, punto 4) ya existe. */
+export interface ChoferDuplicadoResponse {
+  mensaje: string;
+  choferExistente: {
+    id: string;
+    numeroEmpleado: string;
+    nombre: string;
+    activo: boolean;
+  };
+}
+
+/** Misma garantía de "se muestra una sola vez" que CrearChoferResponse. */
+export interface ResetearContrasenaResponse {
+  mensaje: string;
+  contrasenaTemporal: string;
+}

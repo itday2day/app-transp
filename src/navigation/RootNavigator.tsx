@@ -14,6 +14,7 @@ import { RootStackParamList, TabsParamList } from "./types";
 
 import LoginScreen from "@/screens/LoginScreen";
 import RegistroScreen from "@/screens/RegistroScreen";
+import CambiarContrasenaObligatorioScreen from "@/screens/CambiarContrasenaObligatorioScreen";
 import CheckInScreen from "@/screens/CheckInScreen";
 import HistorialScreen from "@/screens/HistorialScreen";
 import DetalleJornadaScreen from "@/screens/DetalleJornadaScreen";
@@ -75,7 +76,13 @@ export function RootNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {usuario ? (
+        {usuario?.debeCambiarContrasena ? (
+          // Única pantalla del stack mientras esto sea true — ni el resto de rutas autenticadas
+          // ni Login/Registro están montadas, así que no hay forma de "volver atrás" hacia
+          // ellas ni de llegar a ninguna pantalla que cargue datos (Fase 2, Parte B de
+          // spec_alta_choferes_dashboard.md).
+          <Stack.Screen name="CambiarContrasenaObligatorio" component={CambiarContrasenaObligatorioScreen} />
+        ) : usuario ? (
           <>
             <Stack.Screen name="Principal" component={PrincipalTabs} />
             <Stack.Screen

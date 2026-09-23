@@ -29,9 +29,17 @@ create extension if not exists postgis;
 -- CHOFERES
 -- ============================================================
 -- id = mismo uuid que auth.users.id (Supabase Auth). Los choferes se
--- autentican con numeroEmpleado, que se mapea a un correo sintético
--- "{numeroEmpleado}@choferes.app-transp.internal" al crear el usuario
--- en Auth (ver notas de integración en el cliente).
+-- autentican con numeroEmpleado, que se mapea a un correo sintético al crear el usuario en
+-- Auth. ⚠️ Corrección (2026-09-23): este comentario decía
+-- "{numeroEmpleado}@choferes.app-transp.internal" — no es la cadena real. El formato real,
+-- confirmado contra src/services/authService.ts (móvil) y dashboard/lib/choferes.ts
+-- (Dashboard, que la copia con este mismo costo escrito en los dos lados — ver
+-- contexto_proyecto.md §4, spec_alta_choferes_dashboard.md): "apptransp.chofer.{numeroEmpleado}.f83a1c@gmail.com"
+-- (dominio gmail.com real porque Supabase Auth rechaza dominios inventados; nunca se le
+-- manda nada a esa dirección, "Confirm email" está desactivado).
+--
+-- Alta/edición/baja/reseteo de contraseña se administran desde el Dashboard
+-- (dashboard/app/api/choferes/) — el registro propio desde la app móvil se deshabilitó.
 create table public.choferes (
   id uuid primary key references auth.users(id) on delete cascade,
   numero_empleado text unique not null,
@@ -41,6 +49,14 @@ create table public.choferes (
   fecha_nacimiento date not null,
   pais_nacimiento text not null,
   sexo text not null check (sexo in ('Masculino', 'Femenino', 'Otro')),
+  -- activo=false impide el acceso en los dos sistemas a la vez: en la tabla Y baneando la
+  -- credencial de Auth (ban_duration, ver dashboard/app/api/choferes/editar/route.ts) — marcar
+  -- solo la columna no le impide a Supabase Auth dejarlo entrar.
+  activo boolean not null default true,
+  -- Se enciende al crear el perfil (contraseña temporal) o al resetearla; la app móvil no deja
+  -- pasar de la pantalla de cambio de contraseña obligatorio mientras esté en true, y la apaga
+  -- ella misma al completar el cambio (RootNavigator.tsx).
+  debe_cambiar_contrasena boolean not null default false,
   created_at timestamptz not null default now()
 );
 

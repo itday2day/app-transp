@@ -7,6 +7,12 @@ export interface Usuario {
   id: string;
   nombre: string;
   numeroEmpleado: string;
+  // El alta la hace el Dashboard con una contraseña temporal (spec_alta_choferes_dashboard.md);
+  // mientras esto sea true, RootNavigator.tsx no deja pasar de
+  // CambiarContrasenaObligatorioScreen a ninguna otra pantalla. La fija el alta y el reseteo
+  // (ambos del lado del servidor); la apaga cambiarContrasenaObligatorio() al completar el
+  // cambio.
+  debeCambiarContrasena: boolean;
 }
 
 export type Sexo = "Masculino" | "Femenino" | "Otro";
@@ -14,17 +20,6 @@ export type Sexo = "Masculino" | "Femenino" | "Otro";
 export interface Pais {
   nombre: string;
   codigo: string; // ISO 3166-1 alpha-2
-}
-
-export interface NuevoRegistro {
-  numeroEmpleado: string;
-  nombre: string;
-  apellidos: string;
-  dni: string;
-  fechaNacimiento: string; // YYYY-MM-DD (ISO 8601)
-  paisNacimiento: string;
-  contrasena: string;
-  sexo: Sexo;
 }
 
 export type EstadoJornada = "abierta" | "cerrada";

@@ -176,31 +176,18 @@
   },
   "registro": {
     "titulo": "Create account",
-    "subtitulo": "Fill in your details to register as a driver.",
-    "numeroEmpleadoEtiqueta": "Employee number",
-    "numeroEmpleadoPlaceholder": "E.g. 4821",
-    "nombreEtiqueta": "First name(s)",
-    "nombrePlaceholder": "E.g. John",
-    "apellidosEtiqueta": "Last name",
-    "apellidosPlaceholder": "E.g. Smith Doe",
-    "dniEtiqueta": "National ID",
-    "dniPlaceholder": "National identity document",
-    "dniError": "The ID must be 5 to 20 alphanumeric characters.",
-    "sexoEtiqueta": "Sex",
-    "fechaNacimientoEtiqueta": "Date of birth",
-    "nacionalidadEtiqueta": "Nationality",
-    "nacionalidadPlaceholder": "Select your country",
-    "contrasenaEtiqueta": "Password",
+    "mensajeDeshabilitado": "Your company creates your access. Ask your fleet administrator for it.",
+    "botonVolver": "Back to sign in"
+  },
+  "cambiarContrasenaObligatorio": {
+    "titulo": "Change your password",
+    "subtitulo": "Your administrator gave you a temporary password. Before continuing, choose a new one only you know.",
+    "contrasenaEtiqueta": "New password",
     "contrasenaPlaceholder": "Minimum 6 characters",
-    "confirmarContrasenaEtiqueta": "Confirm password",
-    "confirmarContrasenaPlaceholder": "Repeat your password",
+    "confirmarContrasenaEtiqueta": "Confirm new password",
+    "confirmarContrasenaPlaceholder": "Repeat the new password",
     "contrasenasNoCoinciden": "Passwords don't match.",
-    "botonCrear": "Create account",
-    "botonVolver": "Back to sign in",
-    "exitoTitulo": "Account created",
-    "exitoMensaje": "You can now sign in with your employee number and password.",
-    "errorNumeroDuplicado": "That employee number already has an account.",
-    "errorLimite": "Too many accounts were created in a short time. Wait a few minutes and try again.",
-    "errorGenerico": "We couldn't create the account. Check your connection and try again."
+    "botonCambiar": "Change password",
+    "errorGenerico": "We couldn't change the password. Check your connection and try again."
   }
 }

@@ -40,8 +40,10 @@ export type Database = {
       };
       choferes: {
         Row: {
+          activo: boolean;
           apellidos: string;
           created_at: string;
+          debe_cambiar_contrasena: boolean;
           dni: string;
           fecha_nacimiento: string;
           id: string;
@@ -51,8 +53,10 @@ export type Database = {
           sexo: string;
         };
         Insert: {
+          activo?: boolean;
           apellidos: string;
           created_at?: string;
+          debe_cambiar_contrasena?: boolean;
           dni: string;
           fecha_nacimiento: string;
           id: string;
@@ -62,8 +66,10 @@ export type Database = {
           sexo: string;
         };
         Update: {
+          activo?: boolean;
           apellidos?: string;
           created_at?: string;
+          debe_cambiar_contrasena?: boolean;
           dni?: string;
           fecha_nacimiento?: string;
           id?: string;

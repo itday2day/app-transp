@@ -1,14 +1,20 @@
 "use client";
 
-import { ClipboardList, Map as MapIcon, Truck } from "lucide-react";
+import { ClipboardList, Map as MapIcon, Truck, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
+// ⚠️ 4ª entrada (Choferes, spec_alta_choferes_dashboard.md): calculado con el mismo método que
+// #16/#24, esto excede el presupuesto de la columna lateral en horizontal por ~14px (~404px
+// sobre ~390px disponibles) — decisión explícita del usuario: dejar que el `overflow-y-auto` ya
+// puesto en layout.tsx (red de seguridad desde el Hallazgo #15) haga su trabajo, en vez de
+// rediseñar la navegación. No confirmado en dispositivo real desde este entorno.
 const ENLACES = [
   { href: "/mapa", label: "Mapa en vivo", icon: MapIcon },
   { href: "/jornadas", label: "Jornadas", icon: ClipboardList },
   { href: "/flota", label: "Flota", icon: Truck },
+  { href: "/choferes", label: "Choferes", icon: Users },
 ];
 
 export function SidebarNav({ horizontal = false }: { horizontal?: boolean }) {

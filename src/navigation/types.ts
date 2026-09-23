@@ -5,6 +5,7 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 export type RootStackParamList = {
   Login: undefined;
   Registro: undefined;
+  CambiarContrasenaObligatorio: undefined;
   Principal: undefined;
   DetalleJornada: { id: string };
   NuevoCheckIn: undefined;

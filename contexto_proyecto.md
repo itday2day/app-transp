@@ -1640,6 +1640,113 @@ etapa deliberadamente fuera de esta.
   anteriores) dependía de golpear la app ya desplegada. Cualquier valor sirve como secreto HMAC
   local — no necesita coincidir con el de producción.
 
+**Hallazgo #25 — alta y administración de choferes desde el Dashboard, con cambio de contraseña
+obligatorio en el primer ingreso (2026-09-23)**: `spec_alta_choferes_dashboard.md`. El registro
+propio desde la app móvil (`RegistroScreen.tsx`) se deshabilitó — la única vía de alta pasa a ser
+el Dashboard, para que el rastro de auditoría de los Hallazgos #6/#7 se sostenga (si el
+administrador conserva la contraseña de un chofer, puede editar jornadas en su nombre sin dejar
+huella).
+
+- **Diagnóstico (Fase 1) antes de tocar nada**: `RegistroScreen.tsx` + `registrarCuenta()`
+  (`authService.ts`) hacían dos pasos sin transacción — `supabase.auth.signUp()` y después
+  `insert` en `choferes` — y el correo sintético con el que Auth identifica al chofer es,
+  confirmado carácter por carácter, `apptransp.chofer.{numeroEmpleado}.f83a1c@gmail.com` (no lo
+  que decía el comentario viejo de `schema.sql`, que quedó corregido). `numero_empleado` es
+  `text unique not null` — `"04"` y `"4"` son valores distintos a propósito, no se inventó una
+  normalización que la base no tiene.
+- ⚠️ **Decisión de negocio, tomada por el usuario, no por mi cuenta** (la spec lo pedía
+  explícitamente): las 7 columnas de `choferes` (`numero_empleado`, `nombre`, `apellidos`, `dni`,
+  `fecha_nacimiento`, `pais_nacimiento`, `sexo`) eran y siguen siendo NOT NULL — el administrador
+  completa las 7 al crear el perfil desde el Dashboard, no quedó ninguna para que el chofer
+  complete después. No se tocó esa restricción ni se agregó una pantalla de "completar perfil" en
+  la app.
+- **Dos columnas nuevas** (`supabase/schema_v9_choferes_administrados.sql`, plegada en
+  `schema.sql`): `activo boolean not null default true` (no rompe choferes existentes) y
+  `debe_cambiar_contrasena boolean not null default false` (los que ya se registraron solos NO
+  quedan forzados a cambiar nada — la bandera solo se enciende para altas/reseteos nuevos).
+- ⚠️ **Corrección a un supuesto de la propia spec**: pedía "elegir el orden" entre crear el
+  usuario de Auth y la fila de `choferes`. No es una elección — `choferes.id` es FK a
+  `auth.users.id`, así que Auth tiene que existir primero por definición. Lo que sí se decidió es
+  la compensación si falla el segundo paso: se BORRA el usuario de Auth recién creado (rollback)
+  en vez de dejar un huérfano invisible (existe en Auth, puede iniciar sesión, pero no aparece en
+  ningún lado porque no hay fila que lo represente) — el estado que queda es "no se creó nada",
+  reintentable. Si ese borrado de compensación también falla, el mensaje se lo dice explícitamente
+  al administrador con el id del usuario huérfano, en vez de tragárselo en silencio. Antes de
+  tocar Auth para nada, se chequea si el número de empleado ya existe (comparación exacta) — evita
+  crear-y-compensar en el caso común de un duplicado/typo.
+- **Contraseña temporal**: generada del lado del servidor (`lib/choferes.ts`,
+  `generarContrasenaTemporal()`), sin caracteres que se confundan al dictar por teléfono
+  (sin `l`/`1`, sin `O`/`0`, sin `I`), devuelta UNA sola vez en la respuesta HTTP de crear o
+  resetear — nunca se guarda en la tabla, nunca se manda por correo (no hay correo real:
+  el chofer usa un dominio sintético), nunca queda en un log.
+- ⚠️ **Mostrar el usuario exacto antes de confirmar el alta**: el formulario del Dashboard
+  (`ChoferDialog`) muestra, en vivo mientras se tipea el número de empleado, "El chofer va a
+  entrar con el número: `04`" + el correo sintético completo — mismo criterio que el contador del
+  Hallazgo #21 (mostrar el dato antes del paso irreversible), para que un cero a la izquierda mal
+  tipeado se note en pantalla, no cuando el chofer no pueda entrar.
+- **Dar de baja actúa en los dos sistemas a la vez**, no solo en la tabla: `activo = false` +
+  `supabase.auth.admin.updateUserById(id, { ban_duration: "876000h" })` (baneo efectivamente
+  permanente — no existe un "para siempre" real en la API). Reactivar hace lo mismo al revés
+  (`ban_duration: "none"`). El ban se aplica ANTES de tocar la tabla: si falla, no queda el estado
+  inconsistente "la tabla dice de baja pero Auth lo sigue dejando entrar".
+- ⚠️ **La baja no es instantánea, documentado, no arreglado**: la app es offline-first — un
+  chofer con sesión abierta puede seguir cargando jornadas localmente hasta que intente
+  sincronizar. El ban corta el acceso (nuevo login, o el próximo refresh de token), no borra lo
+  que ya tenga guardado en el teléfono.
+- **App móvil (Parte B)**: `Usuario` suma `debeCambiarContrasena`; `RootNavigator.tsx` agrega una
+  rama antes de la de "autenticado" — mientras esa bandera sea `true`, el stack solo monta
+  `CambiarContrasenaObligatorioScreen` (pantalla nueva), sin tabs ni forma de llegar a ninguna
+  pantalla que cargue datos. `cambiarContrasenaObligatoria()` (`authService.ts`) cambia la
+  contraseña en Auth y apaga la bandera en el mismo llamado; `AuthContext.marcarContrasenaCambiada()`
+  actualiza el estado en memoria y en `SecureStore` para que sobreviva un cierre de la app.
+  `RegistroScreen.tsx` pasó de formulario a mensaje ("pedile el acceso a tu administrador") — se
+  mantuvo el enlace desde `LoginScreen.tsx` en vez de borrarlo, para no dejar un botón que no
+  lleva a ningún lado; sin ningún camino donde el chofer cargue datos que no van a ningún lado.
+  `registrarCuenta()`/`NuevoRegistro` se eliminaron (código muerto, nada más los usaba).
+- ⚠️ **Presupuesto de la columna lateral en horizontal (Hallazgo #16), esta vez SÍ se excede**:
+  con la 4ª entrada de nav (Choferes), calculado ~404px sobre ~390px disponibles — a diferencia
+  del #24 (que entraba justo), acá no entra. Decisión explícita del usuario, en vez de rediseñar
+  la navegación: dejar que el `overflow-y-auto` ya puesto en esa columna (red de seguridad desde
+  el Hallazgo #15) haga su trabajo. **No confirmado en dispositivo real desde este entorno.**
+- **Verificación**: `npx tsc --noEmit`/`lint`/`format:check` limpios en `dashboard/` y en la raíz
+  (app móvil) — los del Dashboard, recién después de correr la migración (antes, el chequeo de
+  columnas del Hallazgo #23 rechazaba correctamente todo lo que tocaba `activo`/
+  `debe_cambiar_contrasena`, todavía inexistentes).
+  - **Ciclo completo contra la base real**, con choferes de prueba (borrados al terminar): creado
+    el chofer `04` → 409, identifica a Pau (real, activo) — confirma que la unicidad exacta
+    funciona contra un dato de producción real, no simulado. Creado `4` (sin el cero) → 200, fila
+    aparte — confirma que `"04"` y `"4"` son valores distintos, como se decidió en Fase 1. Ciclo
+    de contraseña simulando exactamente las llamadas de `authService.ts` (mismo
+    `signInWithPassword`/`updateUser`, cliente `anon`, no el Dashboard): login con la temporal →
+    `debe_cambiar_contrasena: true` → cambio de contraseña → la temporal vieja queda rechazada
+    ("Invalid login credentials") → la nueva funciona y `debe_cambiar_contrasena` ya está en
+    `false`. Reseteo desde el Dashboard → la contraseña anterior queda rechazada, la temporal
+    nueva funciona, `debe_cambiar_contrasena` vuelve a `true`. Dar de baja → login rechazado con
+    **"User is banned"** (el corte real, no un chequeo de tabla). Reactivar → login vuelve a
+    funcionar.
+  - **Fallo parcial simulado**: Auth creado, insert a `choferes` forzado a fallar (`sexo`
+    inválido, viola el `CHECK`) → compensación (`deleteUser`) → confirmado con
+    `admin.getUserById` que el usuario de Auth ya no existe y que no quedó ninguna fila en
+    `choferes` — ni huérfano de Auth ni huérfano de tabla, tal como se diseñó.
+  - **Contraseña temporal, confirmado que no aparece en ningún lado que no sea la respuesta
+    única**: `GET /api/choferes` no incluye `contrasenaTemporal` en ninguna fila (las únicas
+    coincidencias de "contrasena" en la respuesta son el nombre del campo booleano
+    `debe_cambiar_contrasena`), y ninguna de las contraseñas temporales generadas en esta
+    verificación aparece en el log del servidor de desarrollo.
+  - **Encoding**: un `país_nacimiento` con "España" salió corrupto (`Espa�a`) al mandarlo por
+    `curl -d` en este shell (Git Bash/Windows) — confirmado que es un artefacto del shell, no un
+    bug: la misma petición armada con `fetch` desde Node (sin pasar por el shell) guardó y
+    devolvió "España" bien. No se tocó código por esto.
+  - **Regresión**: `/jornadas`, `/mapa`, `/flota` y `/choferes` responden 200; el caso "cesar"
+    sigue dando **18**. No se probó un login con la contraseña real de un chofer YA existente (no
+    corresponde resetearle la contraseña a alguien real solo para probar) — el mismo camino de
+    código ya quedó verificado de punta a punta con los choferes de prueba.
+  - **No verificado desde este entorno**: la UI real de `CambiarContrasenaObligatorioScreen` ni el
+    gateo de `RootNavigator.tsx` en un dispositivo — se verificaron las llamadas a Supabase que
+    esas pantallas hacen (mismo resultado, no la misma pantalla). Requiere un `.apk` nuevo
+    instalado (Hallazgo #5) para llegar a un dispositivo real — **no se debe dar de alta ningún
+    chofer real hasta que ese `.apk` esté instalado**, tal como pedía la spec.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
