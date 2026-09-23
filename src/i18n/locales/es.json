@@ -34,6 +34,29 @@
     "mensajeSingular": "Encontramos una jornada abierta ({{matricula}}, {{ruta}}) que este teléfono no tenía. Ya la podés ver y cerrar como cualquier otra.",
     "mensajePlural": "Encontramos {{cantidad}} jornadas abiertas que este teléfono no tenía. Ya las podés ver y cerrar como cualquier otra."
   },
+  "jornadasCorregidas": {
+    "titulo": "Un administrador corrigió una jornada",
+    "mensajeSingular": "Un administrador corrigió {{campos}} de tu jornada ({{matricula}}, {{ruta}}).",
+    "mensajePlural": "Un administrador corrigió {{cantidad}} de tus jornadas. Abrí el detalle de cada una para ver qué cambió."
+  },
+  "camposJornada": {
+    "empresa": "empresa",
+    "matricula": "matrícula",
+    "ruta": "ruta",
+    "km_inicial": "km inicial",
+    "km_final": "km final",
+    "combustible_inicial": "combustible inicial",
+    "combustible_final": "combustible final",
+    "lat_final": "ubicación final (lat.)",
+    "lng_final": "ubicación final (long.)",
+    "foto_tacometro_final_url": "foto de tacómetro final",
+    "tuvo_incidencia": "incidencia",
+    "tipo_incidencia": "tipo de incidencia",
+    "detalle_incidencia": "detalle de incidencia",
+    "fecha_check_out": "hora de check-out",
+    "estado": "estado",
+    "fotos_incidencia": "fotos de incidencia"
+  },
   "checkIn": {
     "titulo": "Inicio de jornada",
     "chofer": "Chofer: {{nombre}}",

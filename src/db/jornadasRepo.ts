@@ -189,90 +189,143 @@ export async function obtenerJornadasAbiertas(choferId: string): Promise<Jornada
   return filas.map(filaAJornada);
 }
 
-// Candidatas a reconciliar contra Supabase (ver
-// syncService.reconciliarJornadasAbiertas): "abierta" localmente, pero sin
-// ningún cambio local pendiente de subir todavía (sincronizacion =
-// 'sincronizado') — si tuviera algo en 'pendiente'/'error', se la saltea a
-// propósito, para no arriesgarse a pisar una edición local que la app
-// todavía no subió con lo que diga Supabase en ese momento.
-export async function obtenerJornadasParaReconciliar(choferId: string): Promise<Jornada[]> {
-  const db = await obtenerBaseDeDatos();
-  const filas = await db.getAllAsync<FilaJornadaSQLite>(
-    `SELECT * FROM jornadas WHERE choferId = ? AND estado = 'abierta' AND sincronizacion = 'sincronizado'`,
-    [choferId]
-  );
-  return filas.map(filaAJornada);
-}
-
-/** Los mismos campos de cierre que ya puede cargar "Corregir" desde el
- * Dashboard (ver Hallazgo #6) — tal como vienen de Supabase (snake_case
- * implícito en los nombres de columna reales, acá ya en camelCase porque
- * syncService los arma a partir del `select()` de supabase-js). */
-export interface CierreRemoto {
+/** Una jornada corregida por el administrador, tal como viene de Supabase (Hallazgo #28,
+ * spec_correccion_gana_dashboard.md) — `syncService.sincronizarCambiosDelServidor` ya la trae en
+ * camelCase. `camposCorregidos` son las claves REALES de columna (snake_case, tal como las
+ * guarda `campos_editados_admin`) que esta corrección puntual tocó — decide qué se aplica acá
+ * abajo, nunca "toda la fila". */
+export interface JornadaCorregidaRemota {
+  id: string;
+  empresa: string;
+  matricula: string;
+  ruta: string;
+  kmInicial: number;
   kmFinal: number | null;
+  combustibleInicial: NivelCombustible;
   combustibleFinal: NivelCombustible | null;
-  fotoTacometroFinalUrl: string | null;
   latFinal: number | null;
   lngFinal: number | null;
-  fechaCheckOut: string;
+  fotoTacometroFinalUrl: string | null;
   tuvoIncidencia: boolean | null;
   tipoIncidencia: TipoIncidencia | null;
   detalleIncidencia: string | null;
   fotosIncidencia: string[] | null;
+  fechaCheckOut: string | null;
+  estado: EstadoJornada;
+  camposCorregidos: string[];
 }
 
 /**
- * Sobreescribe localmente una jornada que ya estaba sincronizada, cuando la
- * reconciliación (ver syncService.reconciliarJornadasAbiertas) encuentra que
- * en Supabase ya figura "cerrada" — por ejemplo, un administrador la cerró
- * desde el Dashboard con "Corregir" sin que la app se entere por su cuenta.
+ * Aplica localmente SOLO los campos que `campos_editados_admin` marca como corregidos por el
+ * administrador — nunca la fila entera (Hallazgo #28: eso es justo lo que permite quedarse con el
+ * kilometraje que corrigió el administrador Y el check-out que hizo el chofer, sin que uno pise al
+ * otro). Reemplaza a `sobrescribirCierreRemoto()` (Hallazgo #9): cerrar una jornada desde el
+ * Dashboard ya no es un caso aparte, es una corrección de campo más — `estado`/`fecha_check_out`
+ * son dos de las claves que puede traer `camposCorregidos`, igual que cualquier otra.
  *
- * A propósito NO reutiliza registrarCheckOut() (el check-out normal, hecho
- * por el chofer): esa función pone `fechaCheckOut = new Date()` (la hora
- * ACTUAL del dispositivo — acá hace falta la del cierre real, que viene de
- * Supabase) y `sincronizacion = 'pendiente'` (pondría esta jornada en cola
- * para volver a subirse, cuando en realidad ya está en Supabase — es
- * literalmente el origen de estos datos). Mismo patrón de columnas/tabla que
- * registrarCheckOut, pero con esos dos criterios adaptados a este caso.
+ * A propósito NO toca `sincronizacion` (se llama solo sobre filas que ya estaban
+ * `sincronizacion = 'sincronizado'`, ver `estadosSincronizacionLocal`) ni genera ningún timestamp
+ * local — todo lo que escribe viene tal cual de Supabase, la fuente de verdad.
  *
- * `fotoTacometroFinalUri`/`fotosIncidenciaUris` (las columnas que usa
- * DetalleJornadaScreen para MOSTRAR la foto — a `<Image source={{uri}}>` le
- * da igual si `uri` es un archivo local o una URL remota) se completan con
- * la URL remota, igual que `fotoCheckOutUrl`/`fotosIncidencia` (las columnas
- * que syncService ya usa como "esto ya está subido, no lo reintentes").
+ * `foto_tacometro_final_url` completa `fotoTacometroFinalUri` (la columna que
+ * `DetalleJornadaScreen` usa para MOSTRAR la foto — a `<Image source={{uri}}>` le da igual si
+ * `uri` es un archivo local o una URL remota) Y `fotoCheckOutUrl` (la columna que `syncService` ya
+ * usa como "esto ya está subido, no lo reintentes") a la vez — mismo criterio para
+ * `fotos_incidencia` con `fotosIncidenciaUris`/`fotosIncidencia`.
  */
-export async function sobrescribirCierreRemoto(id: string, remoto: CierreRemoto): Promise<void> {
-  const db = await obtenerBaseDeDatos();
-  const fotosIncidenciaJson =
-    remoto.fotosIncidencia && remoto.fotosIncidencia.length > 0
-      ? JSON.stringify(remoto.fotosIncidencia)
-      : null;
+export async function aplicarCorreccionesAdmin(remoto: JornadaCorregidaRemota): Promise<void> {
+  if (remoto.camposCorregidos.length === 0) return;
 
-  await db.runAsync(
-    `UPDATE jornadas SET
-      kmFinal = ?, combustibleFinal = ?,
-      fotoTacometroFinalUri = ?, fotoCheckOutUrl = ?,
-      latFinal = ?, lngFinal = ?, fechaCheckOut = ?,
-      tuvoIncidencia = ?, tipoIncidencia = ?, detalleIncidencia = ?,
-      fotosIncidenciaUris = ?, fotosIncidencia = ?,
-      estado = 'cerrada', sincronizacion = 'sincronizado'
-    WHERE id = ?`,
-    [
-      remoto.kmFinal,
-      remoto.combustibleFinal,
-      remoto.fotoTacometroFinalUrl,
-      remoto.fotoTacometroFinalUrl,
-      remoto.latFinal,
-      remoto.lngFinal,
-      remoto.fechaCheckOut,
-      remoto.tuvoIncidencia == null ? null : remoto.tuvoIncidencia ? 1 : 0,
-      remoto.tipoIncidencia,
-      remoto.detalleIncidencia,
-      fotosIncidenciaJson,
-      fotosIncidenciaJson,
-      id,
-    ]
+  const asignaciones: string[] = [];
+  const valores: (string | number | null)[] = [];
+  function set(columna: string, valor: string | number | null) {
+    asignaciones.push(`${columna} = ?`);
+    valores.push(valor);
+  }
+
+  for (const campo of remoto.camposCorregidos) {
+    switch (campo) {
+      case "empresa":
+        set("empresa", remoto.empresa);
+        break;
+      case "matricula":
+        set("matricula", remoto.matricula);
+        break;
+      case "ruta":
+        set("ruta", remoto.ruta);
+        break;
+      case "km_inicial":
+        set("kmInicial", remoto.kmInicial);
+        break;
+      case "km_final":
+        set("kmFinal", remoto.kmFinal);
+        break;
+      case "combustible_inicial":
+        set("combustibleInicial", remoto.combustibleInicial);
+        break;
+      case "combustible_final":
+        set("combustibleFinal", remoto.combustibleFinal);
+        break;
+      case "lat_final":
+        set("latFinal", remoto.latFinal);
+        break;
+      case "lng_final":
+        set("lngFinal", remoto.lngFinal);
+        break;
+      case "foto_tacometro_final_url":
+        set("fotoTacometroFinalUri", remoto.fotoTacometroFinalUrl);
+        set("fotoCheckOutUrl", remoto.fotoTacometroFinalUrl);
+        break;
+      case "tuvo_incidencia":
+        set("tuvoIncidencia", remoto.tuvoIncidencia == null ? null : remoto.tuvoIncidencia ? 1 : 0);
+        break;
+      case "tipo_incidencia":
+        set("tipoIncidencia", remoto.tipoIncidencia);
+        break;
+      case "detalle_incidencia":
+        set("detalleIncidencia", remoto.detalleIncidencia);
+        break;
+      case "fecha_check_out":
+        set("fechaCheckOut", remoto.fechaCheckOut);
+        break;
+      case "estado":
+        set("estado", remoto.estado);
+        break;
+      case "fotos_incidencia": {
+        const json =
+          remoto.fotosIncidencia && remoto.fotosIncidencia.length > 0
+            ? JSON.stringify(remoto.fotosIncidencia)
+            : null;
+        set("fotosIncidenciaUris", json);
+        set("fotosIncidencia", json);
+        break;
+      }
+      // Cualquier clave que no esté en este switch (no debería pasar: el trigger solo escribe
+      // las que protege) se ignora sin romper el resto de la corrección.
+    }
+  }
+
+  if (asignaciones.length === 0) return;
+  const db = await obtenerBaseDeDatos();
+  valores.push(remoto.id);
+  await db.runAsync(`UPDATE jornadas SET ${asignaciones.join(", ")} WHERE id = ?`, valores);
+}
+
+/** Estado de `sincronizacion` de cada id que exista localmente — un id ausente del `Map`
+ * devuelto significa que esa jornada no existe en este teléfono. Usado por
+ * `syncService.sincronizarCambiosDelServidor` para decidir, por cada jornada corregida que
+ * devuelve Supabase, si corresponde aplicarla (`sincronizado`), saltearla por tener cambios
+ * locales pendientes (`pendiente`/`sincronizando`/`error`, Hallazgo #27), o ignorarla por no
+ * existir acá. */
+export async function estadosSincronizacionLocal(ids: string[]): Promise<Map<string, EstadoSincronizacion>> {
+  if (ids.length === 0) return new Map();
+  const db = await obtenerBaseDeDatos();
+  const placeholders = ids.map(() => "?").join(", ");
+  const filas = await db.getAllAsync<{ id: string; sincronizacion: EstadoSincronizacion }>(
+    `SELECT id, sincronizacion FROM jornadas WHERE id IN (${placeholders})`,
+    ids
   );
+  return new Map(filas.map((f) => [f.id, f.sincronizacion]));
 }
 
 export async function obtenerJornadaPorId(id: string): Promise<Jornada | null> {
@@ -282,7 +335,7 @@ export async function obtenerJornadaPorId(id: string): Promise<Jornada | null> {
 }
 
 /** Subconjunto de `ids` que YA existen en la base local, sin importar su estado — usado por
- * syncService.recuperarJornadasAbiertas() para no duplicar una jornada abierta que Supabase
+ * syncService.sincronizarCambiosDelServidor() para no duplicar una jornada abierta que Supabase
  * devuelve pero que el teléfono ya tiene (en cualquier forma: abierta, cerrada, con cambios
  * pendientes de subir). Una sola consulta en vez de N `obtenerJornadaPorId` — la cantidad de
  * jornadas abiertas de un chofer es chica, pero no hay motivo para pagar N round-trips a SQLite
@@ -298,8 +351,9 @@ export async function idsJornadasExistentes(ids: string[]): Promise<Set<string>>
   return new Set(filas.map((f) => f.id));
 }
 
-/** Datos de una jornada abierta tal como vienen de Supabase (`syncService.recuperarJornadasAbiertas`
- * ya los trae en camelCase) — mismas columnas de check-in que `crearCheckIn`, más el `id` real
+/** Datos de una jornada abierta tal como vienen de Supabase
+ * (`syncService.sincronizarCambiosDelServidor` ya los trae en camelCase) — mismas columnas de
+ * check-in que `crearCheckIn`, más el `id` real
  * (a diferencia de un check-in nuevo, acá NO se genera uno: hay que conservar el mismo id con el
  * que esta jornada ya existe en Supabase, o dejaría de ser "la misma jornada" para cualquier cosa
  * que la busque por id — reconciliación incluida). */

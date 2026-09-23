@@ -1838,6 +1838,96 @@ barato para pagarlas.
     esto requiere el `.apk` nuevo instalado — sigue sin haber ningún chofer real onboardeado, así
     que no hay apuro que lo fuerce a saltearse esta verificación.
 
+**Hallazgo #28 — la corrección del administrador gana, y llega al teléfono (2026-09-23)**:
+`spec_correccion_gana_dashboard.md`. Hasta acá una corrección del Dashboard solo dejaba un rastro
+binario (`fue_editado`) — no decía QUÉ campo se corrigió, y nada impedía que una subida posterior
+del teléfono (el propio chofer resincronizando una jornada vieja, o un `.apk` desactualizado)
+pisara ese campo sin que nadie se enterara. Tres partes, con diseño confirmado explícitamente por
+el usuario antes de escribir código.
+
+- **Parte A — registro por campo, en `jsonb`, no en tabla aparte.** Nueva columna
+  `jornadas.campos_editados_admin jsonb not null default '{}'::jsonb` — claves = nombres reales de
+  columna, valores = ISO 8601 de cuándo se corrigió esa columna por última vez. Se descartó una
+  tabla de historial aparte a propósito: `editado_por`/`motivo_edicion` ya solo guardaban la última
+  edición, así que el jsonb no pierde nada que existiera; una tabla aparte habría sido una función
+  nueva (historial multi-versión) que nadie pidió, pagada con un subquery por fila en cada
+  `UPDATE`. Si algún día hace falta reconstruir la secuencia completa de ediciones, se migra
+  entonces. El jsonb se escribe **en la misma transacción que la corrección** — vive en el trigger
+  de la Parte C, nunca en el Route Handler a mano, así que no hay forma de que la corrección entre
+  y el jsonb no.
+- **Parte B — consolidación en un único mecanismo de descarga.** Con el registro por campo ya
+  existiendo, cerrar una jornada desde el Dashboard dejó de ser un caso aparte: es una corrección
+  de campo más (`estado`/`fecha_check_out` son dos claves más de `campos_editados_admin`).
+  `reconciliarJornadasAbiertas()` (Hallazgo #9) y `recuperarJornadasAbiertas()` (Hallazgo #26 Parte
+  B) se consolidaron en una sola `sincronizarCambiosDelServidor()` (`syncService.ts`), en dos
+  commits separados a pedido explícito (consolidación pura primero, capacidad nueva después) para
+  poder atribuir cualquier regresión a uno de los dos. La nueva Parte 1 reemplaza la vieja
+  reconciliación id-por-id por una sola consulta acotada por chofer + `editado_en > marca de
+  agua` — `editar/route.ts` pone `editado_en` en CUALQUIER escritura del Dashboard, así que esa
+  única consulta cubre el cierre remoto y cualquier otra corrección de campo a la vez, sin iterar
+  el historial completo del chofer (puede acumular cientos de jornadas).
+  - La marca de agua es **todo-o-nada por lote**: solo avanza después de aplicar todo el lote con
+    éxito; si una fila queda bloqueada (guarda del Hallazgo #26 Parte B: nunca se pisa una jornada
+    con cambios locales `pendiente`/`sincronizando`/`error`) o falla al aplicarse, la marca no
+    avanza nada — se reintenta el lote completo en la próxima corrida. Avanzarla igual habría
+    perdido esa corrección para siempre (la consulta usa `gt` estricto). Persistida con
+    `almacenamientoSeguro` (SecureStore/localStorage), no en SQLite, para sobrevivir una
+    reinstalación con el mismo chofer logueado.
+  - Los dos criterios de la vieja `sobrescribirCierreRemoto()` (#9) sobreviven, ahora heredados de
+    `aplicarCorreccionesAdmin()` en vez de reimplementados: la hora de cierre es la del servidor,
+    nunca el reloj del dispositivo, y la fila nunca queda marcada `pendiente` (si quedara, el
+    teléfono la volvería a subir y chocaría con el trigger nuevo de la Parte C).
+- **Parte C — la garantía vive en la base, con un trigger `before update`
+  (`jornadas_proteger_correcciones_admin_trigger`, `schema_v10_correccion_admin_gana.sql`).** Corre
+  aunque el `.apk` del chofer nunca haya bajado la corrección (Parte B no ejecutada, cliente
+  viejo). Distingue una escritura del Dashboard de una subida de la app con `auth.role()`
+  (`'service_role'` vs `'authenticated'` — mismo helper de Supabase que ya usaba la política de
+  storage, sin GUC ni sesión extra):
+  - Si quien escribe es `service_role` (Dashboard): por cada campo editable que cambió, anota
+    `{columna: now()}` en `campos_editados_admin` — así el propio Dashboard nunca se autobloquea al
+    corregir el mismo campo dos veces. El primer diseño ingenuo (preservar OLD para cualquier campo
+    ya marcado, sin distinguir quién escribe) congelaba el campo para siempre incluso contra el
+    administrador — no se habría descubierto hasta la segunda corrección del mismo dato, semanas
+    después.
+  - Si quien escribe es `authenticated` (la app, subiendo una jornada): por cada campo marcado en
+    `campos_editados_admin`, fuerza NEW de vuelta a OLD con `jsonb_populate_record` — la subida de
+    la app nunca pisa un campo que el administrador ya corrigió, sea cual sea el motivo de la
+    subida (check-out normal, reintento, cierre remoto simulado). El mismo criterio cubre tanto el
+    cierre desde el Dashboard (#6) como deshacer una corrección: para el trigger, las dos son "el
+    Dashboard escribió con `service_role`".
+  - `fotos_incidencia` es la única excepción a "preservar OLD": es append-only por diseño (#6, las
+    fotos del administrador se agregan sin pisar las del chofer), así que si las dos partes tocan
+    el arreglo en momentos distintos el trigger hace `unnest` + `array_agg(distinct ...)` para unir
+    ambos en vez de preservar uno solo — preservar OLD borraría las fotos que subió el chofer
+    después, dejar pasar NEW borraría las que agregó el administrador.
+  - `foto_tacometro_final_url` sí va con "preservar OLD" sin excepción — consistente con el #7, ya
+    es de escritura única.
+- **Verificación**: `npx tsc --noEmit`/`lint`/`format:check` limpios en la raíz (único sub-proyecto
+  tocado del lado app; `dashboard` también limpio). Contra Supabase real, con chofer(es) y admin de
+  prueba (borrados en los dos sistemas al terminar):
+  - Los 5 escenarios de la Parte C: doble corrección del mismo campo por el administrador no se
+    autobloquea; subida de la app con `km_inicial` desactualizado queda protegida mientras los
+    campos de check-out se aplican con normalidad; unión de `fotos_incidencia` correcta;
+    `foto_tacometro_final_url` preservado; `estado`/`fecha_check_out`/`km_final` protegidos contra
+    un cierre local en conflicto.
+  - La Query B nueva de la Parte B, corrida con la sesión real de un chofer de prueba (no
+    service_role): filtra estrictamente por chofer (una jornada de OTRO chofer editada al mismo
+    tiempo no aparece); `campos_editados_admin` trae exactamente los campos tocados por cada
+    corrección (un cierre remoto trae 4 claves, una corrección puntual de `km_final` trae solo
+    esa); avanzar la marca de agua al máximo `editado_en` del lote hace que la misma consulta deje
+    de traer esas filas; una corrección posterior a la marca de agua sí vuelve a aparecer,
+    acumulando junto a la anterior en el mismo jsonb (última corrección por campo, no un
+    historial).
+  - **No verificado desde este entorno** (requiere el dispositivo real del usuario): el
+    `Alert.alert` de `useJornadasAbiertas.ts` en pantalla, `HistorialScreen.tsx` refrescando en
+    segundo plano, y la prueba de modo avión que pide la spec (corregir desde el Dashboard con el
+    teléfono sin señal, confirmar que llega al volver la conexión) — el comportamiento de reintento
+    de la marca de agua ante un lote bloqueado está cubierto por la verificación de arriba, pero no
+    el camino de UI end-to-end en un dispositivo real.
+- **Al usuario**: el punto 11 del plan del piloto ("una jornada se corrige solo cuando está
+  cerrada") era una mitigación provisoria de este mismo bug — con el #28 resuelto ya no hace falta
+  esa restricción.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

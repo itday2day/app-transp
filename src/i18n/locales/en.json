@@ -34,6 +34,29 @@
     "mensajeSingular": "We found an open shift ({{matricula}}, {{ruta}}) this phone didn't have. You can now view and close it like any other.",
     "mensajePlural": "We found {{cantidad}} open shifts this phone didn't have. You can now view and close them like any other."
   },
+  "jornadasCorregidas": {
+    "titulo": "An admin corrected a shift",
+    "mensajeSingular": "An admin corrected {{campos}} on your shift ({{matricula}}, {{ruta}}).",
+    "mensajePlural": "An admin corrected {{cantidad}} of your shifts. Open each one's detail to see what changed."
+  },
+  "camposJornada": {
+    "empresa": "company",
+    "matricula": "license plate",
+    "ruta": "route",
+    "km_inicial": "starting mileage",
+    "km_final": "final mileage",
+    "combustible_inicial": "starting fuel",
+    "combustible_final": "final fuel",
+    "lat_final": "final location (lat.)",
+    "lng_final": "final location (long.)",
+    "foto_tacometro_final_url": "final odometer photo",
+    "tuvo_incidencia": "incident",
+    "tipo_incidencia": "incident type",
+    "detalle_incidencia": "incident detail",
+    "fecha_check_out": "check-out time",
+    "estado": "status",
+    "fotos_incidencia": "incident photos"
+  },
   "checkIn": {
     "titulo": "Start shift",
     "chofer": "Driver: {{nombre}}",

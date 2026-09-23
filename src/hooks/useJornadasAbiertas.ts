@@ -13,7 +13,7 @@ import { useNetwork } from "@/context/NetworkContext";
 export function useJornadasAbiertas() {
   const { t } = useTranslation();
   const { usuario } = useAuth();
-  const { jornadasReconciliadasEn, jornadasRecuperadas } = useNetwork();
+  const { jornadasReconciliadasEn, jornadasRecuperadas, jornadasCorregidas } = useNetwork();
   const [jornadas, setJornadas] = useState<Jornada[]>([]);
   const [cargando, setCargando] = useState(true);
 
@@ -76,6 +76,36 @@ export function useJornadasAbiertas() {
         : t("jornadasRecuperadas.mensajePlural", { cantidad: jornadasRecuperadas.length })
     );
   }, [jornadasRecuperadas, recargar, t]);
+
+  // Corrección de campo (Hallazgo #28, spec_correccion_gana_dashboard.md): mismo puente y mismo
+  // criterio de "avisar en vez de refrescar en silencio" que el efecto de `jornadasRecuperadas` de
+  // arriba — acá el chofer necesita enterarse de que algo que él mismo cargó (km, combustible,
+  // fotos…) ya no dice lo que él puso, porque un administrador lo corrigió y esa corrección gana
+  // (ver `syncService.sincronizarCambiosDelServidor`, Parte 1). `jornadasCorregidas` solo cambia
+  // de referencia cuando NetworkContext aplicó algo de verdad.
+  useEffect(() => {
+    if (jornadasCorregidas.length === 0) return;
+    void Promise.resolve().then(() => recargar());
+    if (jornadasCorregidas.length === 1) {
+      const [unica] = jornadasCorregidas;
+      const campos = unica.campos
+        .map((campo) => t(`camposJornada.${campo}`, { defaultValue: campo }))
+        .join(", ");
+      Alert.alert(
+        t("jornadasCorregidas.titulo"),
+        t("jornadasCorregidas.mensajeSingular", {
+          campos,
+          matricula: unica.matricula,
+          ruta: unica.ruta,
+        })
+      );
+    } else {
+      Alert.alert(
+        t("jornadasCorregidas.titulo"),
+        t("jornadasCorregidas.mensajePlural", { cantidad: jornadasCorregidas.length })
+      );
+    }
+  }, [jornadasCorregidas, recargar, t]);
 
   return { jornadas, cargando, recargar };
 }

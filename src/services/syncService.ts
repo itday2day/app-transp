@@ -1,9 +1,11 @@
 import { supabase } from "@/lib/supabase";
 import { subirEvidencia } from "./storageService";
+import { guardarValor, obtenerValor } from "./almacenamientoSeguro";
 import {
   obtenerPendientesSincronizacion,
-  obtenerJornadasParaReconciliar,
-  sobrescribirCierreRemoto,
+  aplicarCorreccionesAdmin,
+  estadosSincronizacionLocal,
+  JornadaCorregidaRemota,
   marcarComoSincronizado,
   marcarErrorSincronizacion,
   marcarSincronizando,
@@ -159,21 +161,32 @@ export async function sincronizarPendientes(
   return { exitosas, fallidas };
 }
 
-/** Forma de la fila que interesa de `jornadas` en Supabase para reconciliar
- * — subconjunto de columnas, tal como las devuelve supabase-js (snake_case,
- * sin transformar). */
-interface FilaJornadaRemota {
-  estado: EstadoJornada;
-  fecha_check_out: string | null;
+/** Forma de la fila que interesa de `jornadas` en Supabase para bajar correcciones del
+ * administrador (Hallazgo #28) — subconjunto de columnas más `campos_editados_admin`/`editado_en`,
+ * tal como las devuelve supabase-js (snake_case, sin transformar). `campos_editados_admin` puede
+ * venir `null` en filas nunca tocadas por el trigger (`schema_v10_correccion_admin_gana.sql` les
+ * pone default `'{}'::jsonb`, pero una fila creada por un cliente viejo antes de esa migración
+ * podría no tenerlo todavía). */
+interface FilaJornadaCorregidaRemota {
+  id: string;
+  empresa: string;
+  matricula: string;
+  ruta: string;
+  km_inicial: number;
+  km_final: number | null;
+  combustible_inicial: NivelCombustible;
+  combustible_final: NivelCombustible | null;
   lat_final: number | null;
   lng_final: number | null;
   foto_tacometro_final_url: string | null;
-  km_final: number | null;
-  combustible_final: NivelCombustible | null;
   tuvo_incidencia: boolean | null;
   tipo_incidencia: TipoIncidencia | null;
   detalle_incidencia: string | null;
   fotos_incidencia: string[] | null;
+  fecha_check_out: string | null;
+  estado: EstadoJornada;
+  campos_editados_admin: Record<string, string> | null;
+  editado_en: string | null;
 }
 
 /** Forma de la fila que interesa de `jornadas` en Supabase para recuperar una jornada abierta —
@@ -194,6 +207,37 @@ interface FilaJornadaAbiertaRemota {
   fecha_check_in: string;
 }
 
+const PREFIJO_MARCA_AGUA = "marcaAguaCorreccionesAdmin:";
+
+function claveMarcaAgua(choferId: string): string {
+  return `${PREFIJO_MARCA_AGUA}${choferId}`;
+}
+
+/** Epoch (1970) como valor por defecto — "nunca corrió esta consulta para este chofer todavía",
+ * así la primera corrida en un teléfono nuevo trae TODO lo que tenga `editado_en`, sin importar
+ * cuán viejo. Persistida con `almacenamientoSeguro` (no en SQLite): tiene que sobrevivir aunque se
+ * reinstale la app conservando el mismo chofer logueado, que es justo el escenario del
+ * Hallazgo #27 — si viviera en la misma base que se reinstala, cada reinstalación volvería a bajar
+ * el historial completo de correcciones en vez de solo las nuevas. */
+async function obtenerMarcaAgua(choferId: string): Promise<string> {
+  const guardada = await obtenerValor(claveMarcaAgua(choferId));
+  return guardada ?? new Date(0).toISOString();
+}
+
+async function guardarMarcaAgua(choferId: string, valor: string): Promise<void> {
+  await guardarValor(claveMarcaAgua(choferId), valor);
+}
+
+/** Una corrección del administrador que se terminó de aplicar en este teléfono — lo que
+ * `useJornadasAbiertas` necesita para avisarle al chofer (Hallazgo #28: a diferencia de
+ * `cerradasRemoto`, que solo refresca en silencio, esto dispara un aviso visible). */
+export interface JornadaCorregida {
+  id: string;
+  matricula: string;
+  ruta: string;
+  campos: string[];
+}
+
 /**
  * ⚠️ Consolida en una sola función (spec_correccion_gana_dashboard.md, Fase 1 punto 4) lo que
  * antes eran dos mecanismos separados con el mismo propósito de fondo ("bajar del servidor algo
@@ -202,66 +246,125 @@ interface FilaJornadaAbiertaRemota {
  * `recuperarJornadasAbiertas()` (consultaba por chofer las jornadas abiertas que el teléfono no
  * tenía — Hallazgo #27, ver ese commit para el porqué "por chofer" y no "por id"). Dos
  * implementaciones del mismo criterio fue lo que causó el Hallazgo #21; sumar un tercer camino acá
- * hubiera sido peor. Este commit es refactor puro — mismo comportamiento exacto que las dos
- * funciones que reemplaza, solo unificadas en un único punto de entrada. La spec de este commit
- * (correccion_gana_dashboard.md) extiende esta misma función en un commit aparte para bajar
- * también correcciones de campo — separado a propósito, para que una regresión se pueda atribuir a
- * uno de los dos commits, no a los dos mezclados.
+ * hubiera sido peor.
  *
- * Sigue las dos guardas que ya tenían las funciones originales, sin relajar ninguna:
- *   - Reconciliar el cierre remoto de una jornada local solo si esa jornada está
- *     `sincronizacion = 'sincronizado'` (ver `obtenerJornadasParaReconciliar`) — una con cambios
- *     locales `pendiente`/`error` se saltea sin tocar, para no arriesgarse a pisar una edición
- *     local que la app todavía no subió.
+ * La Parte 1 de abajo (antes "reconciliar cierre remoto") quedó reemplazada por completo por el
+ * mecanismo del Hallazgo #28: cerrar una jornada desde el Dashboard ya no es un caso aparte, es
+ * una corrección de campo más (`estado`/`fecha_check_out` son dos claves más de
+ * `campos_editados_admin`, ver `schema_v10_correccion_admin_gana.sql`) — mantenerla aparte hubiera
+ * sido sostener una distinción que dejó de ser real, y un tercer camino paralelo era justo lo que
+ * había que evitar. `editar/route.ts` pone `editado_en` en CUALQUIER escritura del Dashboard, así
+ * que una sola consulta acotada por `editado_en > marca de agua` (por chofer, nunca "todas las
+ * jornadas") cubre tanto el cierre remoto (Hallazgo #6/#9) como cualquier otra corrección de campo,
+ * sin iterar las jornadas locales una por una — importante porque un chofer puede acumular
+ * cientos de jornadas en su historial.
+ *
+ * Sigue las dos guardas que ya tenía el mecanismo original, sin relajar ninguna:
+ *   - Aplicar una corrección remota a una jornada local solo si esa jornada está
+ *     `sincronizacion = 'sincronizado'` (ver `estadosSincronizacionLocal`) — una con cambios
+ *     locales `pendiente`/`sincronizando`/`error` se saltea sin tocar, para no arriesgarse a pisar
+ *     una edición local que la app todavía no subió.
  *   - Recuperar (insertar) una jornada abierta remota solo si su id no existe YA en SQLite (ver
  *     `idsJornadasExistentes`) — nunca se pisa una fila local existente, se identifica "la misma
  *     jornada" por `id` (el uuid generado en el dispositivo, primary key en los dos lados).
+ *
+ * Y agrega el criterio de `sobrescribirCierreRemoto()` (Hallazgo #9), ahora heredado por
+ * `aplicarCorreccionesAdmin()` en vez de reimplementado: la hora de cierre que se guarda es la que
+ * manda Supabase, nunca el reloj del dispositivo, y la fila nunca queda marcada como pendiente de
+ * subir (`aplicarCorreccionesAdmin` no toca `sincronizacion`) — si quedara pendiente, el teléfono
+ * intentaría volver a subirla, y contra el trigger de protección eso da un lío difícil de leer.
  */
 export async function sincronizarCambiosDelServidor(
   choferId: string
-): Promise<{ recuperadas: Jornada[]; cerradasRemoto: string[] }> {
-  // Parte 1 (antes reconciliarJornadasAbiertas): candidatas locales abiertas+sincronizadas,
-  // reconsultadas por id para ver si Supabase ya las cerró (Hallazgo #6, "Corregir" desde el
-  // Dashboard con fecha de cierre).
-  const candidatasLocales = await obtenerJornadasParaReconciliar(choferId);
+): Promise<{ recuperadas: Jornada[]; cerradasRemoto: string[]; corregidas: JornadaCorregida[] }> {
+  // Parte 1 (antes reconciliarJornadasAbiertas, Hallazgo #9; extendida en Hallazgo #28 para
+  // cualquier corrección de campo, no solo el cierre). Acotada por chofer + marca de agua — nunca
+  // "todas las jornadas del chofer", que crecería sin límite con el historial.
+  const marcaAgua = await obtenerMarcaAgua(choferId);
   const cerradasRemoto: string[] = [];
+  const corregidas: JornadaCorregida[] = [];
 
-  if (candidatasLocales.length > 0) {
-    const { data, error } = await supabase
-      .from("jornadas")
-      .select(
-        "id, estado, fecha_check_out, lat_final, lng_final, foto_tacometro_final_url, km_final, combustible_final, tuvo_incidencia, tipo_incidencia, detalle_incidencia, fotos_incidencia"
-      )
-      .in(
-        "id",
-        candidatasLocales.map((j) => j.id)
-      )
-      .returns<(FilaJornadaRemota & { id: string })[]>();
+  const { data: corregidasRemoto, error: errorCorregidas } = await supabase
+    .from("jornadas")
+    .select(
+      "id, empresa, matricula, ruta, km_inicial, km_final, combustible_inicial, combustible_final, lat_final, lng_final, foto_tacometro_final_url, tuvo_incidencia, tipo_incidencia, detalle_incidencia, fotos_incidencia, fecha_check_out, estado, campos_editados_admin, editado_en"
+    )
+    .eq("chofer_id", choferId)
+    .gt("editado_en", marcaAgua)
+    .returns<FilaJornadaCorregidaRemota[]>();
 
-    if (error) {
-      console.error(
-        `sincronizarCambiosDelServidor: no se pudieron consultar las candidatas del chofer ${choferId}:`,
-        error
-      );
-    } else {
-      for (const fila of data ?? []) {
-        // Sin fila remota (se borró), o sigue abierta de verdad allá — nada que reconciliar
-        // todavía.
-        if (fila.estado !== "cerrada" || !fila.fecha_check_out) continue;
-        await sobrescribirCierreRemoto(fila.id, {
-          kmFinal: fila.km_final,
-          combustibleFinal: fila.combustible_final,
-          fotoTacometroFinalUrl: fila.foto_tacometro_final_url,
-          latFinal: fila.lat_final,
-          lngFinal: fila.lng_final,
-          fechaCheckOut: fila.fecha_check_out,
-          tuvoIncidencia: fila.tuvo_incidencia,
-          tipoIncidencia: fila.tipo_incidencia,
-          detalleIncidencia: fila.detalle_incidencia,
-          fotosIncidencia: fila.fotos_incidencia,
-        });
-        cerradasRemoto.push(fila.id);
+  if (errorCorregidas) {
+    console.error(
+      `sincronizarCambiosDelServidor: no se pudieron consultar correcciones del chofer ${choferId}:`,
+      errorCorregidas
+    );
+  } else if (corregidasRemoto && corregidasRemoto.length > 0) {
+    const estadosLocales = await estadosSincronizacionLocal(corregidasRemoto.map((fila) => fila.id));
+    // Todo-o-nada (ver doc de `obtenerMarcaAgua`): si algo queda bloqueado, la marca de agua no
+    // avanza nada en esta corrida — se reintenta el lote completo en la próxima. Avanzarla igual
+    // dejaría esa corrección perdida para siempre: la consulta usa `gt` estricto, así que una
+    // marca de agua que ya pasó ese `editado_en` nunca más lo va a volver a traer.
+    let huboBloqueo = false;
+    let maxEditadoEn = marcaAgua;
+
+    for (const fila of corregidasRemoto) {
+      if (fila.editado_en && fila.editado_en > maxEditadoEn) maxEditadoEn = fila.editado_en;
+
+      const estadoLocal = estadosLocales.get(fila.id);
+      // No existe localmente todavía: nada que corregir acá. Si sigue abierta remotamente la trae
+      // completa la Parte 2 de abajo; si está cerrada, esta jornada nunca existió en este
+      // teléfono y no hay nada que aplicarle.
+      if (!estadoLocal) continue;
+
+      // Guarda del Hallazgo #27: nunca se pisa una fila con cambios locales todavía sin subir.
+      if (estadoLocal !== "sincronizado") {
+        huboBloqueo = true;
+        continue;
       }
+
+      const campos = Object.keys(fila.campos_editados_admin ?? {});
+      // `editado_en` puede venir seteado sin `campos_editados_admin` en filas editadas antes de
+      // que corriera schema_v10 — nada que aplicar, pero tampoco es un bloqueo.
+      if (campos.length === 0) continue;
+
+      const remoto: JornadaCorregidaRemota = {
+        id: fila.id,
+        empresa: fila.empresa,
+        matricula: fila.matricula,
+        ruta: fila.ruta,
+        kmInicial: fila.km_inicial,
+        kmFinal: fila.km_final,
+        combustibleInicial: fila.combustible_inicial,
+        combustibleFinal: fila.combustible_final,
+        latFinal: fila.lat_final,
+        lngFinal: fila.lng_final,
+        fotoTacometroFinalUrl: fila.foto_tacometro_final_url,
+        tuvoIncidencia: fila.tuvo_incidencia,
+        tipoIncidencia: fila.tipo_incidencia,
+        detalleIncidencia: fila.detalle_incidencia,
+        fotosIncidencia: fila.fotos_incidencia,
+        fechaCheckOut: fila.fecha_check_out,
+        estado: fila.estado,
+        camposCorregidos: campos,
+      };
+
+      try {
+        await aplicarCorreccionesAdmin(remoto);
+      } catch (err) {
+        console.error(
+          `sincronizarCambiosDelServidor: no se pudo aplicar la corrección de la jornada ${fila.id}:`,
+          err
+        );
+        huboBloqueo = true;
+        continue;
+      }
+
+      if (campos.includes("estado") && fila.estado === "cerrada") cerradasRemoto.push(fila.id);
+      corregidas.push({ id: fila.id, matricula: fila.matricula, ruta: fila.ruta, campos });
+    }
+
+    if (!huboBloqueo && maxEditadoEn > marcaAgua) {
+      await guardarMarcaAgua(choferId, maxEditadoEn);
     }
   }
 
@@ -308,5 +411,5 @@ export async function sincronizarCambiosDelServidor(
     }
   }
 
-  return { recuperadas, cerradasRemoto };
+  return { recuperadas, cerradasRemoto, corregidas };
 }

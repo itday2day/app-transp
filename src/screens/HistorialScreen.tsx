@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, FlatList, StyleSheet, RefreshControl } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -17,7 +17,7 @@ export default function HistorialScreen() {
   const navigation = useNavigation<TabsNavigationProp<"Historial">>();
   const { t } = useTranslation();
   const { usuario } = useAuth();
-  const { sincronizarAhora } = useNetwork();
+  const { sincronizarAhora, jornadasCorregidas } = useNetwork();
   const [jornadas, setJornadas] = useState<Jornada[]>([]);
   const [cargando, setCargando] = useState(true);
 
@@ -33,6 +33,16 @@ export default function HistorialScreen() {
       cargar();
     }, [cargar])
   );
+
+  // Hallazgo #28 (spec_correccion_gana_dashboard.md): esta pantalla no escuchaba ninguna señal de
+  // NetworkContext — una jornada CERRADA que el administrador corrigió (km, combustible, fotos…)
+  // quedaba desactualizada acá hasta el próximo focus o pull-to-refresh, aunque
+  // `useJornadasAbiertas` (montado en la otra pestaña) ya la hubiera bajado y avisado. El aviso en
+  // sí lo da ese hook — acá solo hace falta refrescar la lista.
+  useEffect(() => {
+    if (jornadasCorregidas.length === 0) return;
+    void Promise.resolve().then(() => cargar());
+  }, [jornadasCorregidas, cargar]);
 
   async function refrescar() {
     setCargando(true);

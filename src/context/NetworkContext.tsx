@@ -6,6 +6,7 @@ import {
   hayJornadasPendientes,
   sincronizarPendientes,
   sincronizarCambiosDelServidor,
+  JornadaCorregida,
 } from "@/services/syncService";
 import { Jornada } from "@/types";
 
@@ -28,6 +29,14 @@ interface NetworkContextValor {
    * lo usa para avisar en pantalla, no solo para refrescar la lista — "se recuperó" es información
    * que el chofer tiene que ver, no un refresco silencioso. */
   jornadasRecuperadas: Jornada[];
+  /** Última tanda de correcciones de campo del administrador aplicadas en este teléfono
+   * (Hallazgo #28, spec_correccion_gana_dashboard.md) — incluye tanto un cierre remoto (Hallazgo
+   * #6/#9, ahora una corrección de campo más) como cualquier otro campo que el trigger de
+   * `schema_v10_correccion_admin_gana.sql` haya protegido. `[]` hasta que pase la primera vez o si
+   * nunca hay nada que corregir (el caso común). `useJornadasAbiertas()` lo usa para avisar en
+   * pantalla qué campos cambiaron, mismo criterio que `jornadasRecuperadas`: esto es información
+   * que el chofer tiene que ver, no un refresco silencioso. */
+  jornadasCorregidas: JornadaCorregida[];
 }
 
 const NetworkContext = createContext<NetworkContextValor | undefined>(undefined);
@@ -41,6 +50,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [ultimaSincronizacion, setUltimaSincronizacion] = useState<Date | null>(null);
   const [jornadasReconciliadasEn, setJornadasReconciliadasEn] = useState<Date | null>(null);
   const [jornadasRecuperadas, setJornadasRecuperadas] = useState<Jornada[]>([]);
+  const [jornadasCorregidas, setJornadasCorregidas] = useState<JornadaCorregida[]>([]);
   const sincronizandoRef = useRef(false);
 
   const sincronizarAhora = useCallback(async (forzarReintento = false) => {
@@ -81,9 +91,10 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const sincronizarDescargaSiCorresponde = useCallback(async () => {
     if (!usuario) return;
     try {
-      const { recuperadas, cerradasRemoto } = await sincronizarCambiosDelServidor(usuario.id);
+      const { recuperadas, cerradasRemoto, corregidas } = await sincronizarCambiosDelServidor(usuario.id);
       if (cerradasRemoto.length > 0) setJornadasReconciliadasEn(new Date());
       if (recuperadas.length > 0) setJornadasRecuperadas(recuperadas);
+      if (corregidas.length > 0) setJornadasCorregidas(corregidas);
     } catch (err) {
       console.error("sincronizarDescargaSiCorresponde falló:", err);
     }
@@ -125,6 +136,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
         sincronizarAhora,
         jornadasReconciliadasEn,
         jornadasRecuperadas,
+        jornadasCorregidas,
       }}
     >
       {children}
