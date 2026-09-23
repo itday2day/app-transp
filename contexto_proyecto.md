@@ -1952,16 +1952,17 @@ el usuario antes de escribir código.
 
 ## 6. Deuda técnica y pendientes conocidos
 
-- ⚠️ **`Input`/`Select` (`components/ui/`) no cumplen el piso de 44px de alto en mobile**
-  (encontrado 2026-09-22 revisando `spec_flota_vehiculos.md`, que daba esto por resuelto). El
-  Hallazgo #11 corrigió la FUENTE de los dos (`text-sm` → `text-base md:text-sm`, evita el zoom
-  automático de Safari/iOS al enfocar) pero no el ALTO, que sigue fijo en `h-9` (36px) en
-  cualquier tamaño de pantalla — a diferencia de `Button`, que sí tiene variante mobile (`h-11
-  md:h-9`). Es parejo en TODO el Dashboard (todo formulario que use estos dos componentes,
-  incluido `editar-jornada-dialog.tsx` desde antes de esta fecha), no algo nuevo de ninguna spec
-  puntual — por eso ninguna spec debería corregirlo en soledad (dejaría esa pantalla inconsistente
-  con el resto). Arreglo, si se decide hacerlo: sumar `h-11 md:h-9` a los dos componentes
-  compartidos, una vez, con el mismo criterio que ya tiene `Button`.
+- ✅ **Resuelto (2026-09-23): `Input`/`Select` (`components/ui/`) ya cumplen el piso de 44px de
+  alto en mobile.** (encontrado 2026-09-22 revisando `spec_flota_vehiculos.md`, que daba esto por
+  resuelto). El Hallazgo #11 había corregido la FUENTE de los dos (`text-sm` → `text-base
+  md:text-sm`, evita el zoom automático de Safari/iOS al enfocar) pero no el ALTO, que quedaba fijo
+  en `h-9` (36px) en cualquier tamaño de pantalla — a diferencia de `Button`, que ya tenía variante
+  mobile (`h-11 md:h-9`). Arreglo: mismo criterio que `Button`, `h-11 md:h-9` en los dos
+  componentes compartidos — como los dos son la base de TODO formulario del Dashboard (incluido
+  `editar-jornada-dialog.tsx`), corregirlos ahí alcanza para toda la app, sin tocar cada pantalla
+  por separado. `tsc`/`lint`/`format:check` limpios; no verificado en dispositivo real desde este
+  entorno (mismo método que el Hallazgo #16/#24: aritmética de clases Tailwind, sin navegador
+  disponible acá).
 - ✅ **Resuelto (2026-09-22): `Database` generado y enganchado en los dos `createClient` — chequeo de
   nombres de columna encendido en toda consulta Supabase del Dashboard.** Cerraba la deuda anotada
   arriba en esta misma sección al revisar el escape de tipos del Hallazgo #21. `npm run
