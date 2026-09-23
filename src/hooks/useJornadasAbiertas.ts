@@ -3,7 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { Alert } from "react-native";
 import { obtenerJornadasAbiertas } from "@/db/jornadasRepo";
-import { reconciliarJornadasAbiertas } from "@/services/syncService";
+import { sincronizarCambiosDelServidor } from "@/services/syncService";
 import { Jornada } from "@/types";
 import { useAuth } from "@/context/AuthContext";
 import { useNetwork } from "@/context/NetworkContext";
@@ -20,13 +20,11 @@ export function useJornadasAbiertas() {
   const recargar = useCallback(async () => {
     if (!usuario) return;
     setCargando(true);
-    // Antes de leer lo que hay en SQLite, reconcilia contra Supabase: un
-    // administrador puede haber cerrado alguna de estas jornadas desde el
-    // Dashboard sin pasar nunca por la app (Hallazgo #6, ver
-    // syncService.reconciliarJornadasAbiertas). Sin esto, una jornada
-    // cerrada remotamente seguiría viéndose "en curso" acá hasta que algo
-    // más la reconciliara primero.
-    await reconciliarJornadasAbiertas(usuario.id);
+    // Antes de leer lo que hay en SQLite, baja los cambios del servidor: un administrador puede
+    // haber cerrado alguna de estas jornadas desde el Dashboard sin pasar nunca por la app
+    // (Hallazgo #6, ver syncService.sincronizarCambiosDelServidor). Sin esto, una jornada cerrada
+    // remotamente seguiría viéndose "en curso" acá hasta que algo más la reconciliara primero.
+    await sincronizarCambiosDelServidor(usuario.id);
     const abiertas = await obtenerJornadasAbiertas(usuario.id);
     setJornadas(abiertas);
     setCargando(false);
