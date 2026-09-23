@@ -24,8 +24,15 @@
     "tabCheckIn": "Check-in",
     "tabHistorial": "History",
     "salir": "Log out",
+    "cambiarContrasena": "Password",
     "tituloDetalleJornada": "Shift details",
-    "tituloNuevoCheckIn": "New route"
+    "tituloNuevoCheckIn": "New route",
+    "tituloCambiarContrasena": "Change password"
+  },
+  "jornadasRecuperadas": {
+    "titulo": "Shift recovered",
+    "mensajeSingular": "We found an open shift ({{matricula}}, {{ruta}}) this phone didn't have. You can now view and close it like any other.",
+    "mensajePlural": "We found {{cantidad}} open shifts this phone didn't have. You can now view and close them like any other."
   },
   "checkIn": {
     "titulo": "Start shift",
@@ -189,5 +196,23 @@
     "contrasenasNoCoinciden": "Passwords don't match.",
     "botonCambiar": "Change password",
     "errorGenerico": "We couldn't change the password. Check your connection and try again."
+  },
+  "cambiarContrasena": {
+    "titulo": "Change password",
+    "subtitulo": "You'll need your current password.",
+    "avisoSinRecuperacion": "If you forget the new password, no one can give it back to you: there's nowhere to send a reset link. The only way out would be asking your administrator to reset it for you.",
+    "contrasenaActualEtiqueta": "Current password",
+    "contrasenaActualPlaceholder": "Your current password",
+    "contrasenaNuevaEtiqueta": "New password",
+    "contrasenaNuevaPlaceholder": "Minimum 6 characters",
+    "confirmarContrasenaNuevaEtiqueta": "Confirm new password",
+    "confirmarContrasenaNuevaPlaceholder": "Repeat the new password",
+    "contrasenasNoCoinciden": "The new passwords don't match.",
+    "errorContrasenaActual": "The current password is not correct.",
+    "botonCambiar": "Change password",
+    "errorGenerico": "We couldn't change the password. Check your connection and try again.",
+    "exitoTitulo": "Password updated",
+    "exitoMensaje": "Next time you sign in, use the new password.",
+    "botonVolver": "Back"
   }
 }

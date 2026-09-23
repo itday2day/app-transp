@@ -8,6 +8,9 @@ import {
   marcarErrorSincronizacion,
   marcarSincronizando,
   actualizarUrlsFotos,
+  idsJornadasExistentes,
+  insertarJornadaRecuperada,
+  JornadaAbiertaRemota,
 } from "@/db/jornadasRepo";
 import { EstadoJornada, Jornada, NivelCombustible, TipoIncidencia, UrlsFotosJornada } from "@/types";
 
@@ -243,4 +246,89 @@ export async function reconciliarJornadasAbiertas(choferId: string): Promise<str
   }
 
   return cerradas;
+}
+
+/** Forma de la fila que interesa de `jornadas` en Supabase para recuperar una jornada abierta —
+ * solo las columnas de CHECK-IN (una jornada abierta no tiene nada de check-out que traer). */
+interface FilaJornadaAbiertaRemota {
+  id: string;
+  chofer_nombre: string;
+  empresa: string;
+  matricula: string;
+  ruta: string;
+  incidencias: string | null;
+  km_inicial: number;
+  combustible_inicial: NivelCombustible;
+  foto_tacometro_inicial_url: string;
+  foto_ruta_url: string | null;
+  lat_inicial: number;
+  lng_inicial: number;
+  fecha_check_in: string;
+}
+
+/**
+ * `reconciliarJornadasAbiertas()` (arriba) reconcilia jornadas que la app YA CONOCE — recorre lo
+ * que hay en SQLite y pregunta por cada una. Si la base local está vacía (desinstalación, Android
+ * limpiando almacenamiento, teléfono nuevo — Hallazgo #5), ese recorrido no tiene nada sobre lo
+ * que iterar y devuelve `[]` sin error: funciona perfecto y no encuentra nada, que es distinto de
+ * fallar. Por eso esta función existe aparte: consulta a Supabase POR CHOFER, no por id, así
+ * encuentra jornadas abiertas que el teléfono nunca llegó a tener.
+ *
+ * Confirmado por Fase 1 de spec_deudas_app_movil.md: `subirJornada()` (arriba en este archivo)
+ * sube las fotos y hace upsert de TODOS los campos de check-in la primera vez que sincroniza,
+ * sin importar si la jornada sigue abierta o ya se cerró — no hay ningún campo de check-in que
+ * quede pendiente hasta el cierre. Una jornada que llegó a sincronizar al menos una vez antes de
+ * perderse localmente se recupera COMPLETA (fotos incluidas), no como un esqueleto. El límite
+ * real y sin arreglo posible es el anterior a eso: un check-in hecho sin señal que nunca llegó a
+ * sincronizar, en un teléfono que se limpió, no está en ningún lado — no hay nada que recuperar
+ * porque no hay nada guardado.
+ *
+ * Nunca pisa lo local: solo INSERTA jornadas cuyo id no existe todavía en SQLite (ver
+ * `idsJornadasExistentes`) — si el teléfono ya tiene una jornada abierta (la misma u otra
+ * distinta), esa se queda exactamente como está, sin tocar. Identifica "la misma jornada" por
+ * `id` (el uuid generado en el dispositivo al hacer check-in, columna primary key tanto acá como
+ * en Supabase) — no hay otro campo que sirva mejor para esto.
+ */
+export async function recuperarJornadasAbiertas(choferId: string): Promise<Jornada[]> {
+  const { data, error } = await supabase
+    .from("jornadas")
+    .select(
+      "id, chofer_nombre, empresa, matricula, ruta, incidencias, km_inicial, combustible_inicial, foto_tacometro_inicial_url, foto_ruta_url, lat_inicial, lng_inicial, fecha_check_in"
+    )
+    .eq("chofer_id", choferId)
+    .eq("estado", "abierta")
+    .returns<FilaJornadaAbiertaRemota[]>();
+
+  if (error) {
+    console.error(`recuperarJornadasAbiertas: no se pudo consultar jornadas del chofer ${choferId}:`, error);
+    return [];
+  }
+  if (!data || data.length === 0) return [];
+
+  const existentes = await idsJornadasExistentes(data.map((fila) => fila.id));
+  const faltantes = data.filter((fila) => !existentes.has(fila.id));
+  if (faltantes.length === 0) return [];
+
+  const recuperadas: Jornada[] = [];
+  for (const fila of faltantes) {
+    const remoto: JornadaAbiertaRemota = {
+      id: fila.id,
+      choferId,
+      choferNombre: fila.chofer_nombre,
+      empresa: fila.empresa,
+      matricula: fila.matricula,
+      ruta: fila.ruta,
+      incidencias: fila.incidencias,
+      kmInicial: fila.km_inicial,
+      combustibleInicial: fila.combustible_inicial,
+      fotoTacometroInicialUrl: fila.foto_tacometro_inicial_url,
+      fotoRutaUrl: fila.foto_ruta_url,
+      latInicial: fila.lat_inicial,
+      lngInicial: fila.lng_inicial,
+      fechaCheckIn: fila.fecha_check_in,
+    };
+    recuperadas.push(await insertarJornadaRecuperada(remoto));
+  }
+
+  return recuperadas;
 }

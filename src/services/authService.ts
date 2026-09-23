@@ -77,3 +77,44 @@ export async function cambiarContrasenaObligatoria(nuevaContrasena: string): Pro
     throw new ErrorApi(500, errorPerfil.message);
   }
 }
+
+// Cambio voluntario (spec_deudas_app_movil.md, Parte A) — a diferencia de
+// cambiarContrasenaObligatoria(), acá el chofer YA tiene una contraseña que él mismo eligió y
+// puede cambiarla cuando quiera, no solo la primera vez. Dos diferencias con la obligatoria:
+//
+// 1. ⚠️ Verifica la contraseña ACTUAL de verdad, no solo la pide. `updateUser()` de Supabase no
+//    la comprueba — cambia la contraseña de quien tenga sesión válida, sin preguntar nada. La
+//    verificación real es un segundo `signInWithPassword` con la contraseña que el chofer dice
+//    tener: si el servidor la acepta, es la correcta (y de paso, como efecto colateral inocuo,
+//    refresca la sesión con tokens nuevos — no hay nada que limpiar ni reautenticar después). Si
+//    la rechaza, se corta ACÁ, antes de tocar nada — el error 401 de iniciarSesion() ya significa
+//    "credenciales incorrectas" en este mismo archivo, así que se reusa el mismo status en vez de
+//    inventar uno nuevo, y CambiarContrasenaScreen lo distingue para mostrar el mensaje propio.
+// 2. NO toca `debe_cambiar_contrasena` — ya está en false (si no, la pantalla que llama a esto ni
+//    se vería, ver RootNavigator.tsx) y un cambio voluntario no es un reseteo: no tiene que volver
+//    a obligar a nada en el próximo ingreso.
+//
+// Ninguna de las dos llamadas de acá abajo cierra la sesión ni toca SQLite — confirmado leyendo
+// cerrarSesion() (arriba, este mismo archivo) y almacenamientoSeguro.ts: el logout solo borra la
+// clave `app_transp_usuario` de SecureStore, nunca la base de jornadas. `updateUser()` tampoco
+// invalida el token vigente. Es la pieza más importante de esta spec: si esto disparara un logout
+// y el logout limpiara SQLite, un chofer con una jornada abierta sin sincronizar la perdería por
+// hacer lo correcto.
+export async function cambiarContrasenaVoluntaria(
+  numeroEmpleado: string,
+  contrasenaActual: string,
+  contrasenaNueva: string
+): Promise<void> {
+  const { error: errorReauth } = await supabase.auth.signInWithPassword({
+    email: numeroEmpleadoAEmail(numeroEmpleado),
+    password: contrasenaActual,
+  });
+  if (errorReauth) {
+    throw new ErrorApi(401, "La contraseña actual no es correcta.");
+  }
+
+  const { error } = await supabase.auth.updateUser({ password: contrasenaNueva });
+  if (error) {
+    throw new ErrorApi(500, error.message);
+  }
+}

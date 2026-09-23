@@ -6,7 +6,9 @@ import {
   hayJornadasPendientes,
   sincronizarPendientes,
   reconciliarJornadasAbiertas,
+  recuperarJornadasAbiertas,
 } from "@/services/syncService";
+import { Jornada } from "@/types";
 
 interface NetworkContextValor {
   conectado: boolean;
@@ -19,6 +21,13 @@ interface NetworkContextValor {
    * lista aunque `CheckInScreen` no tenga el foco en ese momento (bottom-tabs
    * no la desmonta al cambiar de pestaña, así que sigue reaccionando igual). */
   jornadasReconciliadasEn: Date | null;
+  /** Última tanda de jornadas recuperadas desde Supabase (ver
+   * recuperarJornadasAbiertas, spec_deudas_app_movil.md) — jornadas abiertas que existían en el
+   * servidor pero no en este teléfono (desinstalación, Android limpiando almacenamiento). `[]`
+   * hasta que pase la primera vez o si nunca hay nada que recuperar (el caso común).
+   * `useJornadasAbiertas()` lo usa para avisar en pantalla, no solo para refrescar la lista —
+   * "se recuperó" es información que el chofer tiene que ver, no un refresco silencioso. */
+  jornadasRecuperadas: Jornada[];
 }
 
 const NetworkContext = createContext<NetworkContextValor | undefined>(undefined);
@@ -31,6 +40,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [sincronizando, setSincronizando] = useState(false);
   const [ultimaSincronizacion, setUltimaSincronizacion] = useState<Date | null>(null);
   const [jornadasReconciliadasEn, setJornadasReconciliadasEn] = useState<Date | null>(null);
+  const [jornadasRecuperadas, setJornadasRecuperadas] = useState<Jornada[]>([]);
   const sincronizandoRef = useRef(false);
 
   const sincronizarAhora = useCallback(async (forzarReintento = false) => {
@@ -78,6 +88,22 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [usuario]);
 
+  // Recuperación: trae de Supabase las jornadas abiertas de este chofer que el teléfono no
+  // tiene (spec_deudas_app_movil.md, Hallazgo #5) — a diferencia de reconciliarSiCorresponde
+  // (que recorre lo que YA hay en local), esto consulta por chofer, así que encuentra lo que el
+  // teléfono nunca llegó a conocer. Mismo ciclo de revisión que las otras dos: si no hay señal
+  // cuando el chofer recién entra, se reintenta solo en la próxima corrida (cada 15s o al volver
+  // a foreground) sin que nadie tenga que pedirlo de nuevo a mano.
+  const recuperarSiCorresponde = useCallback(async () => {
+    if (!usuario) return;
+    try {
+      const recuperadas = await recuperarJornadasAbiertas(usuario.id);
+      if (recuperadas.length > 0) setJornadasRecuperadas(recuperadas);
+    } catch (err) {
+      console.error("recuperarSiCorresponde falló:", err);
+    }
+  }, [usuario]);
+
   useEffect(() => {
     let activo = true;
 
@@ -89,6 +115,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
       if (haySenal) {
         sincronizarAhora();
         reconciliarSiCorresponde();
+        recuperarSiCorresponde();
       }
     }
 
@@ -103,7 +130,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
       clearInterval(intervalo);
       suscripcion.remove();
     };
-  }, [sincronizarAhora, reconciliarSiCorresponde]);
+  }, [sincronizarAhora, reconciliarSiCorresponde, recuperarSiCorresponde]);
 
   return (
     <NetworkContext.Provider
@@ -113,6 +140,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
         ultimaSincronizacion,
         sincronizarAhora,
         jornadasReconciliadasEn,
+        jornadasRecuperadas,
       }}
     >
       {children}

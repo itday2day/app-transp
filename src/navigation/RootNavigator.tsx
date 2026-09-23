@@ -1,7 +1,7 @@
 import React from "react";
-import { Pressable, Text, StyleSheet } from "react-native";
+import { Pressable, Text, View, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, useNavigation } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,11 +10,12 @@ import { ClaveTraduccion } from "@/i18n";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
-import { RootStackParamList, TabsParamList } from "./types";
+import { RootStackNavigationProp, RootStackParamList, TabsParamList } from "./types";
 
 import LoginScreen from "@/screens/LoginScreen";
 import RegistroScreen from "@/screens/RegistroScreen";
 import CambiarContrasenaObligatorioScreen from "@/screens/CambiarContrasenaObligatorioScreen";
+import CambiarContrasenaScreen from "@/screens/CambiarContrasenaScreen";
 import CheckInScreen from "@/screens/CheckInScreen";
 import HistorialScreen from "@/screens/HistorialScreen";
 import DetalleJornadaScreen from "@/screens/DetalleJornadaScreen";
@@ -36,6 +37,10 @@ const CLAVE_TITULO_TAB: Record<keyof TabsParamList, ClaveTraduccion> = {
 function PrincipalTabs() {
   const { cerrarSesion } = useAuth();
   const { t } = useTranslation();
+  // Este componente es el que registra <Stack.Screen name="Principal" .../> más abajo, así que
+  // useNavigation() acá devuelve el navigator del STACK raíz (no el de cada tab por separado) —
+  // permite navegar a "CambiarContrasena", que vive en el stack, no en los tabs.
+  const navigation = useNavigation<RootStackNavigationProp>();
 
   // ⚠️ Sin `tabBarStyle` a propósito: `BottomTabBar` (@react-navigation/bottom-tabs)
   // ya suma `insets.bottom` a su propio paddingBottom por defecto (confirmado
@@ -54,10 +59,18 @@ function PrincipalTabs() {
         ),
         tabBarActiveTintColor: colores.primario,
         tabBarInactiveTintColor: colores.textoSecundario,
+        // "Contraseña" al lado de "Salir" (spec_deudas_app_movil.md): la app se usa con una
+        // mano y en movimiento, así que la opción de cambiarla va lejos de los botones que se
+        // tocan todos los días (Check-in, Historial), pegada a la de cerrar sesión.
         headerRight: () => (
-          <Pressable onPress={cerrarSesion} style={estilos.botonSalir}>
-            <Text style={estilos.textoSalir}>{t("navegacion.salir")}</Text>
-          </Pressable>
+          <View style={estilos.filaHeader}>
+            <Pressable onPress={() => navigation.navigate("CambiarContrasena")} style={estilos.botonSalir}>
+              <Text style={estilos.textoSalir}>{t("navegacion.cambiarContrasena")}</Text>
+            </Pressable>
+            <Pressable onPress={cerrarSesion} style={estilos.botonSalir}>
+              <Text style={estilos.textoSalir}>{t("navegacion.salir")}</Text>
+            </Pressable>
+          </View>
         ),
       })}
     >
@@ -95,6 +108,11 @@ export function RootNavigator() {
               component={NuevoCheckInScreen}
               options={{ headerShown: true, title: t("navegacion.tituloNuevoCheckIn") }}
             />
+            <Stack.Screen
+              name="CambiarContrasena"
+              component={CambiarContrasenaScreen}
+              options={{ headerShown: true, title: t("navegacion.tituloCambiarContrasena") }}
+            />
           </>
         ) : (
           <>
@@ -112,6 +130,10 @@ export function RootNavigator() {
 }
 
 const estilos = StyleSheet.create({
+  filaHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   botonSalir: {
     paddingVertical: espaciado.xs,
     marginRight: espaciado.md,

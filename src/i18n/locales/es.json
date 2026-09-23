@@ -24,8 +24,15 @@
     "tabCheckIn": "Check-in",
     "tabHistorial": "Historial",
     "salir": "Salir",
+    "cambiarContrasena": "Contraseña",
     "tituloDetalleJornada": "Detalle de jornada",
-    "tituloNuevoCheckIn": "Nueva ruta"
+    "tituloNuevoCheckIn": "Nueva ruta",
+    "tituloCambiarContrasena": "Cambiar contraseña"
+  },
+  "jornadasRecuperadas": {
+    "titulo": "Jornada recuperada",
+    "mensajeSingular": "Encontramos una jornada abierta ({{matricula}}, {{ruta}}) que este teléfono no tenía. Ya la podés ver y cerrar como cualquier otra.",
+    "mensajePlural": "Encontramos {{cantidad}} jornadas abiertas que este teléfono no tenía. Ya las podés ver y cerrar como cualquier otra."
   },
   "checkIn": {
     "titulo": "Inicio de jornada",
@@ -189,5 +196,23 @@
     "contrasenasNoCoinciden": "Las contraseñas no coinciden.",
     "botonCambiar": "Cambiar contraseña",
     "errorGenerico": "No pudimos cambiar la contraseña. Verifica tu conexión e intenta de nuevo."
+  },
+  "cambiarContrasena": {
+    "titulo": "Cambiar contraseña",
+    "subtitulo": "Vas a necesitar tu contraseña actual.",
+    "avisoSinRecuperacion": "Si olvidás la contraseña nueva, nadie puede devolvértela: no hay a dónde mandar un enlace. La única salida sería pedirle a tu administrador que te la resetee.",
+    "contrasenaActualEtiqueta": "Contraseña actual",
+    "contrasenaActualPlaceholder": "Tu contraseña actual",
+    "contrasenaNuevaEtiqueta": "Contraseña nueva",
+    "contrasenaNuevaPlaceholder": "Mínimo 6 caracteres",
+    "confirmarContrasenaNuevaEtiqueta": "Confirmar contraseña nueva",
+    "confirmarContrasenaNuevaPlaceholder": "Repite la contraseña nueva",
+    "contrasenasNoCoinciden": "Las contraseñas nuevas no coinciden.",
+    "errorContrasenaActual": "La contraseña actual no es correcta.",
+    "botonCambiar": "Cambiar contraseña",
+    "errorGenerico": "No pudimos cambiar la contraseña. Verifica tu conexión e intenta de nuevo.",
+    "exitoTitulo": "Contraseña actualizada",
+    "exitoMensaje": "La próxima vez que inicies sesión, usá la contraseña nueva.",
+    "botonVolver": "Volver"
   }
 }

@@ -281,6 +281,115 @@ export async function obtenerJornadaPorId(id: string): Promise<Jornada | null> {
   return fila ? filaAJornada(fila) : null;
 }
 
+/** Subconjunto de `ids` que YA existen en la base local, sin importar su estado — usado por
+ * syncService.recuperarJornadasAbiertas() para no duplicar una jornada abierta que Supabase
+ * devuelve pero que el teléfono ya tiene (en cualquier forma: abierta, cerrada, con cambios
+ * pendientes de subir). Una sola consulta en vez de N `obtenerJornadaPorId` — la cantidad de
+ * jornadas abiertas de un chofer es chica, pero no hay motivo para pagar N round-trips a SQLite
+ * pudiendo pagar uno. */
+export async function idsJornadasExistentes(ids: string[]): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const db = await obtenerBaseDeDatos();
+  const placeholders = ids.map(() => "?").join(", ");
+  const filas = await db.getAllAsync<{ id: string }>(
+    `SELECT id FROM jornadas WHERE id IN (${placeholders})`,
+    ids
+  );
+  return new Set(filas.map((f) => f.id));
+}
+
+/** Datos de una jornada abierta tal como vienen de Supabase (`syncService.recuperarJornadasAbiertas`
+ * ya los trae en camelCase) — mismas columnas de check-in que `crearCheckIn`, más el `id` real
+ * (a diferencia de un check-in nuevo, acá NO se genera uno: hay que conservar el mismo id con el
+ * que esta jornada ya existe en Supabase, o dejaría de ser "la misma jornada" para cualquier cosa
+ * que la busque por id — reconciliación incluida). */
+export interface JornadaAbiertaRemota {
+  id: string;
+  choferId: string;
+  choferNombre: string;
+  empresa: string;
+  matricula: string;
+  ruta: string;
+  incidencias: string | null;
+  kmInicial: number;
+  combustibleInicial: NivelCombustible;
+  fotoTacometroInicialUrl: string;
+  fotoRutaUrl: string | null;
+  latInicial: number;
+  lngInicial: number;
+  fechaCheckIn: string;
+}
+
+/**
+ * Inserta localmente una jornada abierta que existe en Supabase pero no en este teléfono — el
+ * caso del Hallazgo #5 (desinstalación, teléfono nuevo, Android limpiando almacenamiento).
+ *
+ * `fotoTacometroInicialUri`/`fotoRutaUri` (las columnas que la pantalla de check-out y
+ * `DetalleJornadaScreen` leen para MOSTRAR la foto) se completan con la URL remota en vez de un
+ * archivo local — mismo criterio ya establecido por `sobrescribirCierreRemoto` más abajo/arriba
+ * en este archivo para el lado del check-out: a `<Image source={{uri}}>` le da igual si `uri` es
+ * un archivo local o una URL de Supabase Storage. `fotoCheckInUrl`/`fotoRutaUrl` se completan con
+ * lo mismo, marcando esas fotos como "ya subidas" para que syncService no intente resubirlas.
+ * `sincronizacion = 'sincronizado'` por el mismo motivo — este registro nació ya sincronizado,
+ * literalmente es una copia de lo que hay en el servidor.
+ */
+export async function insertarJornadaRecuperada(remoto: JornadaAbiertaRemota): Promise<Jornada> {
+  const db = await obtenerBaseDeDatos();
+  const jornada: Jornada = {
+    id: remoto.id,
+    choferId: remoto.choferId,
+    choferNombre: remoto.choferNombre,
+    empresa: remoto.empresa,
+    matricula: remoto.matricula,
+    ruta: remoto.ruta,
+    incidencias: remoto.incidencias ?? undefined,
+    kmInicial: remoto.kmInicial,
+    combustibleInicial: remoto.combustibleInicial,
+    fotoTacometroInicialUri: remoto.fotoTacometroInicialUrl,
+    fotoRutaUri: remoto.fotoRutaUrl ?? undefined,
+    latInicial: remoto.latInicial,
+    lngInicial: remoto.lngInicial,
+    fechaCheckIn: remoto.fechaCheckIn,
+    fotoCheckInUrl: remoto.fotoTacometroInicialUrl,
+    fotoRutaUrl: remoto.fotoRutaUrl ?? undefined,
+    estado: "abierta",
+    sincronizacion: "sincronizado",
+    intentosSincronizacion: 0,
+  };
+
+  await db.runAsync(
+    `INSERT INTO jornadas (
+      id, choferId, choferNombre, empresa, matricula, ruta, incidencias, kmInicial, combustibleInicial,
+      fotoTacometroInicialUri, fotoRutaUri, latInicial, lngInicial, fechaCheckIn,
+      fotoCheckInUrl, fotoRutaUrl,
+      estado, sincronizacion, intentosSincronizacion
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      jornada.id,
+      jornada.choferId,
+      jornada.choferNombre,
+      jornada.empresa,
+      jornada.matricula,
+      jornada.ruta,
+      jornada.incidencias || null,
+      jornada.kmInicial,
+      jornada.combustibleInicial,
+      jornada.fotoTacometroInicialUri,
+      jornada.fotoRutaUri || "",
+      jornada.latInicial,
+      jornada.lngInicial,
+      jornada.fechaCheckIn,
+      jornada.fotoCheckInUrl ?? null,
+      jornada.fotoRutaUrl ?? null,
+      jornada.estado,
+      jornada.sincronizacion,
+      jornada.intentosSincronizacion,
+    ]
+  );
+
+  return jornada;
+}
+
 export async function obtenerMatriculasFrecuentes(choferId: string, limite = 8): Promise<string[]> {
   const db = await obtenerBaseDeDatos();
   const filas = await db.getAllAsync<{ matricula: string }>(

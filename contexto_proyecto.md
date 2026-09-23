@@ -1747,6 +1747,97 @@ huella).
     instalado (Hallazgo #5) para llegar a un dispositivo real — **no se debe dar de alta ningún
     chofer real hasta que ese `.apk` esté instalado**, tal como pedía la spec.
 
+**Hallazgo #26 — el chofer puede cambiar su contraseña por sí mismo, y una jornada abierta que
+está en Supabase pero no en el teléfono se recupera sola al entrar (2026-09-23)**:
+`spec_deudas_app_movil.md`. Cierra el punto que el Hallazgo #25 había dejado fuera de alcance
+(cambio voluntario) y la deuda del #5 (jornada huérfana tras perder la base local). Las dos partes
+entran en el mismo `.apk` — no hay ningún chofer onboardeado todavía, así que es el momento más
+barato para pagarlas.
+
+- **Parte A — cambio voluntario**. `cambiarContrasenaVoluntaria()` (`authService.ts`), nueva
+  pantalla `CambiarContrasenaScreen.tsx`, entrada en el header junto a "Salir" (no en el camino de
+  Check-in/Historial).
+  - ⚠️ **La contraseña actual se verifica de verdad, no solo se pide**: `updateUser()` de Supabase
+    no la comprueba — cambia la contraseña de quien tenga sesión válida, sin preguntar nada. La
+    verificación real es un segundo `signInWithPassword()` con la contraseña que el chofer dice
+    tener; si el servidor la rechaza, se corta ahí, antes de tocar nada. Confirmado contra la base
+    real: una contraseña actual incorrecta se rechaza SIN afectar la contraseña real (que sigue
+    funcionando después del intento fallido); la correcta permite el cambio, la vieja deja de
+    servir y la nueva funciona.
+  - ⚠️ **Diagnóstico que decidía el diseño entero (Fase 1, confirmado leyendo el código): el
+    logout NO toca la base local.** `cerrarSesion()` (`authService.ts`) solo llama a
+    `supabase.auth.signOut()`; `AuthContext.cerrarSesion()` además borra la clave
+    `app_transp_usuario` de `SecureStore` — ninguno de los dos toca SQLite
+    (`jornadasRepo.ts`/`database.ts`). Y ninguna de las dos funciones de cambio de contraseña
+    (obligatoria del #25, voluntaria de acá) llama a `signOut()` ni invalida la sesión — el token
+    vigente sigue sirviendo después de `updateUser()`. Con esto confirmado, cambiar la contraseña
+    con una jornada abierta sin sincronizar no pone en riesgo esa jornada — no porque se haya
+    blindado nada nuevo, sino porque el mecanismo que podía arriesgarla (logout limpiando SQLite)
+    no existe.
+  - `debe_cambiar_contrasena` no se toca en el cambio voluntario (ya está en `false`, si no esta
+    pantalla ni se vería — la obligatoria del #25 manda mientras esté en `true`) — un cambio por
+    voluntad propia no es un reseteo, no debe volver a exigir nada.
+  - Mismas reglas de contraseña que el cambio obligatorio del #25 (mínimo 6 caracteres, sin
+    inventar una segunda regla) — un aviso explícito, antes de confirmar (no después), dice que si
+    el chofer olvida la contraseña nueva nadie puede devolvérsela: el correo es sintético, la
+    única salida es un reseteo desde el Dashboard.
+- **Parte B — recuperación automática de una jornada abierta**. Nueva función
+  `recuperarJornadasAbiertas()` (`syncService.ts`), enganchada al mismo ciclo de revisión de 15s
+  que ya tenía `NetworkContext.tsx` (junto a la sincronización y la reconciliación del #9) —
+  automática, no a pedido: un chofer apurado no confirmaría un cartel, y el costo de ese "no" es
+  una jornada que ya no se puede cerrar nunca.
+  - ⚠️ **Por qué el mecanismo del #9 (`reconciliarJornadasAbiertas`) no cubría esto — confirmado
+    leyendo el código, no asumido**: ese mecanismo recorre `obtenerJornadasParaReconciliar()`, que
+    lee de SQLite LOCAL y pregunta por cada una a Supabase — si la base local está vacía
+    (desinstalación, Android limpiando almacenamiento, teléfono nuevo), no hay nada sobre lo que
+    iterar y devuelve `[]` sin error: funciona perfecto y no encuentra nada, que es distinto de
+    fallar. `recuperarJornadasAbiertas()` es la contraparte que faltaba: consulta a Supabase **por
+    chofer** (`eq("chofer_id", ...)`), no por id — así encuentra jornadas que el teléfono nunca
+    llegó a conocer.
+  - ⚠️ **La recuperación resultó ser COMPLETA, no parcial — corrigiendo la propia hipótesis de la
+    spec, confirmado leyendo `subirJornada()` (`syncService.ts`), no asumido.** La spec sospechaba
+    que las fotos del check-in podían no viajar hasta el cierre. No es así: `subirJornada()` sube
+    y hace upsert de TODOS los campos de check-in (fotos incluidas) la PRIMERA vez que sincroniza,
+    sin importar si la jornada sigue abierta o ya se cerró — solo los campos de CIERRE están
+    condicionados a `estado === "cerrada"`. Una jornada que llegó a sincronizar al menos una vez
+    antes de perderse localmente se recupera completa. Verificado contra Supabase real: una
+    jornada de prueba insertada como "ya sincronizada" trajo `foto_tacometro_inicial_url` (y
+    `foto_ruta_url`, cuando existía) ya poblada en la consulta de recuperación — no hizo falta
+    ninguna decisión de negocio sobre "cerrar sin evidencia" porque la evidencia sí está. El límite
+    real, sin arreglo posible, es el anterior: un check-in hecho sin señal que nunca llegó a
+    sincronizar, en un teléfono que se limpió, no está en ningún lado.
+  - **Un chofer puede tener varias jornadas abiertas en paralelo** (ya documentado en el código
+    existente, `obtenerJornadasAbiertas()` — "Tarea 6") — confirmado con la consulta real trayendo
+    2 jornadas abiertas simultáneas del mismo chofer de prueba. La identificación de "misma
+    jornada" para no duplicar es por `id` (el uuid generado en el dispositivo al hacer check-in,
+    primary key en los dos lados) — nunca se pisa una jornada local existente: solo se INSERTAN
+    las que Supabase tiene y SQLite no, nunca se actualiza una que ya está.
+  - `insertarJornadaRecuperada()` (`jornadasRepo.ts`) completa `fotoTacometroInicialUri`/
+    `fotoRutaUri` (NOT NULL en el esquema local) con la URL remota — mismo criterio que ya
+    establecía `sobrescribirCierreRemoto()` para el lado del check-out: a
+    `<Image source={{uri}}>` le da igual si `uri` es un archivo local o una URL de Supabase
+    Storage. `sincronizacion = 'sincronizado'` de entrada, para que el ciclo de subida no intente
+    resubir lo que ya nació sincronizado.
+  - El aviso en pantalla (`Alert.alert`, sin sumar ninguna librería) lo dispara
+    `useJornadasAbiertas.ts` al detectar una tanda nueva recuperada — reusa el mismo puente que ya
+    tenía para la reconciliación del #9, agregando el aviso que la reconciliación no necesita (esa
+    corrige algo que el chofer no tiene por qué notar; esto es una jornada entera que reapareció).
+- **Verificación**: `npx tsc --noEmit`/`lint`/`format:check` limpios en la raíz (único
+  sub-proyecto tocado). Contra Supabase real, con un chofer de prueba (borrado en los dos sistemas
+  al terminar): el ciclo completo de la Parte A (contraseña incorrecta rechazada sin efecto
+  secundario, cambio correcto, vieja rechazada, nueva funciona, `debe_cambiar_contrasena` se
+  mantiene en `false`); la consulta exacta de recuperación de la Parte B contra 2 jornadas
+  abiertas de prueba insertadas directo en Supabase, trayendo las 2 con las fotos de check-in ya
+  pobladas.
+  - **No verificado desde este entorno** (sin dispositivo disponible): la UI real de las dos
+    pantallas nuevas, `idsJornadasExistentes()`/`insertarJornadaRecuperada()` corriendo contra
+    SQLite real (expo-sqlite es un módulo nativo, no ejecutable en un proceso Node de este
+    entorno), el `Alert.alert` disparando en pantalla, y sobre todo **la prueba que define la
+    Parte B y que la spec pide explícitamente no saltear**: desinstalar la app con una jornada
+    sincronizada, reinstalar, entrar, y confirmar que la jornada aparece y se puede cerrar. Todo
+    esto requiere el `.apk` nuevo instalado — sigue sin haber ningún chofer real onboardeado, así
+    que no hay apuro que lo fuerce a saltearse esta verificación.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

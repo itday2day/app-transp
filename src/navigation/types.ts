@@ -9,6 +9,7 @@ export type RootStackParamList = {
   Principal: undefined;
   DetalleJornada: { id: string };
   NuevoCheckIn: undefined;
+  CambiarContrasena: undefined;
 };
 
 export type TabsParamList = {
