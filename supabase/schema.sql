@@ -100,6 +100,10 @@ create table public.jornadas (
   editado_por text,
   editado_en timestamptz,
   motivo_edicion text,
+  -- Qué campos tocó la ÚLTIMA corrección del administrador, y cuándo — lo escribe el trigger
+  -- jornadas_proteger_correcciones_admin_trigger más abajo, nunca un Route Handler a mano (ver
+  -- ese trigger para el razonamiento completo: Hallazgo #28, spec_correccion_gana_dashboard.md).
+  campos_editados_admin jsonb not null default '{}'::jsonb,
 
   estado text not null default 'abierta' check (estado in ('abierta', 'cerrada')),
   created_at timestamptz not null default now()
@@ -108,6 +112,71 @@ create table public.jornadas (
 create index jornadas_chofer_id_idx on public.jornadas (chofer_id);
 create index jornadas_estado_idx on public.jornadas (estado);
 create index jornadas_fecha_check_in_idx on public.jornadas (fecha_check_in desc);
+
+-- Protege campo por campo una corrección del administrador contra una subida ciega de la app —
+-- ver el razonamiento completo (por qué jsonb, por qué auth.role(), por qué fotos_incidencia es
+-- la excepción) en supabase/schema_v10_correccion_admin_gana.sql, que aplica esto mismo contra la
+-- base real.
+create or replace function public.jornadas_proteger_correcciones_admin()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  campos_editables constant text[] := array[
+    'empresa', 'matricula', 'ruta', 'km_inicial', 'km_final',
+    'combustible_inicial', 'combustible_final', 'lat_final', 'lng_final',
+    'foto_tacometro_final_url', 'tuvo_incidencia', 'tipo_incidencia', 'detalle_incidencia',
+    'fecha_check_out', 'estado'
+  ];
+  campo text;
+  overrides jsonb := '{}'::jsonb;
+begin
+  if auth.role() = 'service_role' then
+    foreach campo in array campos_editables loop
+      if (to_jsonb(NEW) -> campo) is distinct from (to_jsonb(OLD) -> campo) then
+        NEW.campos_editados_admin :=
+          coalesce(NEW.campos_editados_admin, OLD.campos_editados_admin, '{}'::jsonb)
+          || jsonb_build_object(campo, to_jsonb(now()));
+      end if;
+    end loop;
+    if NEW.fotos_incidencia is distinct from OLD.fotos_incidencia then
+      NEW.campos_editados_admin :=
+        coalesce(NEW.campos_editados_admin, OLD.campos_editados_admin, '{}'::jsonb)
+        || jsonb_build_object('fotos_incidencia', to_jsonb(now()));
+    end if;
+  else
+    if OLD.campos_editados_admin is not null and OLD.campos_editados_admin <> '{}'::jsonb then
+      foreach campo in array campos_editables loop
+        if OLD.campos_editados_admin ? campo then
+          overrides := overrides || jsonb_build_object(campo, to_jsonb(OLD) -> campo);
+        end if;
+      end loop;
+      if overrides <> '{}'::jsonb then
+        NEW := jsonb_populate_record(NEW, overrides);
+      end if;
+
+      if OLD.campos_editados_admin ? 'fotos_incidencia' then
+        NEW.fotos_incidencia := (
+          select array_agg(distinct foto)
+          from unnest(
+            coalesce(OLD.fotos_incidencia, array[]::text[])
+              || coalesce(NEW.fotos_incidencia, array[]::text[])
+          ) as foto
+        );
+      end if;
+    end if;
+  end if;
+  return NEW;
+end;
+$$;
+
+drop trigger if exists jornadas_proteger_correcciones_admin_trigger on public.jornadas;
+create trigger jornadas_proteger_correcciones_admin_trigger
+  before update on public.jornadas
+  for each row
+  execute function public.jornadas_proteger_correcciones_admin();
 
 -- ============================================================
 -- VEHICULOS (flota)

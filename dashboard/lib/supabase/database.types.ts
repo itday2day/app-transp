@@ -82,6 +82,7 @@ export type Database = {
       };
       jornadas: {
         Row: {
+          campos_editados_admin: Json;
           chofer_id: string;
           chofer_nombre: string;
           combustible_final: number | null;
@@ -114,6 +115,7 @@ export type Database = {
           tuvo_incidencia: boolean | null;
         };
         Insert: {
+          campos_editados_admin?: Json;
           chofer_id: string;
           chofer_nombre: string;
           combustible_final?: number | null;
@@ -146,6 +148,7 @@ export type Database = {
           tuvo_incidencia?: boolean | null;
         };
         Update: {
+          campos_editados_admin?: Json;
           chofer_id?: string;
           chofer_nombre?: string;
           combustible_final?: number | null;

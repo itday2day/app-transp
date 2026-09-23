@@ -47,6 +47,11 @@ export interface JornadaRow {
   editado_por: string | null;
   editado_en: string | null;
   motivo_edicion: string | null;
+  /** Qué campos tocó la ÚLTIMA corrección del administrador y cuándo — lo escribe el trigger
+   * `jornadas_proteger_correcciones_admin_trigger` (Hallazgo #28,
+   * `supabase/schema_v10_correccion_admin_gana.sql`), nunca este Route Handler a mano. Claves =
+   * nombres de columna reales (snake_case); valores = ISO 8601 de cuándo se corrigió esa columna. */
+  campos_editados_admin: Record<string, string>;
 }
 
 /** Fila cruda de la vista public.ultimas_posiciones. */

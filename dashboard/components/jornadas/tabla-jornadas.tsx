@@ -24,6 +24,34 @@ const COLUMNAS = [
   "",
 ];
 
+// Etiquetas legibles para las claves de `campos_editados_admin` (nombres de columna reales,
+// snake_case) — Hallazgo #28. Mismo conjunto de columnas que protege el trigger en
+// supabase/schema_v10_correccion_admin_gana.sql; si ese arreglo cambia, este mapa también.
+const ETIQUETAS_CAMPOS_EDITADOS: Record<string, string> = {
+  empresa: "Empresa",
+  matricula: "Matrícula",
+  ruta: "Ruta",
+  km_inicial: "Km inicial",
+  km_final: "Km final",
+  combustible_inicial: "Combustible inicial",
+  combustible_final: "Combustible final",
+  lat_final: "Ubicación final (lat.)",
+  lng_final: "Ubicación final (long.)",
+  foto_tacometro_final_url: "Foto de tacómetro final",
+  tuvo_incidencia: "Incidencia",
+  tipo_incidencia: "Tipo de incidencia",
+  detalle_incidencia: "Detalle de incidencia",
+  fecha_check_out: "Hora de check-out",
+  estado: "Estado",
+  fotos_incidencia: "Fotos de incidencia",
+};
+
+function camposCorregidosLegibles(campos: Record<string, string>): string {
+  const claves = Object.keys(campos);
+  if (claves.length === 0) return "—";
+  return claves.map((clave) => ETIQUETAS_CAMPOS_EDITADOS[clave] ?? clave).join(", ");
+}
+
 function TarjetaJornada({
   jornada,
   cargando,
@@ -152,6 +180,10 @@ export function TablaJornadas({ jornadas, cargando, onSeleccionar }: TablaJornad
                           <p>
                             <span className="font-semibold">Motivo:</span>{" "}
                             {jornada.motivo_edicion ?? "—"}
+                          </p>
+                          <p>
+                            <span className="font-semibold">Campos corregidos:</span>{" "}
+                            {camposCorregidosLegibles(jornada.campos_editados_admin)}
                           </p>
                         </div>
                       }
