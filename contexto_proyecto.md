@@ -1927,6 +1927,102 @@ el usuario antes de escribir código.
 - **Al usuario**: el punto 11 del plan del piloto ("una jornada se corrige solo cuando está
   cerrada") era una mitigación provisoria de este mismo bug — con el #28 resuelto ya no hace falta
   esa restricción.
+- **Bugs encontrados recién al probar en un dispositivo real, no por lectura de código ni por los
+  18 escenarios contra Supabase directo** (esos escenarios corrían desde Node, nunca pasaban por
+  SQLite, SecureStore ni una subida real de un teléfono):
+  - ⚠️ **La marca de agua nunca se leía.** La clave de `SecureStore` usaba `:` como separador
+    (`marcaAguaCorreccionesAdmin:${choferId}`) — SecureStore exige que la clave completa sea
+    alfanumérica + `.`/`-`/`_`, así que `obtenerMarcaAgua()` tiraba "Invalid key provided to
+    SecureStore" en cada corrida, antes de llegar a la Query B. La excepción quedaba atrapada en el
+    `try/catch` de `sincronizarDescargaSiCorresponde` — nunca rompía la app, pero tampoco se veía
+    en ningún lado salvo `logcat`. Por eso la Parte B no aplicaba nada, sin importar red ni estado
+    de la jornada: la función se caía siempre en el mismo punto. Corregido cambiando el separador a
+    `_`.
+  - Un doble tap sobre una fila de la lista (antes de que la primera navegación completara) apilaba
+    dos instancias de `DetalleJornadaScreen` — visible como dos `<BannerConexion />` idénticas
+    superpuestas. Bug de navegación pre-existente, sin relación con el #28; arreglado con un guard
+    por `ref` (`useNavegarUnaVez`) en los dos lugares que navegan a `DetalleJornada`.
+
+**Hallazgo #29 — la sincronización tiene que poder reintentarse desde cualquier punto de
+interrupción (2026-09-25)**: `spec_sincronizacion_reintentable.md`. Encontrado probando por primera
+vez el caso "cargar sin señal y sincronizar después" (prueba de Semana 2 del plan del piloto, nunca
+antes ejecutada): una jornada creada sin señal, con fotos, no subía nunca — ni con señal, ni con
+pull-to-refresh forzado (9 intentos fallidos, todos con el mismo error).
+
+- **El bug, medido en el dispositivo**: `"No se pudo subir la evidencia (...): new row violates
+  row-level security policy"`. Mecanismo: `subirJornada()` sube las fotos antes de escribir la fila;
+  en algún intento anterior una foto YA había llegado a Storage, pero la sincronización se cortó
+  antes de que el teléfono se enterara (nunca llegó a `actualizarUrlsFotos`, que persiste las URLs
+  recién al final, después de TODAS las fotos). Cada reintento posterior sube a la MISMA ruta con
+  `upsert: true`, que Supabase resuelve como un `UPDATE` de `storage.objects` cuando el objeto ya
+  existe — y el bucket `evidencias` solo tenía policies de `INSERT`/`SELECT`.
+- ⚠️ **El arreglo no es "agregar la policy que falta" — es que la sincronización sea idempotente de
+  punta a punta.** Una policy sola tapa este caso puntual y deja abierto el próximo (¿y si falla la
+  foto 2 de 3? ¿y si la fila se escribe y falla algo después?). El criterio que tiene que sostenerse
+  a partir de acá: reintentar cualquier paso de `subirJornada()`, desde cualquier punto de
+  interrupción, tiene que ser seguro — nunca perder datos, nunca duplicar.
+- **Parte A — policy de `UPDATE` en `storage.objects`** (`schema_v11_evidencias_reintentables.sql`),
+  con **exactamente** la misma condición de carpeta que ya tiene el `INSERT`
+  (`(storage.foldername(name))[1] = auth.uid()::text`) — verificada contra la base real antes de
+  escribirla (un chofer autenticado no puede escribir en la carpeta de otro; confirmado con un test
+  que lo intentó y lo vio rechazado). Nada de `DELETE`: no hace falta para el reintento, y una
+  evidencia borrable es un problema distinto y peor. No debilita el #7 (la foto de tacómetro final
+  de escritura única): esa garantía vive en el Route Handler del Dashboard, con `service_role`, que
+  ignora RLS por completo — estas policies nunca la sostuvieron.
+  - ⚠️ **Al escribir esto se encontró un segundo `schema.sql` que mentía** (mismo patrón que el
+    #23): la policy de `INSERT` documentada ahí (`"chofer autenticado sube evidencias"`, sin
+    restricción de carpeta) no es la que corre — `schema_v2_tracking_auth.sql` la había reemplazado
+    por una restringida a la carpeta del chofer, y ese reemplazo nunca se plegó de vuelta. Plegado
+    junto con la policy nueva.
+- **Parte B — cada paso de `subirJornada()`, auditado uno por uno**: subir foto de check-in/ruta/
+  check-out (seguro, con la policy de `UPDATE`), `actualizarUrlsFotos` (SQLite local, siempre
+  seguro), el `upsert` de la fila (seguro — protegido además por el trigger del #28). El único paso
+  que NO era seguro de repetir era el de fotos de incidencia — ver Parte D.
+  - ⚠️ **El gate es por foto, no por "¿ya se subió algo del arreglo?"**: la primera versión sacaba
+    la condición vieja directamente, lo que habría resubido las N fotos de incidencia en cada
+    sincronización, para siempre — plata y batería del chofer tirados en cada ciclo de 15s. Se
+    resolvió comparando, por índice, la URL que le correspondería a cada foto (cómputo puro,
+    `getPublicUrl`, sin red) contra las ya confirmadas — solo sube la que falta.
+  - **Verificado contra Supabase real** (no solo leído): un reintento con el payload nuevo (unión
+    de fotos ya armada del lado de la app, más un `km_final` desactualizado) contra una jornada que
+    el administrador acababa de corregir — el trigger del #28 protegió `km_final` y unió las fotos
+    de incidencia sin duplicados, exactamente como en los 18 escenarios originales. Hacía falta
+    repetirlo con este payload puntual: los escenarios del #28 corrían contra Node, nunca contra lo
+    que efectivamente arma `subirJornada()` en un reintento real.
+  - **El tope de reintentos no puede gastarse sin señal.** Confirmado en el código: `sincronizarAhora()`
+    ya evitaba llamar a `sincronizarPendientes` sin red, pero una vez adentro, si la señal se cortaba
+    A MITAD de la subida (el caso real de un túnel), el fallo contaba igual para los 5 intentos —
+    quemando el tope en minutos y dejando a la app sin reintentar sola ni con señal de vuelta.
+    `marcarPendienteSinContar()` (nuevo) vuelve la fila a `'pendiente'` sin sumar al contador cuando,
+    al fallar, se re-chequea la red y no hay — el intento con señal real sigue contando.
+- **Parte C — un fallo irrecuperable no se ve distinto de uno transitorio.** Con un intento sin
+  señal ya sin contar, llegar a `sincronizacion = 'error'` con el tope agotado significa que SÍ hubo
+  señal y falló igual — la tarjeta y el detalle de la jornada muestran un mensaje aparte y
+  accionable ("no se pudo enviar después de varios intentos, deslizá para reintentar o avisá a tu
+  supervisor") en vez de repetir "error al enviar" para siempre. Que el administrador se entere de
+  una jornada trabada sin que el chofer tenga que llamar queda fuera de esta ronda — anotado como
+  dirección preferida para una spec futura: escribir la fila de `jornadas` primero (sin fotos) y
+  adjuntar evidencia después, para que el turno exista y sea visible en el Dashboard aunque las
+  fotos sigan trabadas — en un sistema que paga por horas, las horas importan más que las fotos.
+- **Parte D — por qué la unión de fotos de incidencia no funcionaba (era una regresión del #28, no
+  un bug del trigger).** El trigger está bien escrito. El bug: `aplicarCorreccionesAdmin()` (nacida
+  en el #28) escribía la URL remota de la corrección en `fotosIncidenciaUris` — una columna que
+  significa "fotos LOCALES del chofer, todavía sin subir". Dos columnas con significados distintos
+  (`fotosIncidenciaUris` = local, `fotosIncidencia` = remota confirmada) y un `write` que las trató
+  como la misma cosa: la misma familia de bug que el resto de esta semana, dos representaciones de
+  un concepto y código que se olvida cuál está tocando. Consecuencia: `subirJornada()` veía
+  `fotosIncidencia` ya "con algo" (la foto del admin, mal ubicada) y nunca llegaba a subir las fotos
+  nuevas del chofer — la unión del trigger nunca tuvo nada que unir, porque la app nunca se lo
+  mandó. Arreglado en dos puntos: `aplicarCorreccionesAdmin` deja de tocar `fotosIncidenciaUris`, y
+  `subirJornada()` arma su propio payload como unión de URLs REMOTAS con URLs REMOTAS
+  (`fotosIncidenciaSubidas` ∪ `jornada.fotosIncidencia`, con `Set`) — nunca mezclado con
+  `fotosIncidenciaUris`, escrito explícito en el código para que no se repita.
+- **Verificación**: `npx tsc --noEmit`/`lint`/`format:check` limpios. Verificación empírica contra
+  Supabase real del punto anterior (trigger + payload de reintento). **Pendiente, no completado
+  todavía**: aplicar `schema_v11_evidencias_reintentables.sql` a la base real (requiere el SQL
+  Editor, sin acceso DDL desde este entorno), la prueba empírica de la policy de `UPDATE` en sí, y
+  toda la Fase 3 en dispositivo real (interrumpir la subida a propósito en distintos puntos, la
+  jornada que ya estaba trabada, fotos de incidencia en pantalla, regresiones del #9/#27/#28).
 
 ## 5. Estándares de calidad y reglas de código
 
@@ -1963,6 +2059,15 @@ el usuario antes de escribir código.
   por separado. `tsc`/`lint`/`format:check` limpios; no verificado en dispositivo real desde este
   entorno (mismo método que el Hallazgo #16/#24: aritmética de clases Tailwind, sin navegador
   disponible acá).
+- ⚠️ **La regla del #23 tiene un agujero: `npm run types:supabase` no detecta drift en policies,
+  triggers, índices ni constraints** (encontrado 2026-09-25 resolviendo el Hallazgo #29 — es el
+  SEGUNDO `schema.sql` que miente sobre una policy de storage, después del propio #23). El
+  generador de tipos solo ve columnas y sus tipos — una policy reemplazada en un `schema_v*.sql` y
+  nunca plegada de vuelta a `schema.sql` no rompe ninguna compilación, no aparece en ningún diff de
+  tipos, y sigue documentando una condición de seguridad que no es la que corre. La única forma
+  encontrada hasta ahora de detectarlo es leer cada `schema_v*.sql` a mano y comparar, o probarlo
+  empíricamente contra la base real (como se hizo acá). Sin solución propuesta todavía — queda como
+  punto abierto.
 - ✅ **Resuelto (2026-09-22): `Database` generado y enganchado en los dos `createClient` — chequeo de
   nombres de columna encendido en toda consulta Supabase del Dashboard.** Cerraba la deuda anotada
   arriba en esta misma sección al revisar el escape de tipos del Hallazgo #21. `npm run

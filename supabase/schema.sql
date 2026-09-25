@@ -270,9 +270,22 @@ create policy "lectura publica de evidencias"
   on storage.objects for select
   using (bucket_id = 'evidencias');
 
-create policy "chofer autenticado sube evidencias"
+-- Restringida a la propia carpeta del chofer (bucket evidencias/{choferId}/...) desde
+-- schema_v2_tracking_auth.sql -- plegada acá ahora (regla del #23; este archivo venía mintiendo,
+-- mostrando la policy original sin esa restricción, encontrado resolviendo el Hallazgo #29).
+create policy "chofer sube evidencias en su propia carpeta"
   on storage.objects for insert
-  with check (bucket_id = 'evidencias' and auth.role() = 'authenticated');
+  with check (bucket_id = 'evidencias' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- Permite reintentar una subida cortada a medias: si una foto ya llegó a Storage en un intento
+-- anterior, upload(..., {upsert:true}) hace un UPDATE de storage.objects, no un INSERT -- sin esta
+-- policy, ese reintento se rechazaba con "new row violates row-level security policy" y la jornada
+-- quedaba trabada para siempre (Hallazgo #29, schema_v11_evidencias_reintentables.sql). Misma
+-- condición de carpeta que el INSERT, nada de DELETE.
+create policy "chofer sobrescribe sus propias evidencias"
+  on storage.objects for update
+  using (bucket_id = 'evidencias' and (storage.foldername(name))[1] = auth.uid()::text)
+  with check (bucket_id = 'evidencias' and (storage.foldername(name))[1] = auth.uid()::text);
 
 -- ============================================================
 -- REALTIME (para el mapa en vivo del Dashboard)

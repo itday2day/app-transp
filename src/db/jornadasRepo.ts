@@ -292,11 +292,16 @@ export async function aplicarCorreccionesAdmin(remoto: JornadaCorregidaRemota): 
         set("estado", remoto.estado);
         break;
       case "fotos_incidencia": {
+        // ⚠️ Hallazgo #29 (spec_sincronizacion_reintentable.md, Parte D): acá vivía el bug real.
+        // `fotosIncidenciaUris` son URIs LOCALES del dispositivo, fotos que el chofer todavía no
+        // subió — nunca debe recibir una URL remota del servidor. Escribirla acá (como hacía esta
+        // función hasta el #29) hacía que `subirJornada()` creyera "esto ya está subido" y
+        // salteara para siempre las fotos nuevas del chofer, aunque nunca hubieran llegado a
+        // Storage. Solo se toca `fotosIncidencia` (la columna de URLs REMOTAS confirmadas).
         const json =
           remoto.fotosIncidencia && remoto.fotosIncidencia.length > 0
             ? JSON.stringify(remoto.fotosIncidencia)
             : null;
-        set("fotosIncidenciaUris", json);
         set("fotosIncidencia", json);
         break;
       }
@@ -494,6 +499,16 @@ export async function marcarErrorSincronizacion(id: string): Promise<void> {
 export async function marcarSincronizando(id: string): Promise<void> {
   const db = await obtenerBaseDeDatos();
   await db.runAsync(`UPDATE jornadas SET sincronizacion = 'sincronizando' WHERE id = ?`, [id]);
+}
+
+/** Vuelve a 'pendiente' SIN sumar a `intentosSincronizacion` (Hallazgo #29,
+ * spec_sincronizacion_reintentable.md, Parte C) — para cuando un intento falló porque la señal se
+ * cortó a mitad de la subida, no porque la subida en sí esté mal. Un intento sin red no puede
+ * gastar el tope de MAX_INTENTOS: si lo gastara, un chofer que entra a un túnel quemaría los 5
+ * intentos automáticos en minutos, y ya con señal de vuelta la app dejaría de reintentar sola. */
+export async function marcarPendienteSinContar(id: string): Promise<void> {
+  const db = await obtenerBaseDeDatos();
+  await db.runAsync(`UPDATE jornadas SET sincronizacion = 'pendiente' WHERE id = ?`, [id]);
 }
 
 // Guarda las URLs públicas devueltas por el servidor tras subir las fotos de

@@ -145,7 +145,8 @@
     "sincPendiente": "Pendiente de enviar al servidor",
     "sincEnviando": "Enviando…",
     "sincEnviado": "Enviado correctamente",
-    "sincError": "Hubo un error al enviar, se reintentará automáticamente"
+    "sincError": "Hubo un error al enviar, se reintentará automáticamente",
+    "sincNecesitaReintento": "No se pudo enviar después de varios intentos automáticos. Deslizá hacia abajo para reintentar cuando tengas señal, o avisá a tu supervisor si el problema sigue."
   },
   "tarjetaJornada": {
     "enCurso": "En curso",
@@ -153,7 +154,8 @@
     "syncPendiente": "Pendiente de enviar",
     "syncEnviando": "Enviando…",
     "syncEnviado": "Enviado",
-    "syncError": "Error al enviar"
+    "syncError": "Error al enviar",
+    "syncNecesitaReintento": "Necesita reintentar"
   },
   "selectorMatricula": {
     "etiqueta": "Matrícula",

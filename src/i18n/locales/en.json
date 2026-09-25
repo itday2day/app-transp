@@ -145,7 +145,8 @@
     "sincPendiente": "Pending upload to server",
     "sincEnviando": "Uploading…",
     "sincEnviado": "Uploaded successfully",
-    "sincError": "There was an upload error, it will retry automatically"
+    "sincError": "There was an upload error, it will retry automatically",
+    "sincNecesitaReintento": "Couldn't send after several automatic attempts. Pull down to retry once you have signal, or let your supervisor know if it keeps happening."
   },
   "tarjetaJornada": {
     "enCurso": "In progress",
@@ -153,7 +154,8 @@
     "syncPendiente": "Pending upload",
     "syncEnviando": "Uploading…",
     "syncEnviado": "Uploaded",
-    "syncError": "Upload error"
+    "syncError": "Upload error",
+    "syncNecesitaReintento": "Needs a retry"
   },
   "selectorMatricula": {
     "etiqueta": "License Plate",

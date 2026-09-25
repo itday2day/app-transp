@@ -1,5 +1,6 @@
+import * as Network from "expo-network";
 import { supabase } from "@/lib/supabase";
-import { subirEvidencia } from "./storageService";
+import { subirEvidencia, obtenerUrlPublicaEvidencia } from "./storageService";
 import { guardarValor, obtenerValor } from "./almacenamientoSeguro";
 import {
   obtenerPendientesSincronizacion,
@@ -8,6 +9,7 @@ import {
   JornadaCorregidaRemota,
   marcarComoSincronizado,
   marcarErrorSincronizacion,
+  marcarPendienteSinContar,
   marcarSincronizando,
   actualizarUrlsFotos,
   idsJornadasExistentes,
@@ -16,7 +18,9 @@ import {
 } from "@/db/jornadasRepo";
 import { EstadoJornada, Jornada, NivelCombustible, TipoIncidencia, UrlsFotosJornada } from "@/types";
 
-const MAX_INTENTOS = 5;
+// Exportado: TarjetaJornada.tsx lo usa para distinguir "todavía reintentando solo" de "ya se
+// rindió el automático, hace falta un reintento manual" (Hallazgo #29, Parte C).
+export const MAX_INTENTOS = 5;
 
 async function subirJornada(jornada: Jornada): Promise<void> {
   // Solo sube las fotos que todavía no tienen URL pública — evita re-subir en
@@ -43,20 +47,36 @@ async function subirJornada(jornada: Jornada): Promise<void> {
     );
   }
 
-  // Simplificación consciente: a diferencia de tacómetro/ruta (que rastrean
-  // cada foto individual), acá se suben todas juntas o se reintenta el lote
-  // completo — no se rastrea qué foto individual ya se subió en un intento
-  // parcial anterior. upload(..., {upsert:true}) sobre la misma ruta hace que
-  // reintentar no duplique nada, solo repita trabajo si falló a medias.
+  // Gate POR FOTO, no por "¿ya se subió algo del arreglo alguna vez?" (Hallazgo #29,
+  // spec_sincronizacion_reintentable.md, Parte B punto 2) — con la policy de UPDATE
+  // (schema_v11_evidencias_reintentables.sql) resubir es seguro, pero sin este gate sería
+  // resubir TODAS las fotos de incidencia en cada sincronización, para siempre: plata y batería
+  // del chofer tirados en cada ciclo de 15s. `obtenerUrlPublicaEvidencia` es cómputo puro (sin
+  // red) de la URL que le correspondería a esa foto — si ya está en `jornada.fotosIncidencia`
+  // (las confirmadas por el servidor), no hace falta subirla de nuevo.
   const fotosIncidenciaLocales = jornada.fotosIncidenciaUris ?? [];
-  let fotosIncidenciaNuevas: string[] | undefined;
-  if (fotosIncidenciaLocales.length > 0 && !jornada.fotosIncidencia?.length) {
-    fotosIncidenciaNuevas = await Promise.all(
-      fotosIncidenciaLocales.map((uri, indice) =>
-        subirEvidencia(uri, `${jornada.choferId}/${jornada.id}-incidencia-${indice}.jpg`)
-      )
+  let fotosIncidenciaSubidas: string[] = [];
+  if (fotosIncidenciaLocales.length > 0) {
+    const yaConfirmadas = new Set(jornada.fotosIncidencia ?? []);
+    fotosIncidenciaSubidas = await Promise.all(
+      fotosIncidenciaLocales.map((uri, indice) => {
+        const ruta = `${jornada.choferId}/${jornada.id}-incidencia-${indice}.jpg`;
+        const urlEsperada = obtenerUrlPublicaEvidencia(ruta);
+        return yaConfirmadas.has(urlEsperada) ? urlEsperada : subirEvidencia(uri, ruta);
+      })
     );
-    urlsNuevas.fotosIncidencia = JSON.stringify(fotosIncidenciaNuevas);
+  }
+  // Unión de URLs REMOTAS con URLs REMOTAS, nunca con `fotosIncidenciaUris` (URIs locales del
+  // dispositivo) — mezclar las dos fue exactamente el bug de la Parte D: `fotosIncidenciaSubidas`
+  // son las de ESTE chofer (subidas ahora o ya confirmadas), `jornada.fotosIncidencia` puede tener
+  // además una que el administrador haya agregado por su cuenta. `Set` evita duplicados si se
+  // reintenta este mismo cálculo.
+  const fotosIncidenciaFinal =
+    fotosIncidenciaLocales.length > 0
+      ? Array.from(new Set([...(jornada.fotosIncidencia ?? []), ...fotosIncidenciaSubidas]))
+      : jornada.fotosIncidencia;
+  if (fotosIncidenciaLocales.length > 0) {
+    urlsNuevas.fotosIncidencia = JSON.stringify(fotosIncidenciaFinal);
   }
 
   if (Object.keys(urlsNuevas).length > 0) {
@@ -66,7 +86,6 @@ async function subirJornada(jornada: Jornada): Promise<void> {
   const fotoCheckInUrl = jornada.fotoCheckInUrl ?? urlsNuevas.fotoCheckInUrl;
   const fotoRutaUrl = jornada.fotoRutaUrl ?? urlsNuevas.fotoRutaUrl;
   const fotoCheckOutUrl = jornada.fotoCheckOutUrl ?? urlsNuevas.fotoCheckOutUrl;
-  const fotosIncidencia = jornada.fotosIncidencia?.length ? jornada.fotosIncidencia : fotosIncidenciaNuevas;
 
   const fila = {
     id: jornada.id,
@@ -95,7 +114,7 @@ async function subirJornada(jornada: Jornada): Promise<void> {
           tuvo_incidencia: jornada.tuvoIncidencia ?? null,
           tipo_incidencia: jornada.tipoIncidencia ?? null,
           detalle_incidencia: jornada.detalleIncidencia ?? null,
-          fotos_incidencia: fotosIncidencia?.length ? fotosIncidencia : null,
+          fotos_incidencia: fotosIncidenciaFinal?.length ? fotosIncidenciaFinal : null,
         }
       : {}),
   };
@@ -153,7 +172,19 @@ export async function sincronizarPendientes(
         `sincronizarPendientes: falló la jornada ${jornada.id} (${jornada.matricula}, intento ${jornada.intentosSincronizacion + 1}/${MAX_INTENTOS}):`,
         err
       );
-      await marcarErrorSincronizacion(jornada.id);
+      // Hallazgo #29 (spec_sincronizacion_reintentable.md, Parte C): un intento que falló porque
+      // la señal se cortó A MITAD de la subida (el caso real de un túnel o un sótano) no puede
+      // contar para el tope de MAX_INTENTOS — si contara, un chofer quemaría los 5 intentos en
+      // minutos y, ya con señal de vuelta, la app dejaría de reintentar sola (fabricaría de nuevo
+      // el mismo problema que esta spec arregla). Se re-chequea la red DESPUÉS del fallo, no antes
+      // — antes solo confirmaría que había señal al empezar, no que la hubo durante toda la subida.
+      const estadoRed = await Network.getNetworkStateAsync();
+      const huboSenal = Boolean(estadoRed.isConnected && estadoRed.isInternetReachable);
+      if (huboSenal) {
+        await marcarErrorSincronizacion(jornada.id);
+      } else {
+        await marcarPendienteSinContar(jornada.id);
+      }
       fallidas += 1;
     }
   }

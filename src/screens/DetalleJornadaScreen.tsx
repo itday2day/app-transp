@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { obtenerJornadaPorId, registrarCheckOut } from "@/db/jornadasRepo";
 import { useUbicacion } from "@/hooks/useUbicacion";
 import { useNetwork } from "@/context/NetworkContext";
+import { MAX_INTENTOS } from "@/services/syncService";
 import { abrirMapa } from "@/services/mapasService";
 import { CheckOutForm, ValoresCheckOutForm } from "@/components/CheckOutForm";
 import { CLAVE_TIPO_INCIDENCIA } from "@/components/IncidenciasForm";
@@ -84,7 +85,7 @@ export default function DetalleJornadaScreen() {
   const [mostrarFormularioCheckOut, setMostrarFormularioCheckOut] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const { capturarUbicacion, obteniendo: obteniendoUbicacion } = useUbicacion();
-  const { conectado } = useNetwork();
+  const { conectado, jornadasCorregidas } = useNetwork();
   const refScroll = useRef<ScrollView>(null);
   const refKmFinal = useRef<TextInput>(null);
   const ySeccionCheckOut = useRef(0);
@@ -92,6 +93,16 @@ export default function DetalleJornadaScreen() {
   useEffect(() => {
     obtenerJornadaPorId(params.id).then(setJornada);
   }, [params.id]);
+
+  // Hallazgo #28/#29: esta era la única pantalla que no escuchaba `jornadasCorregidas` —
+  // `HistorialScreen` se suscribió en el #28, acá quedó pendiente. Es justo la pantalla donde el
+  // chofer lee los datos antes de cerrar la jornada: si acá se ve el valor viejo, el aviso de la
+  // corrección (que ya disparó `useJornadasAbiertas`) no sirve para nada — habría que salir y
+  // volver a entrar para verlo. Recarga solo si la corrección tocó ESTA jornada.
+  useEffect(() => {
+    if (!jornadasCorregidas.some((j) => j.id === params.id)) return;
+    obtenerJornadaPorId(params.id).then(setJornada);
+  }, [jornadasCorregidas, params.id]);
 
   useEffect(() => {
     if (!mostrarFormularioCheckOut) return;
@@ -245,15 +256,16 @@ export default function DetalleJornadaScreen() {
         )}
 
         <Text style={estilos.estadoSincronizacion}>
-          {t("detalleJornada.estadoEnvio")}{" "}
-          {
-            {
-              pendiente: t("detalleJornada.sincPendiente"),
-              sincronizando: t("detalleJornada.sincEnviando"),
-              sincronizado: t("detalleJornada.sincEnviado"),
-              error: t("detalleJornada.sincError"),
-            }[jornada.sincronizacion]
-          }
+          {jornada.sincronizacion === "error" && jornada.intentosSincronizacion >= MAX_INTENTOS
+            ? t("detalleJornada.sincNecesitaReintento")
+            : `${t("detalleJornada.estadoEnvio")} ${
+                {
+                  pendiente: t("detalleJornada.sincPendiente"),
+                  sincronizando: t("detalleJornada.sincEnviando"),
+                  sincronizado: t("detalleJornada.sincEnviado"),
+                  error: t("detalleJornada.sincError"),
+                }[jornada.sincronizacion]
+              }`}
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>

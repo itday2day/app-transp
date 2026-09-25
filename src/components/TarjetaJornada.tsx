@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
 import { Jornada } from "@/types";
 import { ClaveTraduccion } from "@/i18n";
+import { MAX_INTENTOS } from "@/services/syncService";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios } from "@/theme/spacing";
@@ -20,6 +21,16 @@ const CLAVE_SINCRONIZACION: Record<Jornada["sincronizacion"], { clave: ClaveTrad
   error: { clave: "tarjetaJornada.syncError", color: colores.peligro },
 };
 
+/** Hallazgo #29 (spec_sincronizacion_reintentable.md, Parte C): "error al enviar" repetido para
+ * siempre, sin decir qué hacer, es indistinguible de "esto no se va a resolver solo" — con un
+ * intento sin señal ya no contando para el tope (ver `marcarPendienteSinContar`), llegar acá
+ * significa que SÍ hubo señal y el envío falló igual. Estado y mensaje aparte, accionable: le dice
+ * al chofer que el reintento automático se rindió y que puede forzar uno con pull-to-refresh. */
+const CLAVE_NECESITA_REINTENTO: { clave: ClaveTraduccion; color: string } = {
+  clave: "tarjetaJornada.syncNecesitaReintento",
+  color: colores.peligro,
+};
+
 function formatearFecha(iso: string): string {
   const fecha = new Date(iso);
   return (
@@ -31,7 +42,8 @@ function formatearFecha(iso: string): string {
 
 export function TarjetaJornada({ jornada, onPress }: Props) {
   const { t } = useTranslation();
-  const estadoSync = CLAVE_SINCRONIZACION[jornada.sincronizacion];
+  const agotoIntentos = jornada.sincronizacion === "error" && jornada.intentosSincronizacion >= MAX_INTENTOS;
+  const estadoSync = agotoIntentos ? CLAVE_NECESITA_REINTENTO : CLAVE_SINCRONIZACION[jornada.sincronizacion];
 
   return (
     <Pressable onPress={onPress} style={estilos.tarjeta}>
