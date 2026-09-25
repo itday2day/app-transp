@@ -89,13 +89,20 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   // ella): son dos preocupaciones distintas — "subir lo que tengo pendiente" vs. "bajar lo que
   // cambió sin mí" — que solo comparten el mismo ciclo de revisión.
   const sincronizarDescargaSiCorresponde = useCallback(async () => {
-    if (!usuario) return;
+    if (!usuario) {
+      console.log("[H28-sync] sincronizarDescargaSiCorresponde: sin usuario en contexto, se saltea");
+      return;
+    }
     try {
       const { recuperadas, cerradasRemoto, corregidas } = await sincronizarCambiosDelServidor(usuario.id);
       if (cerradasRemoto.length > 0) setJornadasReconciliadasEn(new Date());
       if (recuperadas.length > 0) setJornadasRecuperadas(recuperadas);
       if (corregidas.length > 0) setJornadasCorregidas(corregidas);
     } catch (err) {
+      console.error(
+        "[H28-sync] sincronizarDescargaSiCorresponde falló (excepción no capturada más adentro):",
+        err
+      );
       console.error("sincronizarDescargaSiCorresponde falló:", err);
     }
   }, [usuario]);
@@ -106,6 +113,14 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
     async function revisar() {
       const estado = await Network.getNetworkStateAsync();
       const haySenal = Boolean(estado.isConnected && estado.isInternetReachable);
+      // Instrumentación temporal (Hallazgo #28): expo-network es conocido por reportar
+      // isInternetReachable en falso/null en algunos Android aunque haya señal real -- si
+      // haySenal da false acá de forma persistente con datos/wifi andando, sincronizarAhora()/
+      // sincronizarDescargaSiCorresponde() de abajo NUNCA se llaman, y eso explicaría que nada se
+      // aplique "ni con señal, ni sin señal".
+      console.log(
+        `[H28-sync] revisar(): isConnected=${estado.isConnected}, isInternetReachable=${estado.isInternetReachable}, type=${estado.type}, haySenal=${haySenal}`
+      );
       if (!activo) return;
       setConectado(haySenal);
       if (haySenal) {

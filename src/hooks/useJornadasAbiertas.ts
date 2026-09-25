@@ -20,11 +20,21 @@ export function useJornadasAbiertas() {
   const recargar = useCallback(async () => {
     if (!usuario) return;
     setCargando(true);
+    // Instrumentación temporal (Hallazgo #28): esta función espera a `sincronizarCambiosDelServidor`
+    // (dos consultas a Supabase) ANTES de mostrar lo que ya hay en SQLite -- si el dispositivo no
+    // tiene señal y esas consultas tardan en fallar (en vez de fallar rápido), la lista local
+    // queda tapada por "cargando" más tiempo del esperado. Este log mide cuánto tarda de verdad.
+    const inicio = Date.now();
     // Antes de leer lo que hay en SQLite, baja los cambios del servidor: un administrador puede
     // haber cerrado alguna de estas jornadas desde el Dashboard sin pasar nunca por la app
     // (Hallazgo #6, ver syncService.sincronizarCambiosDelServidor). Sin esto, una jornada cerrada
     // remotamente seguiría viéndose "en curso" acá hasta que algo más la reconciliara primero.
-    await sincronizarCambiosDelServidor(usuario.id);
+    try {
+      await sincronizarCambiosDelServidor(usuario.id);
+    } catch (err) {
+      console.error("[H28-sync] useJornadasAbiertas.recargar: sincronizarCambiosDelServidor lanzó:", err);
+    }
+    console.log(`[H28-sync] useJornadasAbiertas.recargar: la descarga tardó ${Date.now() - inicio}ms`);
     const abiertas = await obtenerJornadasAbiertas(usuario.id);
     setJornadas(abiertas);
     setCargando(false);

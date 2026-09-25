@@ -308,7 +308,12 @@ export async function aplicarCorreccionesAdmin(remoto: JornadaCorregidaRemota): 
   if (asignaciones.length === 0) return;
   const db = await obtenerBaseDeDatos();
   valores.push(remoto.id);
-  await db.runAsync(`UPDATE jornadas SET ${asignaciones.join(", ")} WHERE id = ?`, valores);
+  const resultado = await db.runAsync(`UPDATE jornadas SET ${asignaciones.join(", ")} WHERE id = ?`, valores);
+  // Instrumentación temporal (Hallazgo #28): si `changes` da 0, el WHERE id = ? no encontró la fila
+  // -- la corrección se "aplicó" sin tocar nada, y eso no se veía en ningún log hasta ahora.
+  console.log(
+    `[H28-sync] aplicarCorreccionesAdmin(${remoto.id}): UPDATE afectó ${resultado.changes} fila(s), columnas=[${asignaciones.join(", ")}]`
+  );
 }
 
 /** Estado de `sincronizacion` de cada id que exista localmente — un id ausente del `Map`

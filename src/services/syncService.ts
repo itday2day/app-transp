@@ -274,13 +274,22 @@ export interface JornadaCorregida {
  * subir (`aplicarCorreccionesAdmin` no toca `sincronizacion`) — si quedara pendiente, el teléfono
  * intentaría volver a subirla, y contra el trigger de protección eso da un lío difícil de leer.
  */
+// Prefijo fijo para poder filtrar en `adb logcat` sin ambigüedad
+// (`adb logcat | grep H28`). Instrumentación temporal para diagnosticar en
+// dispositivo real por qué la Parte B del Hallazgo #28 no estaba aplicando
+// nada — se retira una vez confirmada la causa real.
+const LOG = "[H28-sync]";
+
 export async function sincronizarCambiosDelServidor(
   choferId: string
 ): Promise<{ recuperadas: Jornada[]; cerradasRemoto: string[]; corregidas: JornadaCorregida[] }> {
+  console.log(`${LOG} arrancó para chofer=${choferId}, reloj del dispositivo=${new Date().toISOString()}`);
+
   // Parte 1 (antes reconciliarJornadasAbiertas, Hallazgo #9; extendida en Hallazgo #28 para
   // cualquier corrección de campo, no solo el cierre). Acotada por chofer + marca de agua — nunca
   // "todas las jornadas del chofer", que crecería sin límite con el historial.
   const marcaAgua = await obtenerMarcaAgua(choferId);
+  console.log(`${LOG} marca de agua leída = ${marcaAgua}`);
   const cerradasRemoto: string[] = [];
   const corregidas: JornadaCorregida[] = [];
 
@@ -294,12 +303,33 @@ export async function sincronizarCambiosDelServidor(
     .returns<FilaJornadaCorregidaRemota[]>();
 
   if (errorCorregidas) {
+    console.error(`${LOG} Query B falló para chofer ${choferId}:`, JSON.stringify(errorCorregidas));
     console.error(
       `sincronizarCambiosDelServidor: no se pudieron consultar correcciones del chofer ${choferId}:`,
       errorCorregidas
     );
+  } else {
+    console.log(
+      `${LOG} Query B devolvió ${corregidasRemoto?.length ?? 0} fila(s) para chofer=${choferId}, marca_agua>${marcaAgua}`
+    );
+    // Crudo, para TODAS las filas devueltas, antes de cualquier filtro local — si RLS devolviera
+    // esta columna vacía o con otra forma, acá se ve tal cual llega, sin pasar todavía por el
+    // filtro de sincronizacion local (que podría hacer parecer un problema de la app cuando sería
+    // de lo que devuelve/permite Supabase).
+    for (const fila of corregidasRemoto ?? []) {
+      console.log(
+        `${LOG} fila cruda id=${fila.id} editado_en=${fila.editado_en} campos_editados_admin=${JSON.stringify(fila.campos_editados_admin)}`
+      );
+    }
+  }
+
+  if (errorCorregidas) {
+    // ya logueado arriba
   } else if (corregidasRemoto && corregidasRemoto.length > 0) {
     const estadosLocales = await estadosSincronizacionLocal(corregidasRemoto.map((fila) => fila.id));
+    console.log(
+      `${LOG} estadosSincronizacionLocal para [${corregidasRemoto.map((f) => f.id).join(", ")}] = ${JSON.stringify(Array.from(estadosLocales.entries()))}`
+    );
     // Todo-o-nada (ver doc de `obtenerMarcaAgua`): si algo queda bloqueado, la marca de agua no
     // avanza nada en esta corrida — se reintenta el lote completo en la próxima. Avanzarla igual
     // dejaría esa corrección perdida para siempre: la consulta usa `gt` estricto, así que una
@@ -314,18 +344,30 @@ export async function sincronizarCambiosDelServidor(
       // No existe localmente todavía: nada que corregir acá. Si sigue abierta remotamente la trae
       // completa la Parte 2 de abajo; si está cerrada, esta jornada nunca existió en este
       // teléfono y no hay nada que aplicarle.
-      if (!estadoLocal) continue;
+      if (!estadoLocal) {
+        console.log(`${LOG} fila ${fila.id}: no existe localmente, se saltea (no es bloqueo)`);
+        continue;
+      }
 
       // Guarda del Hallazgo #27: nunca se pisa una fila con cambios locales todavía sin subir.
       if (estadoLocal !== "sincronizado") {
+        console.log(
+          `${LOG} fila ${fila.id}: BLOQUEADA — sincronizacion local = '${estadoLocal}' (no 'sincronizado')`
+        );
         huboBloqueo = true;
         continue;
       }
 
       const campos = Object.keys(fila.campos_editados_admin ?? {});
+      console.log(
+        `${LOG} fila ${fila.id}: local='sincronizado', editado_en=${fila.editado_en}, campos_editados_admin=${JSON.stringify(fila.campos_editados_admin)}`
+      );
       // `editado_en` puede venir seteado sin `campos_editados_admin` en filas editadas antes de
       // que corriera schema_v10 — nada que aplicar, pero tampoco es un bloqueo.
-      if (campos.length === 0) continue;
+      if (campos.length === 0) {
+        console.log(`${LOG} fila ${fila.id}: campos_editados_admin vacío, nada que aplicar`);
+        continue;
+      }
 
       const remoto: JornadaCorregidaRemota = {
         id: fila.id,
@@ -350,7 +392,9 @@ export async function sincronizarCambiosDelServidor(
 
       try {
         await aplicarCorreccionesAdmin(remoto);
+        console.log(`${LOG} fila ${fila.id}: aplicarCorreccionesAdmin OK, campos=[${campos.join(", ")}]`);
       } catch (err) {
+        console.error(`${LOG} fila ${fila.id}: aplicarCorreccionesAdmin FALLÓ:`, err);
         console.error(
           `sincronizarCambiosDelServidor: no se pudo aplicar la corrección de la jornada ${fila.id}:`,
           err
@@ -363,8 +407,16 @@ export async function sincronizarCambiosDelServidor(
       corregidas.push({ id: fila.id, matricula: fila.matricula, ruta: fila.ruta, campos });
     }
 
+    console.log(
+      `${LOG} fin del lote: huboBloqueo=${huboBloqueo}, marcaAgua=${marcaAgua}, maxEditadoEn=${maxEditadoEn}, corregidas.length=${corregidas.length}`
+    );
     if (!huboBloqueo && maxEditadoEn > marcaAgua) {
       await guardarMarcaAgua(choferId, maxEditadoEn);
+      console.log(`${LOG} marca de agua avanzada a ${maxEditadoEn}`);
+    } else if (huboBloqueo) {
+      console.log(
+        `${LOG} marca de agua NO avanza (hubo bloqueo) — se reintenta el lote completo la próxima vez`
+      );
     }
   }
 
@@ -411,5 +463,8 @@ export async function sincronizarCambiosDelServidor(
     }
   }
 
+  console.log(
+    `${LOG} terminó para chofer=${choferId}: recuperadas=${recuperadas.length}, cerradasRemoto=${cerradasRemoto.length}, corregidas=${corregidas.length}`
+  );
   return { recuperadas, cerradasRemoto, corregidas };
 }
