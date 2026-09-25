@@ -207,7 +207,12 @@ interface FilaJornadaAbiertaRemota {
   fecha_check_in: string;
 }
 
-const PREFIJO_MARCA_AGUA = "marcaAguaCorreccionesAdmin:";
+// ⚠️ SecureStore exige que la clave completa sea alfanumérica + "." "-" "_" — un ":" acá
+// (confirmado en logs de un dispositivo real, Hallazgo #28) tira "Invalid key provided to
+// SecureStore" en CADA llamada, antes de tocar la Query B o SQLite. Por eso toda la Parte B
+// fallaba siempre, sin importar red: la excepción quedaba atrapada en el try/catch de
+// `sincronizarDescargaSiCorresponde` (NetworkContext.tsx) y solo se veía en logcat.
+const PREFIJO_MARCA_AGUA = "marcaAguaCorreccionesAdmin_";
 
 function claveMarcaAgua(choferId: string): string {
   return `${PREFIJO_MARCA_AGUA}${choferId}`;
