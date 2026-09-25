@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useNetwork } from "@/context/NetworkContext";
 import { useJornadasAbiertas } from "@/hooks/useJornadasAbiertas";
 import { useSeguimientoGPS } from "@/hooks/useSeguimientoGPS";
+import { useNavegarUnaVez } from "@/hooks/useNavegarUnaVez";
 import { TarjetaJornada } from "@/components/TarjetaJornada";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { TabsNavigationProp } from "@/navigation/types";
@@ -20,6 +21,7 @@ import { espaciado } from "@/theme/spacing";
 // cancelarlo salvo enviarlo.
 export default function CheckInScreen() {
   const navigation = useNavigation<TabsNavigationProp<"CheckIn">>();
+  const navegarUnaVez = useNavegarUnaVez();
   const { t } = useTranslation();
   const { usuario } = useAuth();
   const { sincronizarAhora } = useNetwork();
@@ -84,7 +86,7 @@ export default function CheckInScreen() {
             renderItem={({ item }) => (
               <TarjetaJornada
                 jornada={item}
-                onPress={() => navigation.navigate("DetalleJornada", { id: item.id })}
+                onPress={() => navegarUnaVez(() => navigation.navigate("DetalleJornada", { id: item.id }))}
               />
             )}
           />

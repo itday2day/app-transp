@@ -8,6 +8,7 @@ import { useNetwork } from "@/context/NetworkContext";
 import { listarHistorial } from "@/db/jornadasRepo";
 import { Jornada } from "@/types";
 import { TarjetaJornada } from "@/components/TarjetaJornada";
+import { useNavegarUnaVez } from "@/hooks/useNavegarUnaVez";
 import { TabsNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
@@ -15,6 +16,7 @@ import { espaciado } from "@/theme/spacing";
 
 export default function HistorialScreen() {
   const navigation = useNavigation<TabsNavigationProp<"Historial">>();
+  const navegarUnaVez = useNavegarUnaVez();
   const { t } = useTranslation();
   const { usuario } = useAuth();
   const { sincronizarAhora, jornadasCorregidas } = useNetwork();
@@ -69,7 +71,7 @@ export default function HistorialScreen() {
         renderItem={({ item }) => (
           <TarjetaJornada
             jornada={item}
-            onPress={() => navigation.navigate("DetalleJornada", { id: item.id })}
+            onPress={() => navegarUnaVez(() => navigation.navigate("DetalleJornada", { id: item.id }))}
           />
         )}
         ListEmptyComponent={
