@@ -58,6 +58,12 @@ export interface JornadaRow {
    * `supabase/schema_v10_correccion_admin_gana.sql`), nunca este Route Handler a mano. Claves =
    * nombres de columna reales (snake_case); valores = ISO 8601 de cuándo se corrigió esa columna. */
   campos_editados_admin: Record<string, string>;
+
+  /** Jornada cargada por Administración desde `/jornadas` (spec_rutas_asignadas_admin.md), nunca
+   * por el check-in del chofer en el celular — mismo patrón de auditoría que fue_editado/
+   * editado_por de arriba. */
+  creada_por_admin: boolean;
+  creada_por: string | null;
 }
 
 /** Fila cruda de la vista public.ultimas_posiciones. */
@@ -176,6 +182,33 @@ export interface EditarJornadaRequest extends CamposEditablesJornada {
 }
 
 export interface EditarJornadaResponse {
+  mensaje: string;
+  jornada: JornadaRow;
+}
+
+/** Body de POST /api/jornadas/crear (spec_rutas_asignadas_admin.md) — nunca incluye foto de
+ * tacómetro ni GPS reales, Administración no los tiene. Los campos de cierre son opcionales como
+ * bloque: si se completan, la jornada nace cerrada. */
+export interface CrearJornadaRequest {
+  choferId: string;
+  empresa: string;
+  matricula: string;
+  ruta: string;
+  kmInicial: number;
+  combustibleInicial: number;
+  /** ISO 8601, opcional — por defecto la hora del servidor al crearla. */
+  fechaCheckIn?: string;
+  kmFinal?: number;
+  combustibleFinal?: number;
+  /** ISO 8601, opcional — por defecto la hora del servidor al crearla (solo se usa si se
+   * completó el resto del cierre). */
+  fechaCheckOut?: string;
+  tuvoIncidencia?: boolean;
+  tipoIncidencia?: TipoIncidencia | null;
+  detalleIncidencia?: string;
+}
+
+export interface CrearJornadaResponse {
   mensaje: string;
   jornada: JornadaRow;
 }

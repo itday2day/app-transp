@@ -2017,12 +2017,85 @@ pull-to-refresh forzado (9 intentos fallidos, todos con el mismo error).
   `subirJornada()` arma su propio payload como unión de URLs REMOTAS con URLs REMOTAS
   (`fotosIncidenciaSubidas` ∪ `jornada.fotosIncidencia`, con `Set`) — nunca mezclado con
   `fotosIncidenciaUris`, escrito explícito en el código para que no se repita.
-- **Verificación**: `npx tsc --noEmit`/`lint`/`format:check` limpios. Verificación empírica contra
-  Supabase real del punto anterior (trigger + payload de reintento). **Pendiente, no completado
-  todavía**: aplicar `schema_v11_evidencias_reintentables.sql` a la base real (requiere el SQL
-  Editor, sin acceso DDL desde este entorno), la prueba empírica de la policy de `UPDATE` en sí, y
-  toda la Fase 3 en dispositivo real (interrumpir la subida a propósito en distintos puntos, la
-  jornada que ya estaba trabada, fotos de incidencia en pantalla, regresiones del #9/#27/#28).
+- **Verificación**: `npx tsc --noEmit`/`lint`/`format:check` limpios. `schema_v11_evidencias_reintentables.sql`
+  aplicada a la base real; policy de `UPDATE` verificada empíricamente (un chofer sobrescribe su
+  propio archivo, no el de otro). **Fase 3 completa en dispositivo real (2026-09-26)**: la jornada
+  que ya estaba trabada (`c0b181b9…`, 9 intentos fallidos) subió sola apenas hubo señal, sin tocar
+  nada a mano; interrupción fabricada a mitad de la subida de una foto, y cortes después de la 1ª,
+  2ª y las 3 fotos pero antes de la fila — las tres se resolvieron reintentando, sin fila
+  duplicada; reintento sobre una jornada ya corregida por el administrador mantuvo el km del admin
+  y el check-out del chofer; fotos de incidencia de administrador y chofer quedaron todas, sin
+  duplicados, también en reintento; Detalle de Jornada se refresca en vivo; mensaje "sin señal, se
+  envía solo" correcto; regresiones del #9 (cierre remoto con la app abierta), check-in normal con
+  señal, y #27 (desinstalar/reinstalar, la jornada abierta reapareció rápido) — todas OK. **Hallazgo #29 cerrado.**
+  - No fabricado en el dispositivo (verificado solo por revisión de código): el mensaje de "esto no
+    se va a resolver reintentando" (tope de intentos agotado con señal presente) — con la Parte A
+    resuelta, un reintento con señal real casi siempre tiene éxito, así que este caso puntual no se
+    pudo forzar en la prueba.
+- **Bug lateral, no relacionado con esta spec**: doble tap en la navegación apilaba dos instancias
+  de `DetalleJornadaScreen` (visible como dos franjas de "sin conexión" idénticas superpuestas) —
+  encontrado como subproducto de instrumentar la app para este diagnóstico. Arreglado con un guard
+  por `ref` (`useNavegarUnaVez`, commit `dc28032`). Confirmado en dispositivo real: doble tap ya no
+  apila pantallas.
+
+**Hallazgo #32 — Administración puede cargar una jornada desde el Dashboard, sin pasar por el
+check-in del chofer (2026-09-28)**: `spec_rutas_asignadas_admin.md`. Pedido nuevo, no un bug: hoy
+toda jornada nace exclusivamente del check-in del celular — sin forma de planificar una ruta a
+futuro, ni de cargar una entrega que ya se hizo y recién se avisa días después.
+
+- **Fase 1, el hallazgo que cambió el alcance real**: `listarHistorial()`/`obtenerJornadasAbiertas()`
+  (`jornadasRepo.ts`) son consultas SQLite **locales puras**, nunca tocan Supabase — y la Parte 2 de
+  `sincronizarCambiosDelServidor` (#27) traía del servidor solo jornadas `estado = 'abierta'`. Una
+  jornada armada 100% desde el Dashboard con `estado='cerrada'` no tenía NINGÚN camino para llegar
+  al historial del chofer. Por eso esta spec sí tocó `src/`, no solo `dashboard/` — confirmado
+  antes de escribir código, no asumido.
+- **Un solo mecanismo, no dos** (mismo criterio que ya usa el proyecto desde el #21): en vez de un
+  camino de recuperación aparte para jornadas cerradas creadas por admin, se extendió
+  `insertarJornadaRecuperada()`/Parte 2 para cubrir los dos casos con la misma forma — el filtro
+  pasó de `estado = 'abierta'` a `estado.eq.abierta,creada_por_admin.eq.true`, acotado por esa
+  columna (nunca "todo el historial cerrado", que sería una sincronización sin límite ajena a lo
+  que pide esta spec). `estado` de la jornada insertada se decide por si trae `fecha_check_out`, no
+  por un parámetro aparte.
+- **Esquema** (`schema_v13_jornadas_creadas_admin.sql`, aplicada y plegada en `schema.sql`):
+  `foto_tacometro_inicial_url`/`lat_inicial`/`lng_inicial` pasan a nullable — Administración no
+  tiene cámara ni GPS real del chofer. `creada_por_admin`/`creada_por`, mismo patrón de auditoría
+  que `fue_editado`/`editado_por` del #28, sin inventar un tercer valor de `estado`.
+  - ⚠️ **SQLite no soporta `ALTER COLUMN`** para relajar un `NOT NULL` en instalaciones existentes
+    — hizo falta el procedimiento de reconstrucción de tabla (`relajarNotNullCheckIn()` en
+    `database.ts`): crear la tabla nueva con el esquema correcto, copiar todas las filas tal cual,
+    borrar la vieja, renombrar. Se salta solo si ya corrió (`PRAGMA table_info` reporta
+    `notnull=0`), para no reconstruir en cada arranque.
+- **Bloqueo de doble jornada abierta** (criterio 5, cierra el punto que había quedado abierto del
+  #27): `POST /api/jornadas/crear` rechaza con 409 si el chofer elegido ya tiene una jornada
+  abierta, real o creada por admin — un solo chequeo, sin distinguir el origen.
+- **Los atajos de alta de chofer/vehículo reusan `ChoferDialog`/`VehiculoDialog` tal cual** (Fase 1
+  confirmó que ya estaban armados con la forma exacta que hacía falta, `{onClose, onGuardado}`) —
+  mismo flujo completo con usuario y contraseña temporal que ya usa `/choferes`, nada duplicado ni
+  reducido.
+- ⚠️ **Bug real encontrado (no en esta spec, en el #31 recién implementado) al correr `tsc` por
+  primera vez sobre el trabajo de la otra sesión**: `NuevoCheckIn` no tenía el mismo override que
+  `DatosCheckOut` para aceptar `null` en `tipoIncidenciaCheckin` — `CheckInForm.tsx` ya mandaba
+  `null` correctamente, pero el tipo no lo dejaba pasar. Corregido en commit aparte (`2b76c0a`)
+  antes de seguir, siguiendo la instrucción de no dejar sin commitear un estado de compilación
+  rota mientras se genera un `.apk`.
+- **Verificación**: `npx tsc --noEmit`/`lint`/`format:check` limpios en los tres sub-proyectos
+  tocados (raíz, `dashboard/`, `server/mock/`). Contra Supabase real: el insert con foto/GPS en
+  `null` + `creada_por_admin` funciona (confirma la migración aplicada); el chequeo de jornada
+  abierta existente detecta el conflicto y deja de detectarlo una vez cerrada; una segunda jornada
+  se puede crear recién después. Contra el generador de Excel real (`server/mock/reportes.js`,
+  `generarLibroExcel` expuesta temporalmente para la prueba y revertida después): no se rompe con
+  una jornada sin foto ni GPS, calcula igual que cualquier otra.
+  Prueba 5 (cerrar una jornada `creada_por_admin` que quedó abierta) confirmada igual: el mismo
+  `UPDATE` que ya usa `editar/route.ts` la cierra sin código nuevo, `creada_por_admin` se mantiene
+  en `true` después del cierre, y queda el mismo rastro de auditoría (`fue_editado`/`editado_por`)
+  que cualquier otra corrección.
+  - **No verificado desde este entorno**: que el chofer *vea* la jornada asignada en su app
+    (abierta o en su historial, pruebas 1 y 2) — bloqueado por la misma cuota de builds de EAS que
+    el Hallazgo #31 hasta 2026-10-01. Tampoco la prueba 4 (alta de chofer/vehículo desde los
+    atajos) de punta a punta en el navegador — sin acceso a uno en este entorno; el componente que
+    reusa (`ChoferDialog`/`VehiculoDialog`) ya está probado end-to-end desde los Hallazgos #24/#25,
+    lo único sin cubrir por esa prueba anterior es el cableado nuevo alrededor (invalidar la
+    consulta y preseleccionar el id creado).
 
 ## 5. Estándares de calidad y reglas de código
 

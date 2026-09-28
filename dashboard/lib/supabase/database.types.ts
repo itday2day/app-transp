@@ -87,6 +87,8 @@ export type Database = {
           chofer_nombre: string;
           combustible_final: number | null;
           combustible_inicial: number;
+          creada_por: string | null;
+          creada_por_admin: boolean;
           created_at: string;
           detalle_incidencia: string | null;
           detalle_incidencia_checkin: string | null;
@@ -98,7 +100,7 @@ export type Database = {
           fecha_check_out: string | null;
           foto_ruta_url: string | null;
           foto_tacometro_final_url: string | null;
-          foto_tacometro_inicial_url: string;
+          foto_tacometro_inicial_url: string | null;
           fotos_incidencia: string[] | null;
           fotos_incidencia_checkin: string[] | null;
           fue_editado: boolean;
@@ -107,9 +109,9 @@ export type Database = {
           km_final: number | null;
           km_inicial: number;
           lat_final: number | null;
-          lat_inicial: number;
+          lat_inicial: number | null;
           lng_final: number | null;
-          lng_inicial: number;
+          lng_inicial: number | null;
           matricula: string;
           motivo_edicion: string | null;
           ruta: string;
@@ -124,6 +126,8 @@ export type Database = {
           chofer_nombre: string;
           combustible_final?: number | null;
           combustible_inicial: number;
+          creada_por?: string | null;
+          creada_por_admin?: boolean;
           created_at?: string;
           detalle_incidencia?: string | null;
           detalle_incidencia_checkin?: string | null;
@@ -135,7 +139,7 @@ export type Database = {
           fecha_check_out?: string | null;
           foto_ruta_url?: string | null;
           foto_tacometro_final_url?: string | null;
-          foto_tacometro_inicial_url: string;
+          foto_tacometro_inicial_url?: string | null;
           fotos_incidencia?: string[] | null;
           fotos_incidencia_checkin?: string[] | null;
           fue_editado?: boolean;
@@ -144,9 +148,9 @@ export type Database = {
           km_final?: number | null;
           km_inicial: number;
           lat_final?: number | null;
-          lat_inicial: number;
+          lat_inicial?: number | null;
           lng_final?: number | null;
-          lng_inicial: number;
+          lng_inicial?: number | null;
           matricula: string;
           motivo_edicion?: string | null;
           ruta: string;
@@ -161,6 +165,8 @@ export type Database = {
           chofer_nombre?: string;
           combustible_final?: number | null;
           combustible_inicial?: number;
+          creada_por?: string | null;
+          creada_por_admin?: boolean;
           created_at?: string;
           detalle_incidencia?: string | null;
           detalle_incidencia_checkin?: string | null;
@@ -172,7 +178,7 @@ export type Database = {
           fecha_check_out?: string | null;
           foto_ruta_url?: string | null;
           foto_tacometro_final_url?: string | null;
-          foto_tacometro_inicial_url?: string;
+          foto_tacometro_inicial_url?: string | null;
           fotos_incidencia?: string[] | null;
           fotos_incidencia_checkin?: string[] | null;
           fue_editado?: boolean;
@@ -181,9 +187,9 @@ export type Database = {
           km_final?: number | null;
           km_inicial?: number;
           lat_final?: number | null;
-          lat_inicial?: number;
+          lat_inicial?: number | null;
           lng_final?: number | null;
-          lng_inicial?: number;
+          lng_inicial?: number | null;
           matricula?: string;
           motivo_edicion?: string | null;
           ruta?: string;

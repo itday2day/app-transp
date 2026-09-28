@@ -25,10 +25,10 @@ interface FilaJornadaSQLite {
   incidencias: string | null;
   kmInicial: number;
   combustibleInicial: NivelCombustible;
-  fotoTacometroInicialUri: string;
+  fotoTacometroInicialUri: string | null;
   fotoRutaUri: string;
-  latInicial: number;
-  lngInicial: number;
+  latInicial: number | null;
+  lngInicial: number | null;
   fechaCheckIn: string;
   tuvoIncidenciaCheckin: number | null;
   tipoIncidenciaCheckin: TipoIncidencia | null;
@@ -49,6 +49,8 @@ interface FilaJornadaSQLite {
   fotoCheckOutUrl: string | null;
   fotosIncidenciaUris: string | null; // JSON stringificado (SQLite no tiene arrays)
   fotosIncidencia: string | null; // ídem
+  creadaPorAdmin: number;
+  creadaPor: string | null;
   estado: EstadoJornada;
   sincronizacion: EstadoSincronizacion;
   intentosSincronizacion: number;
@@ -88,10 +90,10 @@ function filaAJornada(fila: FilaJornadaSQLite): Jornada {
     incidencias: fila.incidencias ?? undefined,
     kmInicial: fila.kmInicial,
     combustibleInicial: fila.combustibleInicial,
-    fotoTacometroInicialUri: fila.fotoTacometroInicialUri,
+    fotoTacometroInicialUri: fila.fotoTacometroInicialUri ?? undefined,
     fotoRutaUri: fila.fotoRutaUri || undefined,
-    latInicial: fila.latInicial,
-    lngInicial: fila.lngInicial,
+    latInicial: fila.latInicial ?? undefined,
+    lngInicial: fila.lngInicial ?? undefined,
     fechaCheckIn: fila.fechaCheckIn,
     tuvoIncidenciaCheckin:
       fila.tuvoIncidenciaCheckin == null ? undefined : Boolean(fila.tuvoIncidenciaCheckin),
@@ -113,6 +115,8 @@ function filaAJornada(fila: FilaJornadaSQLite): Jornada {
     fotoCheckOutUrl: fila.fotoCheckOutUrl ?? undefined,
     fotosIncidenciaUris: parsearFotos(fila.fotosIncidenciaUris),
     fotosIncidencia: parsearFotos(fila.fotosIncidencia),
+    creadaPorAdmin: Boolean(fila.creadaPorAdmin),
+    creadaPor: fila.creadaPor ?? undefined,
     estado: fila.estado,
     sincronizacion: fila.sincronizacion,
     intentosSincronizacion: fila.intentosSincronizacion,
@@ -131,6 +135,9 @@ export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promis
     // la misma frontera exacta donde ya se normalizaban los demás campos opcionales del spread.
     tipoIncidenciaCheckin: datos.tipoIncidenciaCheckin ?? undefined,
     fechaCheckIn: new Date().toISOString(),
+    // El check-in del propio chofer nunca es una jornada creada_por_admin -- esa viene por el
+    // camino de recuperación (insertarJornadaCreadaPorAdmin), no por acá.
+    creadaPorAdmin: false,
     estado: "abierta",
     sincronizacion: "pendiente",
     intentosSincronizacion: 0,
@@ -152,10 +159,10 @@ export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promis
       jornada.ruta,
       jornada.kmInicial,
       jornada.combustibleInicial,
-      jornada.fotoTacometroInicialUri,
+      jornada.fotoTacometroInicialUri ?? null,
       jornada.fotoRutaUri || "",
-      jornada.latInicial,
-      jornada.lngInicial,
+      jornada.latInicial ?? null,
+      jornada.lngInicial ?? null,
       jornada.fechaCheckIn,
       jornada.tuvoIncidenciaCheckin == null ? null : jornada.tuvoIncidenciaCheckin ? 1 : 0,
       jornada.tipoIncidenciaCheckin ?? null,
@@ -382,13 +389,23 @@ export async function idsJornadasExistentes(ids: string[]): Promise<Set<string>>
   return new Set(filas.map((f) => f.id));
 }
 
-/** Datos de una jornada abierta tal como vienen de Supabase
+/** Datos de una jornada tal como viene de Supabase para recuperarla localmente
  * (`syncService.sincronizarCambiosDelServidor` ya los trae en camelCase) — mismas columnas de
- * check-in que `crearCheckIn`, más el `id` real
- * (a diferencia de un check-in nuevo, acá NO se genera uno: hay que conservar el mismo id con el
- * que esta jornada ya existe en Supabase, o dejaría de ser "la misma jornada" para cualquier cosa
- * que la busque por id — reconciliación incluida). */
-export interface JornadaAbiertaRemota {
+ * check-in que `crearCheckIn`, más el `id` real (a diferencia de un check-in nuevo, acá NO se
+ * genera uno: hay que conservar el mismo id con el que esta jornada ya existe en Supabase, o
+ * dejaría de ser "la misma jornada" para cualquier cosa que la busque por id — reconciliación
+ * incluida).
+ *
+ * Cubre dos casos con la misma forma (spec_rutas_asignadas_admin.md, punto 1 de Fase 1: es la
+ * misma operación de fondo — "insertar una jornada que vino del servidor, nunca de un check-in
+ * local" — así que un solo mecanismo, no dos):
+ *   - Hallazgo #27: una jornada ABIERTA que el teléfono nunca conoció (desinstalación). Los
+ *     campos de cierre van `null`/`undefined`.
+ *   - Jornada creada por Administración desde el Dashboard: puede llegar abierta (para que el
+ *     chofer la complete) o ya cerrada (si Administración cargó también los datos de cierre) —
+ *     de ahí que `fechaCheckOut` decida el `estado`, no un parámetro aparte. Foto/GPS de
+ *     check-in pueden venir `null` (Administración no tiene cámara ni GPS real del chofer). */
+export interface JornadaRecuperadaRemota {
   id: string;
   choferId: string;
   choferNombre: string;
@@ -398,32 +415,45 @@ export interface JornadaAbiertaRemota {
   incidencias: string | null;
   kmInicial: number;
   combustibleInicial: NivelCombustible;
-  fotoTacometroInicialUrl: string;
+  fotoTacometroInicialUrl: string | null;
   fotoRutaUrl: string | null;
-  latInicial: number;
-  lngInicial: number;
+  latInicial: number | null;
+  lngInicial: number | null;
   fechaCheckIn: string;
   tuvoIncidenciaCheckin: boolean | null;
   tipoIncidenciaCheckin: TipoIncidencia | null;
   detalleIncidenciaCheckin: string | null;
   fotosIncidenciaCheckin: string[] | null; // URLs remotas, ya subidas
+  // Cierre -- ausentes/null en una jornada que llega abierta (#27, o asignada a futuro).
+  kmFinal: number | null;
+  combustibleFinal: NivelCombustible | null;
+  fotoTacometroFinalUrl: string | null;
+  latFinal: number | null;
+  lngFinal: number | null;
+  fechaCheckOut: string | null;
+  tuvoIncidencia: boolean | null;
+  tipoIncidencia: TipoIncidencia | null;
+  detalleIncidencia: string | null;
+  fotosIncidencia: string[] | null;
+  creadaPorAdmin: boolean;
+  creadaPor: string | null;
 }
 
 /**
- * Inserta localmente una jornada abierta que existe en Supabase pero no en este teléfono — el
- * caso del Hallazgo #5 (desinstalación, teléfono nuevo, Android limpiando almacenamiento).
+ * Inserta localmente una jornada que existe en Supabase pero no en este teléfono. `sincronizacion
+ * = 'sincronizado'` siempre — este registro nació ya sincronizado, literalmente es una copia de
+ * lo que hay en el servidor, sin importar si llega abierta o cerrada.
  *
- * `fotoTacometroInicialUri`/`fotoRutaUri` (las columnas que la pantalla de check-out y
- * `DetalleJornadaScreen` leen para MOSTRAR la foto) se completan con la URL remota en vez de un
- * archivo local — mismo criterio ya establecido por `sobrescribirCierreRemoto` más abajo/arriba
- * en este archivo para el lado del check-out: a `<Image source={{uri}}>` le da igual si `uri` es
- * un archivo local o una URL de Supabase Storage. `fotoCheckInUrl`/`fotoRutaUrl` se completan con
- * lo mismo, marcando esas fotos como "ya subidas" para que syncService no intente resubirlas.
- * `sincronizacion = 'sincronizado'` por el mismo motivo — este registro nació ya sincronizado,
- * literalmente es una copia de lo que hay en el servidor.
+ * Las URLs de foto (check-in, ruta, check-out, incidencias) se completan tanto en las columnas
+ * *Uri (las que `DetalleJornadaScreen` lee para MOSTRAR la foto) como en las *Url/fotosIncidencia*
+ * (las que `syncService` usa como "esto ya está subido, no lo reintentes") — mismo criterio en
+ * las dos direcciones: a `<Image source={{uri}}>` le da igual si `uri` es un archivo local o una
+ * URL remota, y no tiene sentido que el teléfono intente resubir algo que ya subió Administración
+ * o que ya estaba confirmado en un intento anterior.
  */
-export async function insertarJornadaRecuperada(remoto: JornadaAbiertaRemota): Promise<Jornada> {
+export async function insertarJornadaRecuperada(remoto: JornadaRecuperadaRemota): Promise<Jornada> {
   const db = await obtenerBaseDeDatos();
+  const cerrada = remoto.fechaCheckOut != null;
   const jornada: Jornada = {
     id: remoto.id,
     choferId: remoto.choferId,
@@ -434,23 +464,33 @@ export async function insertarJornadaRecuperada(remoto: JornadaAbiertaRemota): P
     incidencias: remoto.incidencias ?? undefined,
     kmInicial: remoto.kmInicial,
     combustibleInicial: remoto.combustibleInicial,
-    fotoTacometroInicialUri: remoto.fotoTacometroInicialUrl,
+    fotoTacometroInicialUri: remoto.fotoTacometroInicialUrl ?? undefined,
     fotoRutaUri: remoto.fotoRutaUrl ?? undefined,
-    latInicial: remoto.latInicial,
-    lngInicial: remoto.lngInicial,
+    latInicial: remoto.latInicial ?? undefined,
+    lngInicial: remoto.lngInicial ?? undefined,
     fechaCheckIn: remoto.fechaCheckIn,
-    // Igual que fotoTacometroInicialUri/fotoRutaUri arriba: las fotos de la incidencia de
-    // check-in ya están confirmadas en Storage (viene de Supabase), así que se guardan
-    // directamente como "URIs" locales (URLs remotas, a <Image> le da igual) y también como
-    // fotosIncidenciaCheckin (URLs remotas) para que syncService no intente resubirlas.
     tuvoIncidenciaCheckin: remoto.tuvoIncidenciaCheckin ?? undefined,
     tipoIncidenciaCheckin: remoto.tipoIncidenciaCheckin ?? undefined,
     detalleIncidenciaCheckin: remoto.detalleIncidenciaCheckin ?? undefined,
     fotosIncidenciaCheckinUris: remoto.fotosIncidenciaCheckin ?? undefined,
     fotosIncidenciaCheckin: remoto.fotosIncidenciaCheckin ?? undefined,
-    fotoCheckInUrl: remoto.fotoTacometroInicialUrl,
+    fotoCheckInUrl: remoto.fotoTacometroInicialUrl ?? undefined,
     fotoRutaUrl: remoto.fotoRutaUrl ?? undefined,
-    estado: "abierta",
+    kmFinal: remoto.kmFinal ?? undefined,
+    combustibleFinal: remoto.combustibleFinal ?? undefined,
+    fotoTacometroFinalUri: remoto.fotoTacometroFinalUrl ?? undefined,
+    latFinal: remoto.latFinal ?? undefined,
+    lngFinal: remoto.lngFinal ?? undefined,
+    fechaCheckOut: remoto.fechaCheckOut ?? undefined,
+    tuvoIncidencia: remoto.tuvoIncidencia ?? undefined,
+    tipoIncidencia: remoto.tipoIncidencia ?? undefined,
+    detalleIncidencia: remoto.detalleIncidencia ?? undefined,
+    fotoCheckOutUrl: remoto.fotoTacometroFinalUrl ?? undefined,
+    fotosIncidenciaUris: remoto.fotosIncidencia ?? undefined,
+    fotosIncidencia: remoto.fotosIncidencia ?? undefined,
+    creadaPorAdmin: remoto.creadaPorAdmin,
+    creadaPor: remoto.creadaPor ?? undefined,
+    estado: cerrada ? "cerrada" : "abierta",
     sincronizacion: "sincronizado",
     intentosSincronizacion: 0,
   };
@@ -462,8 +502,12 @@ export async function insertarJornadaRecuperada(remoto: JornadaAbiertaRemota): P
       tuvoIncidenciaCheckin, tipoIncidenciaCheckin, detalleIncidenciaCheckin,
       fotosIncidenciaCheckinUris, fotosIncidenciaCheckin,
       fotoCheckInUrl, fotoRutaUrl,
+      kmFinal, combustibleFinal, fotoTacometroFinalUri, latFinal, lngFinal, fechaCheckOut,
+      tuvoIncidencia, tipoIncidencia, detalleIncidencia, fotoCheckOutUrl,
+      fotosIncidenciaUris, fotosIncidencia,
+      creadaPorAdmin, creadaPor,
       estado, sincronizacion, intentosSincronizacion
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       jornada.id,
       jornada.choferId,
@@ -474,10 +518,10 @@ export async function insertarJornadaRecuperada(remoto: JornadaAbiertaRemota): P
       jornada.incidencias || null,
       jornada.kmInicial,
       jornada.combustibleInicial,
-      jornada.fotoTacometroInicialUri,
+      jornada.fotoTacometroInicialUri ?? null,
       jornada.fotoRutaUri || "",
-      jornada.latInicial,
-      jornada.lngInicial,
+      jornada.latInicial ?? null,
+      jornada.lngInicial ?? null,
       jornada.fechaCheckIn,
       jornada.tuvoIncidenciaCheckin == null ? null : jornada.tuvoIncidenciaCheckin ? 1 : 0,
       jornada.tipoIncidenciaCheckin ?? null,
@@ -490,6 +534,24 @@ export async function insertarJornadaRecuperada(remoto: JornadaAbiertaRemota): P
         : null,
       jornada.fotoCheckInUrl ?? null,
       jornada.fotoRutaUrl ?? null,
+      jornada.kmFinal ?? null,
+      jornada.combustibleFinal ?? null,
+      jornada.fotoTacometroFinalUri ?? null,
+      jornada.latFinal ?? null,
+      jornada.lngFinal ?? null,
+      jornada.fechaCheckOut ?? null,
+      jornada.tuvoIncidencia == null ? null : jornada.tuvoIncidencia ? 1 : 0,
+      jornada.tipoIncidencia ?? null,
+      jornada.detalleIncidencia ?? null,
+      jornada.fotoCheckOutUrl ?? null,
+      jornada.fotosIncidenciaUris && jornada.fotosIncidenciaUris.length > 0
+        ? JSON.stringify(jornada.fotosIncidenciaUris)
+        : null,
+      jornada.fotosIncidencia && jornada.fotosIncidencia.length > 0
+        ? JSON.stringify(jornada.fotosIncidencia)
+        : null,
+      jornada.creadaPorAdmin ? 1 : 0,
+      jornada.creadaPor ?? null,
       jornada.estado,
       jornada.sincronizacion,
       jornada.intentosSincronizacion,

@@ -49,10 +49,13 @@ export interface Jornada {
 
   kmInicial: number;
   combustibleInicial: NivelCombustible;
-  fotoTacometroInicialUri: string;
+  // Opcionales desde spec_rutas_asignadas_admin.md: una jornada creada_por_admin (más abajo) no
+  // tiene foto real de tacómetro ni GPS real -- el check-in del propio chofer (CheckInForm.tsx)
+  // siempre los completa, así que en ese camino nunca vienen vacíos.
+  fotoTacometroInicialUri?: string;
   fotoRutaUri?: string; // opcional: la foto de la hoja de ruta no es obligatoria para el check-in
-  latInicial: number;
-  lngInicial: number;
+  latInicial?: number;
+  lngInicial?: number;
   fechaCheckIn: string; // ISO 8601
   // Incidencia estructurada del check-in (spec_incidencia_en_checkin.md) — mismo patrón que la
   // incidencia de check-out más abajo, independiente de ella (una jornada puede tener 0, 1 o 2).
@@ -79,6 +82,11 @@ export interface Jornada {
   fotoCheckOutUrl?: string;
   fotosIncidenciaCheckin?: string[];
   fotosIncidencia?: string[];
+
+  // Jornada cargada por Administración desde el Dashboard (spec_rutas_asignadas_admin.md), no por
+  // el check-in del chofer -- mismo patrón que fue_editado/editado_por del Hallazgo #28.
+  creadaPorAdmin: boolean;
+  creadaPor?: string;
 
   estado: EstadoJornada;
   sincronizacion: EstadoSincronizacion;

@@ -14,7 +14,7 @@ import {
   actualizarUrlsFotos,
   idsJornadasExistentes,
   insertarJornadaRecuperada,
-  JornadaAbiertaRemota,
+  JornadaRecuperadaRemota,
 } from "@/db/jornadasRepo";
 import { EstadoJornada, Jornada, NivelCombustible, TipoIncidencia, UrlsFotosJornada } from "@/types";
 
@@ -28,7 +28,10 @@ async function subirJornada(jornada: Jornada): Promise<void> {
   // con las fotos ya subidas en el intento anterior).
   const urlsNuevas: UrlsFotosJornada = {};
 
-  if (!jornada.fotoCheckInUrl) {
+  // spec_rutas_asignadas_admin.md: una jornada creada_por_admin puede no tener foto de
+  // tacómetro inicial -- el chofer solo la sube si de verdad tomó una (ver la misma condición
+  // ya establecida para fotoRutaUri, dos líneas abajo).
+  if (jornada.fotoTacometroInicialUri && !jornada.fotoCheckInUrl) {
     urlsNuevas.fotoCheckInUrl = await subirEvidencia(
       jornada.fotoTacometroInicialUri,
       `${jornada.choferId}/${jornada.id}-inicial.jpg`
@@ -120,10 +123,10 @@ async function subirJornada(jornada: Jornada): Promise<void> {
     incidencias: jornada.incidencias || null,
     km_inicial: jornada.kmInicial,
     combustible_inicial: jornada.combustibleInicial,
-    foto_tacometro_inicial_url: fotoCheckInUrl,
+    foto_tacometro_inicial_url: fotoCheckInUrl ?? null,
     foto_ruta_url: fotoRutaUrl ?? null,
-    lat_inicial: jornada.latInicial,
-    lng_inicial: jornada.lngInicial,
+    lat_inicial: jornada.latInicial ?? null,
+    lng_inicial: jornada.lngInicial ?? null,
     fecha_check_in: jornada.fechaCheckIn,
     // spec_incidencia_en_checkin.md — existe desde el momento del check-in, no solo al cerrar
     // (a diferencia de la incidencia de check-out, más abajo).
@@ -249,9 +252,11 @@ interface FilaJornadaCorregidaRemota {
   editado_en: string | null;
 }
 
-/** Forma de la fila que interesa de `jornadas` en Supabase para recuperar una jornada abierta —
- * solo las columnas de CHECK-IN (una jornada abierta no tiene nada de check-out que traer). */
-interface FilaJornadaAbiertaRemota {
+/** Forma de la fila que interesa de `jornadas` en Supabase para recuperar una jornada -- todas las
+ * columnas de check-in y de cierre, porque a diferencia del viejo mecanismo del #27 (solo
+ * jornadas abiertas) esta consulta ahora también trae jornadas ya CERRADAS creadas por
+ * Administración (spec_rutas_asignadas_admin.md) que el teléfono nunca conoció. */
+interface FilaJornadaRecuperadaRemota {
   id: string;
   chofer_nombre: string;
   empresa: string;
@@ -260,15 +265,27 @@ interface FilaJornadaAbiertaRemota {
   incidencias: string | null;
   km_inicial: number;
   combustible_inicial: NivelCombustible;
-  foto_tacometro_inicial_url: string;
+  foto_tacometro_inicial_url: string | null;
   foto_ruta_url: string | null;
-  lat_inicial: number;
-  lng_inicial: number;
+  lat_inicial: number | null;
+  lng_inicial: number | null;
   fecha_check_in: string;
   tuvo_incidencia_checkin: boolean | null;
   tipo_incidencia_checkin: TipoIncidencia | null;
   detalle_incidencia_checkin: string | null;
   fotos_incidencia_checkin: string[] | null;
+  km_final: number | null;
+  combustible_final: NivelCombustible | null;
+  foto_tacometro_final_url: string | null;
+  lat_final: number | null;
+  lng_final: number | null;
+  fecha_check_out: string | null;
+  tuvo_incidencia: boolean | null;
+  tipo_incidencia: TipoIncidencia | null;
+  detalle_incidencia: string | null;
+  fotos_incidencia: string[] | null;
+  creada_por_admin: boolean;
+  creada_por: string | null;
 }
 
 // ⚠️ SecureStore exige que la clave completa sea alfanumérica + "." "-" "_" — un ":" acá
@@ -489,30 +506,40 @@ export async function sincronizarCambiosDelServidor(
     }
   }
 
-  // Parte 2 (antes recuperarJornadasAbiertas): jornadas abiertas del chofer en Supabase que el
-  // teléfono nunca llegó a conocer — confirmado en Fase 1 de spec_deudas_app_movil.md que
-  // `subirJornada()` sube TODOS los campos de check-in (fotos incluidas) la primera vez que
-  // sincroniza, así que una jornada recuperada llega completa, no como un esqueleto.
-  const { data: abiertasRemoto, error: errorAbiertas } = await supabase
+  // Parte 2 (antes recuperarJornadasAbiertas): jornadas del chofer en Supabase que el teléfono
+  // nunca llegó a conocer — confirmado en Fase 1 de spec_deudas_app_movil.md que `subirJornada()`
+  // sube TODOS los campos de check-in (fotos incluidas) la primera vez que sincroniza, así que una
+  // jornada recuperada llega completa, no como un esqueleto.
+  //
+  // El filtro ya no es solo `estado = 'abierta'` (Hallazgo #27): también trae jornadas CERRADAS
+  // marcadas `creada_por_admin` (spec_rutas_asignadas_admin.md, Fase 1 punto 1) -- confirmado
+  // leyendo el código que `listarHistorial()`/`obtenerJornadasAbiertas()` son consultas SQLite
+  // puras, nunca tocan Supabase, así que una jornada armada 100% desde el Dashboard con
+  // `estado='cerrada'` no tenía NINGÚN camino para llegar al historial del chofer sin esto. El
+  // resto de jornadas cerradas (las que el propio chofer subió) no necesitan este camino: ya
+  // pasaron por el teléfono al crearse, es la razón por la que están en Supabase. Acotado por
+  // `creada_por_admin`, no "todo el historial cerrado" -- eso sería una sincronización sin límite
+  // ajena a lo que pide esta spec.
+  const { data: recuperadasRemoto, error: errorRecuperadas } = await supabase
     .from("jornadas")
     .select(
-      "id, chofer_nombre, empresa, matricula, ruta, incidencias, km_inicial, combustible_inicial, foto_tacometro_inicial_url, foto_ruta_url, lat_inicial, lng_inicial, fecha_check_in, tuvo_incidencia_checkin, tipo_incidencia_checkin, detalle_incidencia_checkin, fotos_incidencia_checkin"
+      "id, chofer_nombre, empresa, matricula, ruta, incidencias, km_inicial, combustible_inicial, foto_tacometro_inicial_url, foto_ruta_url, lat_inicial, lng_inicial, fecha_check_in, tuvo_incidencia_checkin, tipo_incidencia_checkin, detalle_incidencia_checkin, fotos_incidencia_checkin, km_final, combustible_final, foto_tacometro_final_url, lat_final, lng_final, fecha_check_out, tuvo_incidencia, tipo_incidencia, detalle_incidencia, fotos_incidencia, creada_por_admin, creada_por"
     )
     .eq("chofer_id", choferId)
-    .eq("estado", "abierta")
-    .returns<FilaJornadaAbiertaRemota[]>();
+    .or("estado.eq.abierta,creada_por_admin.eq.true")
+    .returns<FilaJornadaRecuperadaRemota[]>();
 
   const recuperadas: Jornada[] = [];
-  if (errorAbiertas) {
+  if (errorRecuperadas) {
     console.error(
-      `sincronizarCambiosDelServidor: no se pudieron consultar jornadas abiertas del chofer ${choferId}:`,
-      errorAbiertas
+      `sincronizarCambiosDelServidor: no se pudieron consultar jornadas a recuperar del chofer ${choferId}:`,
+      errorRecuperadas
     );
-  } else if (abiertasRemoto && abiertasRemoto.length > 0) {
-    const existentes = await idsJornadasExistentes(abiertasRemoto.map((fila) => fila.id));
-    for (const fila of abiertasRemoto) {
+  } else if (recuperadasRemoto && recuperadasRemoto.length > 0) {
+    const existentes = await idsJornadasExistentes(recuperadasRemoto.map((fila) => fila.id));
+    for (const fila of recuperadasRemoto) {
       if (existentes.has(fila.id)) continue;
-      const remoto: JornadaAbiertaRemota = {
+      const remoto: JornadaRecuperadaRemota = {
         id: fila.id,
         choferId,
         choferNombre: fila.chofer_nombre,
@@ -531,6 +558,18 @@ export async function sincronizarCambiosDelServidor(
         tipoIncidenciaCheckin: fila.tipo_incidencia_checkin,
         detalleIncidenciaCheckin: fila.detalle_incidencia_checkin,
         fotosIncidenciaCheckin: fila.fotos_incidencia_checkin,
+        kmFinal: fila.km_final,
+        combustibleFinal: fila.combustible_final,
+        fotoTacometroFinalUrl: fila.foto_tacometro_final_url,
+        latFinal: fila.lat_final,
+        lngFinal: fila.lng_final,
+        fechaCheckOut: fila.fecha_check_out,
+        tuvoIncidencia: fila.tuvo_incidencia,
+        tipoIncidencia: fila.tipo_incidencia,
+        detalleIncidencia: fila.detalle_incidencia,
+        fotosIncidencia: fila.fotos_incidencia,
+        creadaPorAdmin: fila.creada_por_admin,
+        creadaPor: fila.creada_por,
       };
       recuperadas.push(await insertarJornadaRecuperada(remoto));
     }

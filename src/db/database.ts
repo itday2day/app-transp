@@ -29,10 +29,14 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
       incidencias TEXT,
       kmInicial REAL NOT NULL,
       combustibleInicial REAL NOT NULL,
-      fotoTacometroInicialUri TEXT NOT NULL,
+      -- fotoTacometroInicialUri/latInicial/lngInicial: nullable desde
+      -- spec_rutas_asignadas_admin.md -- una jornada creada por Administración desde el Dashboard
+      -- no tiene foto real de tacómetro ni GPS real del dispositivo. Instalaciones existentes se
+      -- migran en relajarNotNullCheckIn() más abajo (SQLite no soporta ALTER COLUMN).
+      fotoTacometroInicialUri TEXT,
       fotoRutaUri TEXT NOT NULL,
-      latInicial REAL NOT NULL,
-      lngInicial REAL NOT NULL,
+      latInicial REAL,
+      lngInicial REAL,
       fechaCheckIn TEXT NOT NULL,
       tuvoIncidenciaCheckin INTEGER,
       tipoIncidenciaCheckin TEXT,
@@ -55,7 +59,9 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
       fotosIncidencia TEXT,
       estado TEXT NOT NULL DEFAULT 'abierta',
       sincronizacion TEXT NOT NULL DEFAULT 'pendiente',
-      intentosSincronizacion INTEGER NOT NULL DEFAULT 0
+      intentosSincronizacion INTEGER NOT NULL DEFAULT 0,
+      creadaPorAdmin INTEGER NOT NULL DEFAULT 0,
+      creadaPor TEXT
     );
 
     CREATE INDEX IF NOT EXISTS idx_jornadas_chofer ON jornadas (choferId);
@@ -63,9 +69,92 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
   `);
 
   await agregarColumnasFaltantes(db);
+  await relajarNotNullCheckIn(db);
   await migrarCombustibleAPorcentaje(db);
 
   return db;
+}
+
+// spec_rutas_asignadas_admin.md: relaja el NOT NULL de fotoTacometroInicialUri/latInicial/
+// lngInicial en instalaciones EXISTENTES (una app nueva ya nace con el CREATE TABLE de arriba, ya
+// nullable). SQLite no soporta ALTER COLUMN para tocar un constraint -- hace falta el
+// procedimiento de reconstrucción de tabla que la propia documentación de SQLite recomienda:
+// crear la tabla nueva con el esquema correcto, copiar todas las filas tal cual (sin perder ni
+// transformar ningún dato), borrar la vieja, renombrar. Se salta solo si ya corrió (PRAGMA
+// table_info reporta notnull=0 en fotoTacometroInicialUri) -- para no reconstruir la tabla en
+// cada arranque de la app.
+async function relajarNotNullCheckIn(db: SQLite.SQLiteDatabase): Promise<void> {
+  const columnas = await db.getAllAsync<{ name: string; notnull: number }>(`PRAGMA table_info(jornadas)`);
+  const fotoInicial = columnas.find((c) => c.name === "fotoTacometroInicialUri");
+  if (!fotoInicial || fotoInicial.notnull === 0) return;
+
+  await db.execAsync(`
+    CREATE TABLE jornadas_nueva (
+      id TEXT PRIMARY KEY NOT NULL,
+      choferId TEXT NOT NULL,
+      choferNombre TEXT NOT NULL,
+      empresa TEXT NOT NULL,
+      matricula TEXT NOT NULL,
+      ruta TEXT NOT NULL,
+      incidencias TEXT,
+      kmInicial REAL NOT NULL,
+      combustibleInicial REAL NOT NULL,
+      fotoTacometroInicialUri TEXT,
+      fotoRutaUri TEXT NOT NULL,
+      latInicial REAL,
+      lngInicial REAL,
+      fechaCheckIn TEXT NOT NULL,
+      tuvoIncidenciaCheckin INTEGER,
+      tipoIncidenciaCheckin TEXT,
+      detalleIncidenciaCheckin TEXT,
+      fotosIncidenciaCheckinUris TEXT,
+      fotosIncidenciaCheckin TEXT,
+      kmFinal REAL,
+      combustibleFinal REAL,
+      fotoTacometroFinalUri TEXT,
+      latFinal REAL,
+      lngFinal REAL,
+      fechaCheckOut TEXT,
+      tuvoIncidencia INTEGER,
+      tipoIncidencia TEXT,
+      detalleIncidencia TEXT,
+      fotoCheckInUrl TEXT,
+      fotoRutaUrl TEXT,
+      fotoCheckOutUrl TEXT,
+      fotosIncidenciaUris TEXT,
+      fotosIncidencia TEXT,
+      estado TEXT NOT NULL DEFAULT 'abierta',
+      sincronizacion TEXT NOT NULL DEFAULT 'pendiente',
+      intentosSincronizacion INTEGER NOT NULL DEFAULT 0,
+      creadaPorAdmin INTEGER NOT NULL DEFAULT 0,
+      creadaPor TEXT
+    );
+
+    INSERT INTO jornadas_nueva (
+      id, choferId, choferNombre, empresa, matricula, ruta, incidencias, kmInicial,
+      combustibleInicial, fotoTacometroInicialUri, fotoRutaUri, latInicial, lngInicial,
+      fechaCheckIn, tuvoIncidenciaCheckin, tipoIncidenciaCheckin, detalleIncidenciaCheckin,
+      fotosIncidenciaCheckinUris, fotosIncidenciaCheckin, kmFinal, combustibleFinal,
+      fotoTacometroFinalUri, latFinal, lngFinal, fechaCheckOut, tuvoIncidencia, tipoIncidencia,
+      detalleIncidencia, fotoCheckInUrl, fotoRutaUrl, fotoCheckOutUrl, fotosIncidenciaUris,
+      fotosIncidencia, estado, sincronizacion, intentosSincronizacion, creadaPorAdmin, creadaPor
+    )
+    SELECT
+      id, choferId, choferNombre, empresa, matricula, ruta, incidencias, kmInicial,
+      combustibleInicial, fotoTacometroInicialUri, fotoRutaUri, latInicial, lngInicial,
+      fechaCheckIn, tuvoIncidenciaCheckin, tipoIncidenciaCheckin, detalleIncidenciaCheckin,
+      fotosIncidenciaCheckinUris, fotosIncidenciaCheckin, kmFinal, combustibleFinal,
+      fotoTacometroFinalUri, latFinal, lngFinal, fechaCheckOut, tuvoIncidencia, tipoIncidencia,
+      detalleIncidencia, fotoCheckInUrl, fotoRutaUrl, fotoCheckOutUrl, fotosIncidenciaUris,
+      fotosIncidencia, estado, sincronizacion, intentosSincronizacion, creadaPorAdmin, creadaPor
+    FROM jornadas;
+
+    DROP TABLE jornadas;
+    ALTER TABLE jornadas_nueva RENAME TO jornadas;
+
+    CREATE INDEX IF NOT EXISTS idx_jornadas_chofer ON jornadas (choferId);
+    CREATE INDEX IF NOT EXISTS idx_jornadas_estado ON jornadas (estado);
+  `);
 }
 
 // combustibleInicial/combustibleFinal eran un enum de texto ("Reserva"|"1/4"|
@@ -116,6 +205,11 @@ const COLUMNAS_JORNADA: Record<string, string> = {
   fotoCheckOutUrl: "TEXT",
   fotosIncidenciaUris: "TEXT",
   fotosIncidencia: "TEXT",
+  // spec_rutas_asignadas_admin.md — jornada cargada por Administración desde el Dashboard, nunca
+  // por el propio chofer. relajarNotNullCheckIn() de abajo depende de que estas dos ya existan
+  // antes de reconstruir la tabla, por eso agregarColumnasFaltantes() corre primero.
+  creadaPorAdmin: "INTEGER NOT NULL DEFAULT 0",
+  creadaPor: "TEXT",
 };
 
 async function agregarColumnasFaltantes(db: SQLite.SQLiteDatabase): Promise<void> {

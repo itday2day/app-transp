@@ -74,10 +74,13 @@ create table public.jornadas (
 
   km_inicial numeric not null,
   combustible_inicial smallint not null check (combustible_inicial between 0 and 100),
-  foto_tacometro_inicial_url text not null,
+  -- foto_tacometro_inicial_url/lat_inicial/lng_inicial: nullable desde
+  -- schema_v13_jornadas_creadas_admin.sql (spec_rutas_asignadas_admin.md) -- una jornada cargada
+  -- por Administración desde el Dashboard no tiene foto real de tacómetro ni GPS real.
+  foto_tacometro_inicial_url text,
   foto_ruta_url text,
-  lat_inicial double precision not null,
-  lng_inicial double precision not null,
+  lat_inicial double precision,
+  lng_inicial double precision,
   fecha_check_in timestamptz not null default now(),
   -- Incidencia estructurada del check-in (schema_v12_incidencia_checkin.sql,
   -- spec_incidencia_en_checkin.md) — mismo patrón que la incidencia de check-out más abajo,
@@ -112,6 +115,13 @@ create table public.jornadas (
   -- jornadas_proteger_correcciones_admin_trigger más abajo, nunca un Route Handler a mano (ver
   -- ese trigger para el razonamiento completo: Hallazgo #28, spec_correccion_gana_dashboard.md).
   campos_editados_admin jsonb not null default '{}'::jsonb,
+
+  -- Jornada cargada por Administración desde el Dashboard (spec_rutas_asignadas_admin.md), nunca
+  -- por el check-in del chofer en el celular -- mismo patrón de auditoría que fue_editado/
+  -- editado_por de arriba, en vez de un tercer valor de `estado` que obligaría a revisar cada
+  -- lugar del código que hoy asume que solo hay "abierta"/"cerrada".
+  creada_por_admin boolean not null default false,
+  creada_por text,
 
   estado text not null default 'abierta' check (estado in ('abierta', 'cerrada')),
   created_at timestamptz not null default now()

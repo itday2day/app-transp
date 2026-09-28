@@ -1,9 +1,10 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { CrearJornadaDialog } from "@/components/jornadas/crear-jornada-dialog";
 import { EditarJornadaDialog } from "@/components/jornadas/editar-jornada-dialog";
 import { ExportarReporteDialog } from "@/components/jornadas/exportar-reporte-dialog";
 import { FiltrosJornadasForm } from "@/components/jornadas/filtros-jornadas";
@@ -19,6 +20,9 @@ export default function JornadasPage() {
   const [jornadaSeleccionada, setJornadaSeleccionada] = useState<JornadaRow | null>(null);
   const [jornadaAEditar, setJornadaAEditar] = useState<JornadaRow | null>(null);
   const [exportarAbierto, setExportarAbierto] = useState(false);
+  // spec_rutas_asignadas_admin.md: Administración carga una jornada sin pasar por el check-in
+  // del chofer -- ruta planificada a futuro, o aviso tardío de una entrega ya hecha.
+  const [crearAbierto, setCrearAbierto] = useState(false);
   // Se incrementa cada vez que se abre el diálogo y se usa como `key` de
   // ExportarReporteDialog para forzar un remount — así sus campos siempre
   // arrancan sincronizados con los filtros vigentes en ese momento (ver
@@ -36,10 +40,16 @@ export default function JornadasPage() {
     <div className="flex flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-lg font-semibold">Jornadas</h1>
-        <Button onClick={abrirExportar}>
-          <Download className="h-4 w-4" />
-          Exportar
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setCrearAbierto(true)}>
+            <Plus className="h-4 w-4" />
+            Cargar jornada
+          </Button>
+          <Button onClick={abrirExportar}>
+            <Download className="h-4 w-4" />
+            Exportar
+          </Button>
+        </div>
       </div>
 
       <FiltrosJornadasForm filtros={filtros} onChange={setFiltros} />
@@ -78,6 +88,16 @@ export default function JornadasPage() {
           jornada={jornadaAEditar}
           onClose={() => setJornadaAEditar(null)}
           onGuardado={() => {
+            queryClient.invalidateQueries({ queryKey: ["jornadas"] });
+          }}
+        />
+      )}
+
+      {crearAbierto && (
+        <CrearJornadaDialog
+          onClose={() => setCrearAbierto(false)}
+          onCreada={() => {
+            setCrearAbierto(false);
             queryClient.invalidateQueries({ queryKey: ["jornadas"] });
           }}
         />

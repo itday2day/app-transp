@@ -185,7 +185,12 @@ export default function DetalleJornadaScreen() {
             lng={jornada.lngInicial}
           />
           <View style={estilos.filaFotos}>
-            <Image source={{ uri: jornada.fotoTacometroInicialUri }} style={estilos.foto} />
+            {/* spec_rutas_asignadas_admin.md: una jornada creada_por_admin puede no tener foto
+                real de tacómetro -- ya no es un campo garantizado, a diferencia de una jornada
+                que nació del check-in del propio chofer. */}
+            {jornada.fotoTacometroInicialUri ? (
+              <Image source={{ uri: jornada.fotoTacometroInicialUri }} style={estilos.foto} />
+            ) : null}
             {jornada.fotoRutaUri ? (
               <Image source={{ uri: jornada.fotoRutaUri }} style={estilos.foto} />
             ) : null}

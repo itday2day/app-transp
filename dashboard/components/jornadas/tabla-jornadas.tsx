@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Pencil } from "lucide-react";
+import { AlertTriangle, ClipboardList, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn, formatFechaHora } from "@/lib/utils";
@@ -89,7 +89,10 @@ function TarjetaJornada({
         <span>Check-out: {formatFechaHora(jornada.fecha_check_out)}</span>
       </div>
 
-      {(jornada.tuvo_incidencia || jornada.tuvo_incidencia_checkin || jornada.fue_editado) && (
+      {(jornada.tuvo_incidencia ||
+        jornada.tuvo_incidencia_checkin ||
+        jornada.fue_editado ||
+        (jornada.creada_por_admin && jornada.estado === "abierta")) && (
         <div className="flex flex-wrap items-center gap-2">
           {/* spec_incidencia_en_checkin.md: una jornada puede tener incidencia en cualquiera de
               las dos etapas (o las dos) — esta tarjeta compacta muestra una sola señal de "hay
@@ -104,6 +107,15 @@ function TarjetaJornada({
             <Badge variant="warning">
               <Pencil className="h-3 w-3" />
               Editado
+            </Badge>
+          )}
+          {/* spec_rutas_asignadas_admin.md, criterio 6: visible mientras siga abierta -- una vez
+              que el chofer la completa (o Administración la carga ya cerrada), deja de importar
+              distinguirla de cualquier otra jornada cerrada. */}
+          {jornada.creada_por_admin && jornada.estado === "abierta" && (
+            <Badge variant="primary">
+              <ClipboardList className="h-3 w-3" />
+              Asignada
             </Badge>
           )}
         </div>
@@ -153,9 +165,18 @@ export function TablaJornadas({ jornadas, cargando, onSeleccionar }: TablaJornad
                   {formatFechaHora(jornada.fecha_check_out)}
                 </td>
                 <td className="px-3 py-2">
-                  <Badge variant={jornada.estado === "abierta" ? "primary" : "default"}>
-                    {jornada.estado === "abierta" ? "Abierta" : "Cerrada"}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Badge variant={jornada.estado === "abierta" ? "primary" : "default"}>
+                      {jornada.estado === "abierta" ? "Abierta" : "Cerrada"}
+                    </Badge>
+                    {/* spec_rutas_asignadas_admin.md, criterio 6 */}
+                    {jornada.creada_por_admin && jornada.estado === "abierta" && (
+                      <Badge variant="primary">
+                        <ClipboardList className="h-3 w-3" />
+                        Asignada
+                      </Badge>
+                    )}
+                  </div>
                 </td>
                 <td className="px-3 py-2">
                   {jornada.tuvo_incidencia || jornada.tuvo_incidencia_checkin ? (
