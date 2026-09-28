@@ -41,6 +41,10 @@ export interface Jornada {
   empresa: string;
   matricula: string;
   ruta: string;
+  // ⚠️ Histórico: texto libre que capturaba el check-in antes de
+  // spec_incidencia_en_checkin.md. Ya no se escribe desde el formulario (ver
+  // tuvoIncidenciaCheckin y el resto de campos *Checkin más abajo) — se
+  // mantiene de solo lectura para no perder el dato de jornadas viejas.
   incidencias?: string;
 
   kmInicial: number;
@@ -50,6 +54,12 @@ export interface Jornada {
   latInicial: number;
   lngInicial: number;
   fechaCheckIn: string; // ISO 8601
+  // Incidencia estructurada del check-in (spec_incidencia_en_checkin.md) — mismo patrón que la
+  // incidencia de check-out más abajo, independiente de ella (una jornada puede tener 0, 1 o 2).
+  tuvoIncidenciaCheckin?: boolean;
+  tipoIncidenciaCheckin?: TipoIncidencia;
+  detalleIncidenciaCheckin?: string;
+  fotosIncidenciaCheckinUris?: string[]; // local, se muestran en DetalleJornadaScreen
 
   kmFinal?: number;
   combustibleFinal?: NivelCombustible;
@@ -67,6 +77,7 @@ export interface Jornada {
   fotoCheckInUrl?: string;
   fotoRutaUrl?: string;
   fotoCheckOutUrl?: string;
+  fotosIncidenciaCheckin?: string[];
   fotosIncidencia?: string[];
 
   estado: EstadoJornada;
@@ -79,14 +90,16 @@ export type NuevoCheckIn = Pick<
   | "empresa"
   | "matricula"
   | "ruta"
-  | "incidencias"
   | "kmInicial"
   | "combustibleInicial"
   | "fotoTacometroInicialUri"
   | "fotoRutaUri"
   | "latInicial"
   | "lngInicial"
->;
+  | "tuvoIncidenciaCheckin"
+  | "detalleIncidenciaCheckin"
+  | "fotosIncidenciaCheckinUris"
+> & { tipoIncidenciaCheckin: TipoIncidencia | null };
 
 export type DatosCheckOut = Pick<
   Jornada,
@@ -104,6 +117,7 @@ export interface UrlsFotosJornada {
   fotoCheckInUrl?: string;
   fotoRutaUrl?: string;
   fotoCheckOutUrl?: string;
+  fotosIncidenciaCheckin?: string; // JSON stringificado de string[] (ver jornadasRepo.ts)
   fotosIncidencia?: string; // JSON stringificado de string[] (ver jornadasRepo.ts)
 }
 

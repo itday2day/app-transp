@@ -30,6 +30,11 @@ interface FilaJornadaSQLite {
   latInicial: number;
   lngInicial: number;
   fechaCheckIn: string;
+  tuvoIncidenciaCheckin: number | null;
+  tipoIncidenciaCheckin: TipoIncidencia | null;
+  detalleIncidenciaCheckin: string | null;
+  fotosIncidenciaCheckinUris: string | null; // JSON stringificado
+  fotosIncidenciaCheckin: string | null; // ídem, URLs remotas
   kmFinal: number | null;
   combustibleFinal: NivelCombustible | null;
   fotoTacometroFinalUri: string | null;
@@ -88,6 +93,12 @@ function filaAJornada(fila: FilaJornadaSQLite): Jornada {
     latInicial: fila.latInicial,
     lngInicial: fila.lngInicial,
     fechaCheckIn: fila.fechaCheckIn,
+    tuvoIncidenciaCheckin:
+      fila.tuvoIncidenciaCheckin == null ? undefined : Boolean(fila.tuvoIncidenciaCheckin),
+    tipoIncidenciaCheckin: fila.tipoIncidenciaCheckin ?? undefined,
+    detalleIncidenciaCheckin: fila.detalleIncidenciaCheckin ?? undefined,
+    fotosIncidenciaCheckinUris: parsearFotos(fila.fotosIncidenciaCheckinUris),
+    fotosIncidenciaCheckin: parsearFotos(fila.fotosIncidenciaCheckin),
     kmFinal: fila.kmFinal ?? undefined,
     combustibleFinal: fila.combustibleFinal ?? undefined,
     fotoTacometroFinalUri: fila.fotoTacometroFinalUri ?? undefined,
@@ -115,6 +126,10 @@ export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promis
     choferId: chofer.id,
     choferNombre: chofer.nombre,
     ...datos,
+    // NuevoCheckIn acepta `null` para "sin tipo" (mismo patrón que DatosCheckOut/
+    // ValoresCheckOutForm), pero Jornada usa `undefined` (campo opcional) -- normalizado acá,
+    // la misma frontera exacta donde ya se normalizaban los demás campos opcionales del spread.
+    tipoIncidenciaCheckin: datos.tipoIncidenciaCheckin ?? undefined,
     fechaCheckIn: new Date().toISOString(),
     estado: "abierta",
     sincronizacion: "pendiente",
@@ -123,10 +138,11 @@ export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promis
 
   await db.runAsync(
     `INSERT INTO jornadas (
-      id, choferId, choferNombre, empresa, matricula, ruta, incidencias, kmInicial, combustibleInicial,
+      id, choferId, choferNombre, empresa, matricula, ruta, kmInicial, combustibleInicial,
       fotoTacometroInicialUri, fotoRutaUri, latInicial, lngInicial, fechaCheckIn,
+      tuvoIncidenciaCheckin, tipoIncidenciaCheckin, detalleIncidenciaCheckin, fotosIncidenciaCheckinUris,
       estado, sincronizacion, intentosSincronizacion
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       jornada.id,
       jornada.choferId,
@@ -134,7 +150,6 @@ export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promis
       jornada.empresa,
       jornada.matricula,
       jornada.ruta,
-      jornada.incidencias || null,
       jornada.kmInicial,
       jornada.combustibleInicial,
       jornada.fotoTacometroInicialUri,
@@ -142,6 +157,12 @@ export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promis
       jornada.latInicial,
       jornada.lngInicial,
       jornada.fechaCheckIn,
+      jornada.tuvoIncidenciaCheckin == null ? null : jornada.tuvoIncidenciaCheckin ? 1 : 0,
+      jornada.tipoIncidenciaCheckin ?? null,
+      jornada.detalleIncidenciaCheckin ?? null,
+      jornada.fotosIncidenciaCheckinUris && jornada.fotosIncidenciaCheckinUris.length > 0
+        ? JSON.stringify(jornada.fotosIncidenciaCheckinUris)
+        : null,
       jornada.estado,
       jornada.sincronizacion,
       jornada.intentosSincronizacion,
@@ -382,6 +403,10 @@ export interface JornadaAbiertaRemota {
   latInicial: number;
   lngInicial: number;
   fechaCheckIn: string;
+  tuvoIncidenciaCheckin: boolean | null;
+  tipoIncidenciaCheckin: TipoIncidencia | null;
+  detalleIncidenciaCheckin: string | null;
+  fotosIncidenciaCheckin: string[] | null; // URLs remotas, ya subidas
 }
 
 /**
@@ -414,6 +439,15 @@ export async function insertarJornadaRecuperada(remoto: JornadaAbiertaRemota): P
     latInicial: remoto.latInicial,
     lngInicial: remoto.lngInicial,
     fechaCheckIn: remoto.fechaCheckIn,
+    // Igual que fotoTacometroInicialUri/fotoRutaUri arriba: las fotos de la incidencia de
+    // check-in ya están confirmadas en Storage (viene de Supabase), así que se guardan
+    // directamente como "URIs" locales (URLs remotas, a <Image> le da igual) y también como
+    // fotosIncidenciaCheckin (URLs remotas) para que syncService no intente resubirlas.
+    tuvoIncidenciaCheckin: remoto.tuvoIncidenciaCheckin ?? undefined,
+    tipoIncidenciaCheckin: remoto.tipoIncidenciaCheckin ?? undefined,
+    detalleIncidenciaCheckin: remoto.detalleIncidenciaCheckin ?? undefined,
+    fotosIncidenciaCheckinUris: remoto.fotosIncidenciaCheckin ?? undefined,
+    fotosIncidenciaCheckin: remoto.fotosIncidenciaCheckin ?? undefined,
     fotoCheckInUrl: remoto.fotoTacometroInicialUrl,
     fotoRutaUrl: remoto.fotoRutaUrl ?? undefined,
     estado: "abierta",
@@ -425,9 +459,11 @@ export async function insertarJornadaRecuperada(remoto: JornadaAbiertaRemota): P
     `INSERT INTO jornadas (
       id, choferId, choferNombre, empresa, matricula, ruta, incidencias, kmInicial, combustibleInicial,
       fotoTacometroInicialUri, fotoRutaUri, latInicial, lngInicial, fechaCheckIn,
+      tuvoIncidenciaCheckin, tipoIncidenciaCheckin, detalleIncidenciaCheckin,
+      fotosIncidenciaCheckinUris, fotosIncidenciaCheckin,
       fotoCheckInUrl, fotoRutaUrl,
       estado, sincronizacion, intentosSincronizacion
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       jornada.id,
       jornada.choferId,
@@ -443,6 +479,15 @@ export async function insertarJornadaRecuperada(remoto: JornadaAbiertaRemota): P
       jornada.latInicial,
       jornada.lngInicial,
       jornada.fechaCheckIn,
+      jornada.tuvoIncidenciaCheckin == null ? null : jornada.tuvoIncidenciaCheckin ? 1 : 0,
+      jornada.tipoIncidenciaCheckin ?? null,
+      jornada.detalleIncidenciaCheckin ?? null,
+      jornada.fotosIncidenciaCheckinUris && jornada.fotosIncidenciaCheckinUris.length > 0
+        ? JSON.stringify(jornada.fotosIncidenciaCheckinUris)
+        : null,
+      jornada.fotosIncidenciaCheckin && jornada.fotosIncidenciaCheckin.length > 0
+        ? JSON.stringify(jornada.fotosIncidenciaCheckin)
+        : null,
       jornada.fotoCheckInUrl ?? null,
       jornada.fotoRutaUrl ?? null,
       jornada.estado,
