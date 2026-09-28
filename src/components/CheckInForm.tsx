@@ -1,15 +1,5 @@
 import React, { useEffect, useRef, useState, type RefObject } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  Keyboard,
-  ScrollView,
-  findNodeHandle,
-  UIManager,
-} from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Keyboard, ScrollView } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { SelectorBuscable } from "@/components/SelectorBuscable";
@@ -17,9 +7,10 @@ import { SelectorDesplegable } from "@/components/SelectorDesplegable";
 import { SelectorMatricula } from "@/components/SelectorMatricula";
 import { SelectorCombustible } from "@/components/SelectorCombustible";
 import { CapturaFoto } from "@/components/CapturaFoto";
+import { IncidenciasForm } from "@/components/IncidenciasForm";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { EMPRESAS, obtenerRutasDeEmpresa } from "@/data/empresas";
-import { NivelCombustible } from "@/types";
+import { IncidenciaData, NivelCombustible, TipoIncidencia } from "@/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
@@ -32,17 +23,28 @@ export interface ValoresCheckInForm {
   combustibleInicial: NivelCombustible;
   fotoTacometroInicialUri: string;
   fotoRutaUri?: string;
-  incidencias: string;
+  tuvoIncidenciaCheckin: boolean;
+  tipoIncidenciaCheckin: TipoIncidencia | null;
+  detalleIncidenciaCheckin: string;
+  fotosIncidenciaCheckinUris: string[];
 }
 
 interface Props {
   onEnviar: (valores: ValoresCheckInForm) => void;
   enviando: boolean;
   matriculasFrecuentes: string[];
-  /** ScrollView de CheckInScreen — se usa para traer el campo de Incidencias
-   * a la vista cuando se enfoca (ver manejarFocusIncidencias más abajo). */
+  /** ScrollView de CheckInScreen — se reenvía a IncidenciasForm para traer su
+   * campo de detalle a la vista cuando se enfoca (spec_incidencia_en_checkin.md,
+   * mismo patrón que ya usa CheckOutForm). */
   scrollViewRef: RefObject<ScrollView | null>;
 }
+
+const INCIDENCIA_INICIAL: IncidenciaData = {
+  tuvoIncidencia: false,
+  tipo: null,
+  detalle: "",
+  fotos: [],
+};
 
 export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollViewRef }: Props) {
   const { t } = useTranslation();
@@ -54,40 +56,8 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
   const [combustible, setCombustible] = useState<NivelCombustible | null>(null);
   const [fotoTacometro, setFotoTacometro] = useState<string | null>(null);
   const [fotoRuta, setFotoRuta] = useState<string | null>(null);
-  const [incidencias, setIncidencias] = useState("");
+  const [incidencia, setIncidencia] = useState<IncidenciaData>(INCIDENCIA_INICIAL);
   const refRutaManual = useRef<TextInput>(null);
-  const refIncidencias = useRef<TextInput>(null);
-
-  // Mide la posición real del campo de Incidencias respecto al ScrollView
-  // (no respecto a su padre inmediato — measureLayout resuelve eso sin tener
-  // que acumular offsets a mano por cada nivel de anidamiento) y lo trae a la
-  // vista al enfocarlo, para que el teclado nunca lo tape. Es multilínea y es
-  // el campo más propenso a quedar oculto: el último del formulario.
-  function manejarFocusIncidencias() {
-    const scroll = scrollViewRef.current;
-    if (!scroll) return;
-    // ref.measureLayout() (el método de instancia, oficialmente el
-    // "recomendado") tira "Warning: ref.measureLayout must be called with a
-    // ref to a native component" con el ref de CampoTexto (envuelto con
-    // forwardRef) — no lo reconoce como componente nativo pese a que
-    // reenvía el ref directo al TextInput real. UIManager.measureLayout(),
-    // la función de más bajo nivel, no llama al método sobre la instancia
-    // del ref: solo necesita los tags numéricos de ambos nodos (vía
-    // findNodeHandle), así que no depende de que el ref "sea" reconocido
-    // como nativo — evita el problema por completo.
-    const nodoCampo = findNodeHandle(refIncidencias.current);
-    const nodoScroll = findNodeHandle(scroll);
-    if (nodoCampo == null || nodoScroll == null) return;
-
-    UIManager.measureLayout(
-      nodoCampo,
-      nodoScroll,
-      () => {},
-      (_left, top) => {
-        scroll.scrollTo({ y: Math.max(0, top - espaciado.md), animated: true });
-      }
-    );
-  }
 
   const rutasDisponibles = obtenerRutasDeEmpresa(empresa);
 
@@ -109,13 +79,15 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
     setRutaManual(false);
   }
 
+  const detalleIncidenciaValido = incidencia.tipo !== "Otro" || incidencia.detalle.trim().length > 0;
   const formularioValido =
     empresa !== null &&
     matricula.trim().length > 0 &&
     ruta.trim().length > 0 &&
     Number(kmInicial) > 0 &&
     combustible !== null &&
-    fotoTacometro !== null;
+    fotoTacometro !== null &&
+    detalleIncidenciaValido;
 
   function manejarEnviar() {
     if (!formularioValido || !empresa || !combustible || !fotoTacometro) return;
@@ -128,7 +100,10 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
       combustibleInicial: combustible,
       fotoTacometroInicialUri: fotoTacometro,
       fotoRutaUri: fotoRuta ?? undefined,
-      incidencias: incidencias.trim(),
+      tuvoIncidenciaCheckin: incidencia.tuvoIncidencia,
+      tipoIncidenciaCheckin: incidencia.tuvoIncidencia ? incidencia.tipo : null,
+      detalleIncidenciaCheckin: incidencia.tuvoIncidencia ? incidencia.detalle.trim() : "",
+      fotosIncidenciaCheckinUris: incidencia.tuvoIncidencia ? incidencia.fotos : [],
     });
   }
 
@@ -228,19 +203,9 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
 
       <View style={estilos.divisor} />
 
-      {/* Sección 4: observaciones y envío. */}
+      {/* Sección 4: incidencia y envío. */}
       <View>
-        <CampoTexto
-          ref={refIncidencias}
-          etiqueta={t("checkInForm.incidenciasEtiqueta")}
-          placeholder={t("checkInForm.incidenciasPlaceholder")}
-          multiline
-          numberOfLines={4}
-          style={estilos.incidencias}
-          value={incidencias}
-          onChangeText={setIncidencias}
-          onFocus={manejarFocusIncidencias}
-        />
+        <IncidenciasForm valor={incidencia} onCambiar={setIncidencia} scrollViewRef={scrollViewRef} />
 
         <BotonPrimario
           titulo={t("checkInForm.botonEnviar")}
@@ -260,10 +225,6 @@ const estilos = StyleSheet.create({
     backgroundColor: colores.borde,
     marginTop: espaciado.sm,
     marginBottom: espaciado.lg,
-  },
-  incidencias: {
-    minHeight: 100,
-    textAlignVertical: "top",
   },
   boton: {
     marginTop: espaciado.sm,

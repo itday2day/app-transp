@@ -170,10 +170,41 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
             </Button>
           </div>
 
-          {jornada.incidencias && (
-            <div>
-              <p className="mb-1 text-xs text-muted-foreground">Incidencias (notas de ruta)</p>
+          {/* spec_incidencia_en_checkin.md: incidencia estructurada del check-in, mismo patrón que
+              la de check-out más abajo. `jornada.incidencias` (texto libre) es el histórico de
+              jornadas creadas antes de este spec — se muestra tal cual solo cuando la jornada no
+              tiene datos estructurados de check-in, para no perder ningún dato viejo. */}
+          <div>
+            <div className="mb-2 flex items-center gap-2">
+              <p className="text-xs text-muted-foreground">Incidencia de check-in</p>
+              {jornada.tuvo_incidencia_checkin && (
+                <Badge variant="danger">
+                  <AlertTriangle className="h-3 w-3" />
+                  {jornada.tipo_incidencia_checkin ?? "Sí"}
+                </Badge>
+              )}
+            </div>
+            {jornada.tuvo_incidencia_checkin ? (
+              <p className="text-sm">
+                {jornada.detalle_incidencia_checkin || "Sin detalle adicional."}
+              </p>
+            ) : jornada.incidencias ? (
               <p className="text-sm">{jornada.incidencias}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Sin incidencia reportada.</p>
+            )}
+          </div>
+
+          {jornada.fotos_incidencia_checkin && jornada.fotos_incidencia_checkin.length > 0 && (
+            <div>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Fotos de respaldo de la incidencia de check-in
+              </p>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                {jornada.fotos_incidencia_checkin.map((url, indice) => (
+                  <Foto key={url} titulo={`Foto ${indice + 1}`} url={url} />
+                ))}
+              </div>
             </div>
           )}
 
@@ -197,7 +228,7 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
           {jornada.fotos_incidencia && jornada.fotos_incidencia.length > 0 && (
             <div>
               <p className="mb-2 text-xs text-muted-foreground">
-                Fotos de respaldo de la incidencia
+                Fotos de respaldo de la incidencia de check-out
               </p>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 {jornada.fotos_incidencia.map((url, indice) => (

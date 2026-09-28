@@ -79,6 +79,14 @@ create table public.jornadas (
   lat_inicial double precision not null,
   lng_inicial double precision not null,
   fecha_check_in timestamptz not null default now(),
+  -- Incidencia estructurada del check-in (schema_v12_incidencia_checkin.sql,
+  -- spec_incidencia_en_checkin.md) — mismo patrón que la incidencia de check-out más abajo,
+  -- independiente de ella (una jornada puede tener 0, 1 o 2). `incidencias` (arriba) queda de
+  -- solo lectura para jornadas viejas, ya no se escribe desde el check-in.
+  tuvo_incidencia_checkin boolean,
+  tipo_incidencia_checkin text check (tipo_incidencia_checkin in ('Avería vehículo', 'Tráfico/Retraso', 'Cliente ausente', 'Otro')),
+  detalle_incidencia_checkin text,
+  fotos_incidencia_checkin text[],
 
   km_final numeric,
   combustible_final smallint check (combustible_final between 0 and 100),

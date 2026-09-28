@@ -89,6 +89,7 @@ export type Database = {
           combustible_inicial: number;
           created_at: string;
           detalle_incidencia: string | null;
+          detalle_incidencia_checkin: string | null;
           editado_en: string | null;
           editado_por: string | null;
           empresa: string;
@@ -99,6 +100,7 @@ export type Database = {
           foto_tacometro_final_url: string | null;
           foto_tacometro_inicial_url: string;
           fotos_incidencia: string[] | null;
+          fotos_incidencia_checkin: string[] | null;
           fue_editado: boolean;
           id: string;
           incidencias: string | null;
@@ -112,7 +114,9 @@ export type Database = {
           motivo_edicion: string | null;
           ruta: string;
           tipo_incidencia: string | null;
+          tipo_incidencia_checkin: string | null;
           tuvo_incidencia: boolean | null;
+          tuvo_incidencia_checkin: boolean | null;
         };
         Insert: {
           campos_editados_admin?: Json;
@@ -122,6 +126,7 @@ export type Database = {
           combustible_inicial: number;
           created_at?: string;
           detalle_incidencia?: string | null;
+          detalle_incidencia_checkin?: string | null;
           editado_en?: string | null;
           editado_por?: string | null;
           empresa: string;
@@ -132,6 +137,7 @@ export type Database = {
           foto_tacometro_final_url?: string | null;
           foto_tacometro_inicial_url: string;
           fotos_incidencia?: string[] | null;
+          fotos_incidencia_checkin?: string[] | null;
           fue_editado?: boolean;
           id?: string;
           incidencias?: string | null;
@@ -145,7 +151,9 @@ export type Database = {
           motivo_edicion?: string | null;
           ruta: string;
           tipo_incidencia?: string | null;
+          tipo_incidencia_checkin?: string | null;
           tuvo_incidencia?: boolean | null;
+          tuvo_incidencia_checkin?: boolean | null;
         };
         Update: {
           campos_editados_admin?: Json;
@@ -155,6 +163,7 @@ export type Database = {
           combustible_inicial?: number;
           created_at?: string;
           detalle_incidencia?: string | null;
+          detalle_incidencia_checkin?: string | null;
           editado_en?: string | null;
           editado_por?: string | null;
           empresa?: string;
@@ -165,6 +174,7 @@ export type Database = {
           foto_tacometro_final_url?: string | null;
           foto_tacometro_inicial_url?: string;
           fotos_incidencia?: string[] | null;
+          fotos_incidencia_checkin?: string[] | null;
           fue_editado?: boolean;
           id?: string;
           incidencias?: string | null;
@@ -178,7 +188,9 @@ export type Database = {
           motivo_edicion?: string | null;
           ruta?: string;
           tipo_incidencia?: string | null;
+          tipo_incidencia_checkin?: string | null;
           tuvo_incidencia?: boolean | null;
+          tuvo_incidencia_checkin?: boolean | null;
         };
         Relationships: [
           {

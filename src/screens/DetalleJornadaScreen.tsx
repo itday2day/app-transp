@@ -177,9 +177,6 @@ export default function DetalleJornadaScreen() {
           />
           <Fila etiqueta={t("detalleJornada.empresa")} valor={jornada.empresa} />
           <Fila etiqueta={t("detalleJornada.ruta")} valor={jornada.ruta} />
-          {jornada.incidencias ? (
-            <FilaTexto etiqueta={t("detalleJornada.incidencias")} valor={jornada.incidencias} />
-          ) : null}
           <Fila etiqueta={t("detalleJornada.kmInicial")} valor={`${jornada.kmInicial} km`} />
           <Fila etiqueta={t("detalleJornada.combustible")} valor={`${jornada.combustibleInicial}%`} />
           <FilaUbicacion
@@ -193,6 +190,25 @@ export default function DetalleJornadaScreen() {
               <Image source={{ uri: jornada.fotoRutaUri }} style={estilos.foto} />
             ) : null}
           </View>
+          {/* spec_incidencia_en_checkin.md: incidencia estructurada del check-in, mismo patrón que
+              la del check-out más abajo. `jornada.incidencias` (texto libre) es el histórico de
+              jornadas creadas antes de este spec — se muestra tal cual solo cuando no hay datos
+              estructurados, para no perder ningún dato viejo. */}
+          <FilaTexto
+            etiqueta={t("detalleJornada.incidencia")}
+            valor={
+              jornada.tuvoIncidenciaCheckin
+                ? `${jornada.tipoIncidenciaCheckin ? t(CLAVE_TIPO_INCIDENCIA[jornada.tipoIncidenciaCheckin]) : "-"}${jornada.detalleIncidenciaCheckin ? ` — ${jornada.detalleIncidenciaCheckin}` : ""}`
+                : jornada.incidencias || t("detalleJornada.sinIncidencias")
+            }
+          />
+          {jornada.fotosIncidenciaCheckinUris && jornada.fotosIncidenciaCheckinUris.length > 0 ? (
+            <View style={estilos.filaFotosIncidencia}>
+              {jornada.fotosIncidenciaCheckinUris.map((uri) => (
+                <Image key={uri} source={{ uri }} style={estilos.fotoIncidencia} />
+              ))}
+            </View>
+          ) : null}
         </View>
 
         {jornada.estado === "cerrada" ? (

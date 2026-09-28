@@ -32,6 +32,16 @@ interface JornadaReporte {
   kmFinal: number | null;
   combustibleInicial: number;
   combustibleFinal: number | null;
+  // Texto libre histórico (jornadas creadas antes de spec_incidencia_en_checkin.md) — solo lectura,
+  // ver §4 del spec: el mock server lo usa como respaldo cuando no hay incidencia de check-in
+  // estructurada.
+  incidencias: string | null;
+  // Incidencia estructurada del check-in (spec_incidencia_en_checkin.md) — independiente de la de
+  // check-out de más abajo.
+  tuvoIncidenciaCheckin: boolean | null;
+  tipoIncidenciaCheckin: string | null;
+  detalleIncidenciaCheckin: string | null;
+  fotosIncidenciaCheckin: string[];
   tuvoIncidencia: boolean | null;
   tipoIncidencia: string | null;
   detalleIncidencia: string | null;
@@ -59,6 +69,11 @@ function filaAJornadaReporte(fila: JornadaRowConChofer): JornadaReporte {
     kmFinal: fila.km_final,
     combustibleInicial: fila.combustible_inicial,
     combustibleFinal: fila.combustible_final,
+    incidencias: fila.incidencias,
+    tuvoIncidenciaCheckin: fila.tuvo_incidencia_checkin,
+    tipoIncidenciaCheckin: fila.tipo_incidencia_checkin,
+    detalleIncidenciaCheckin: fila.detalle_incidencia_checkin,
+    fotosIncidenciaCheckin: fila.fotos_incidencia_checkin ?? [],
     tuvoIncidencia: fila.tuvo_incidencia,
     tipoIncidencia: fila.tipo_incidencia,
     detalleIncidencia: fila.detalle_incidencia,

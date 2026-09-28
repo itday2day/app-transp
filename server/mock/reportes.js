@@ -180,25 +180,47 @@ function agregarHojaFiltros(libro, { rangoInicio, rangoFin, empresa, chofer, est
   ]);
 }
 
-// Hoy una jornada solo puede tener 0 o 1 incidencia (se captura una única vez
-// al hacer check-out), pero esto se arma como arreglo para que, si en el
-// futuro una jornada admite varias, las columnas de tipo/descripción ya las
-// muestren concatenadas por salto de línea sin tocar este archivo.
-// ⚠️ "hora" queda como el ISO crudo (no una cadena ya formateada) a
-// propósito: quien arma la fila la convierte a número de Excel. Eso además
-// significa que esta concatenación por salto de línea NO puede extenderse a
-// "hora" si el día de mañana una jornada admite varias incidencias (una
-// celda numérica no puede llevar dos valores) — ese caso, cuando exista,
-// necesita su propio rediseño de esta columna.
-function obtenerIncidencias(jornada) {
-  if (!jornada.tuvoIncidencia) return [];
-  return [
-    {
-      tipo: jornada.tipoIncidencia || "N/A",
-      detalle: jornada.detalleIncidencia || "N/A",
-      horaIso: jornada.fechaCheckOut,
-    },
-  ];
+// spec_incidencia_en_checkin.md: una jornada puede tener 0, 1 o 2 incidencias
+// estructuradas — una de check-in y otra de check-out, independientes entre
+// sí — así que cada etapa se resuelve por separado en vez de un único
+// arreglo. "horaIso" queda como el ISO crudo (no una cadena ya formateada) a
+// propósito: quien arma la fila la convierte a número de Excel.
+//
+// Check-in tiene además un caso histórico (§4 del spec): jornadas creadas
+// antes de este spec solo tienen el campo de texto libre `incidencias`, sin
+// tipo ni hora propia. Se muestra ese texto en la columna de descripción sin
+// inventar un tipo, y `estructurada: false` hace que la columna "¿Incidencia
+// Check-In?" NO se marque "SÍ" para ese caso — mismo criterio que el
+// Dashboard, donde el badge de incidencia solo aparece para datos
+// estructurados (ver jornada-detalle-dialog.tsx).
+function obtenerIncidenciaCheckIn(jornada) {
+  if (jornada.tuvoIncidenciaCheckin) {
+    return {
+      estructurada: true,
+      tipo: jornada.tipoIncidenciaCheckin || "N/A",
+      detalle: jornada.detalleIncidenciaCheckin || "N/A",
+      horaIso: jornada.fechaCheckIn,
+    };
+  }
+  if (jornada.incidencias) {
+    return {
+      estructurada: false,
+      tipo: null,
+      detalle: jornada.incidencias,
+      horaIso: jornada.fechaCheckIn,
+    };
+  }
+  return null;
+}
+
+function obtenerIncidenciaCheckOut(jornada) {
+  if (!jornada.tuvoIncidencia) return null;
+  return {
+    estructurada: true,
+    tipo: jornada.tipoIncidencia || "N/A",
+    detalle: jornada.detalleIncidencia || "N/A",
+    horaIso: jornada.fechaCheckOut,
+  };
 }
 
 const RELLENO_INCIDENCIA = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF3D6" } };
@@ -252,28 +274,38 @@ async function generarLibroExcel(jornadas, filtros) {
     { header: "Kilometraje Total Recorrido", key: "kmRecorrido", width: 20 },
     { header: "Nivel Combustible Inicial", key: "combustibleInicial", width: 18 },
     { header: "Nivel Combustible Final", key: "combustibleFinal", width: 18 },
-    { header: "¿Tiene Incidencias?", key: "tieneIncidencias", width: 16 },
-    { header: "Tipo de Incidencia", key: "tipoIncidencia", width: 20 },
-    { header: "Descripción de Incidencia", key: "descripcionIncidencia", width: 32 },
-    { header: "Hora Incidencia", key: "horaIncidencia", width: 14 },
+    // spec_incidencia_en_checkin.md §3.8: dos secciones paralelas (Check-In / Check-Out) en vez de
+    // la única sección de antes — cada etapa es independiente y necesita su propia hora, que no
+    // puede compartirse en una sola celda numérica.
+    { header: "¿Incidencia Check-In?", key: "tieneIncidenciaCheckIn", width: 18 },
+    { header: "Tipo Incidencia Check-In", key: "tipoIncidenciaCheckIn", width: 20 },
+    { header: "Descripción Incidencia Check-In", key: "descripcionIncidenciaCheckIn", width: 32 },
+    { header: "Hora Incidencia Check-In", key: "horaIncidenciaCheckIn", width: 16 },
+    { header: "¿Incidencia Check-Out?", key: "tieneIncidenciaCheckOut", width: 18 },
+    { header: "Tipo Incidencia Check-Out", key: "tipoIncidenciaCheckOut", width: 20 },
+    { header: "Descripción Incidencia Check-Out", key: "descripcionIncidenciaCheckOut", width: 32 },
+    { header: "Hora Incidencia Check-Out", key: "horaIncidenciaCheckOut", width: 16 },
     { header: "Foto Check-In", key: "urlFotoCheckIn", width: 20 },
     { header: "Foto Ruta", key: "urlFotoRuta", width: 20 },
     { header: "Foto Check-Out", key: "urlFotoCheckOut", width: 20 },
     { header: "Ubicación Check-In", key: "ubicacionCheckIn", width: 16 },
     { header: "Ubicación Check-Out", key: "ubicacionCheckOut", width: 16 },
     ...Array.from({ length: MAX_FOTOS_INCIDENCIA_EXCEL }, (_, i) => ({
-      header: `Foto Incidencia ${i + 1}`,
-      key: `fotoIncidencia${i + 1}`,
+      header: `Foto Incidencia Check-In ${i + 1}`,
+      key: `fotoIncidenciaCheckIn${i + 1}`,
+      width: 20,
+    })),
+    ...Array.from({ length: MAX_FOTOS_INCIDENCIA_EXCEL }, (_, i) => ({
+      header: `Foto Incidencia Check-Out ${i + 1}`,
+      key: `fotoIncidenciaCheckOut${i + 1}`,
       width: 20,
     })),
   ];
   hoja.getRow(1).font = { bold: true };
 
   for (const jornada of jornadas) {
-    const incidencias = obtenerIncidencias(jornada);
-    const tieneIncidencias = incidencias.length > 0;
-    // Ver el comentario en obtenerIncidencias(): hoy nunca hay más de una.
-    const incidencia = incidencias[0] ?? null;
+    const incidenciaCheckIn = obtenerIncidenciaCheckIn(jornada);
+    const incidenciaCheckOut = obtenerIncidenciaCheckOut(jornada);
     const horasTotalesNumero = calcularHorasTotales(jornada.fechaCheckIn, jornada.fechaCheckOut);
 
     const fila = hoja.addRow({
@@ -294,10 +326,14 @@ async function generarLibroExcel(jornadas, filtros) {
       kmRecorrido: calcularKmRecorrido(jornada.kmInicial, jornada.kmFinal),
       combustibleInicial: `${jornada.combustibleInicial}%`,
       combustibleFinal: jornada.combustibleFinal != null ? `${jornada.combustibleFinal}%` : "N/A",
-      tieneIncidencias: tieneIncidencias ? "SÍ" : "NO",
-      tipoIncidencia: tieneIncidencias ? incidencias.map((i) => i.tipo).join("\n") : "N/A",
-      descripcionIncidencia: tieneIncidencias ? incidencias.map((i) => i.detalle).join("\n") : "N/A",
-      horaIncidencia: incidencia ? fraccionHoraExcel(incidencia.horaIso) : "N/A",
+      tieneIncidenciaCheckIn: incidenciaCheckIn?.estructurada ? "SÍ" : "NO",
+      tipoIncidenciaCheckIn: incidenciaCheckIn ? (incidenciaCheckIn.tipo ?? "N/A") : "N/A",
+      descripcionIncidenciaCheckIn: incidenciaCheckIn ? incidenciaCheckIn.detalle : "N/A",
+      horaIncidenciaCheckIn: incidenciaCheckIn ? fraccionHoraExcel(incidenciaCheckIn.horaIso) : "N/A",
+      tieneIncidenciaCheckOut: incidenciaCheckOut ? "SÍ" : "NO",
+      tipoIncidenciaCheckOut: incidenciaCheckOut ? incidenciaCheckOut.tipo : "N/A",
+      descripcionIncidenciaCheckOut: incidenciaCheckOut ? incidenciaCheckOut.detalle : "N/A",
+      horaIncidenciaCheckOut: incidenciaCheckOut ? fraccionHoraExcel(incidenciaCheckOut.horaIso) : "N/A",
     });
 
     // numFmt solo en las celdas que de verdad llevan un número — aplicarlo
@@ -307,14 +343,27 @@ async function generarLibroExcel(jornadas, filtros) {
     fila.getCell("horaCheckIn").numFmt = FORMATO_HORA_EXCEL;
     if (jornada.fechaCheckOut) fila.getCell("horaCheckOut").numFmt = FORMATO_HORA_EXCEL;
     if (horasTotalesNumero != null) fila.getCell("horasTotales").numFmt = FORMATO_DURACION_EXCEL;
-    if (incidencia) fila.getCell("horaIncidencia").numFmt = FORMATO_HORA_EXCEL;
+    if (incidenciaCheckIn) fila.getCell("horaIncidenciaCheckIn").numFmt = FORMATO_HORA_EXCEL;
+    if (incidenciaCheckOut) fila.getCell("horaIncidenciaCheckOut").numFmt = FORMATO_HORA_EXCEL;
 
-    if (tieneIncidencias) {
-      fila.getCell("tieneIncidencias").fill = RELLENO_INCIDENCIA;
-      fila.getCell("tieneIncidencias").font = { bold: true, color: COLOR_TEXTO_INCIDENCIA };
-      // horaIncidencia ya no es texto potencialmente largo (era el join por
-      // salto de línea) — el wrap solo tiene sentido para tipo/descripción.
-      ["tipoIncidencia", "descripcionIncidencia"].forEach((clave) => {
+    // El resaltado (relleno/negrita) de "¿Incidencia...?" solo se aplica cuando es una incidencia
+    // ESTRUCTURADA de verdad — el histórico de texto libre (§4 del spec) no la activa, mismo
+    // criterio que el badge del Dashboard. El wrap de texto sí aplica para cualquier contenido
+    // (estructurado o histórico), porque ambos pueden ser texto largo.
+    if (incidenciaCheckIn?.estructurada) {
+      fila.getCell("tieneIncidenciaCheckIn").fill = RELLENO_INCIDENCIA;
+      fila.getCell("tieneIncidenciaCheckIn").font = { bold: true, color: COLOR_TEXTO_INCIDENCIA };
+    }
+    if (incidenciaCheckIn) {
+      ["tipoIncidenciaCheckIn", "descripcionIncidenciaCheckIn"].forEach((clave) => {
+        fila.getCell(clave).alignment = { wrapText: true, vertical: "top" };
+      });
+    }
+
+    if (incidenciaCheckOut) {
+      fila.getCell("tieneIncidenciaCheckOut").fill = RELLENO_INCIDENCIA;
+      fila.getCell("tieneIncidenciaCheckOut").font = { bold: true, color: COLOR_TEXTO_INCIDENCIA };
+      ["tipoIncidenciaCheckOut", "descripcionIncidenciaCheckOut"].forEach((clave) => {
         fila.getCell(clave).alignment = { wrapText: true, vertical: "top" };
       });
     }
@@ -348,10 +397,26 @@ async function generarLibroExcel(jornadas, filtros) {
       }
     }
 
-    const fotosIncidencia = jornada.fotosIncidencia ?? [];
+    const fotosIncidenciaCheckIn = jornada.fotosIncidenciaCheckin ?? [];
     for (let i = 0; i < MAX_FOTOS_INCIDENCIA_EXCEL; i++) {
-      const clave = `fotoIncidencia${i + 1}`;
-      const url = fotosIncidencia[i];
+      const clave = `fotoIncidenciaCheckIn${i + 1}`;
+      const url = fotosIncidenciaCheckIn[i];
+      if (url) {
+        fila.getCell(clave).value = {
+          text: `Ver Foto ${i + 1} ↗`,
+          hyperlink: url,
+          tooltip: "Haz clic para ver la imagen en alta resolución",
+        };
+        fila.getCell(clave).font = { color: COLOR_ENLACE, underline: true };
+      } else {
+        fila.getCell(clave).value = "-";
+      }
+    }
+
+    const fotosIncidenciaCheckOut = jornada.fotosIncidencia ?? [];
+    for (let i = 0; i < MAX_FOTOS_INCIDENCIA_EXCEL; i++) {
+      const clave = `fotoIncidenciaCheckOut${i + 1}`;
+      const url = fotosIncidenciaCheckOut[i];
       if (url) {
         fila.getCell(clave).value = {
           text: `Ver Foto ${i + 1} ↗`,

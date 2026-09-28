@@ -27,6 +27,12 @@ export interface JornadaRow {
   lat_inicial: number | null;
   lng_inicial: number | null;
   fecha_check_in: string;
+  // Incidencia estructurada del check-in (spec_incidencia_en_checkin.md) — mismo patrón que la
+  // incidencia de check-out más abajo, independiente de ella.
+  tuvo_incidencia_checkin: boolean | null;
+  tipo_incidencia_checkin: TipoIncidencia | null;
+  detalle_incidencia_checkin: string | null;
+  fotos_incidencia_checkin: string[] | null;
 
   km_final: number | null;
   combustible_final: NivelCombustible | null;

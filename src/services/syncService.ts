@@ -79,6 +79,29 @@ async function subirJornada(jornada: Jornada): Promise<void> {
     urlsNuevas.fotosIncidencia = JSON.stringify(fotosIncidenciaFinal);
   }
 
+  // spec_incidencia_en_checkin.md — mismo gate por foto, mismo criterio de unión, que la
+  // incidencia de check-out de arriba, con su propia carpeta de rutas ("-incidencia-checkin-")
+  // para no pisar las fotos de la incidencia de check-out de la misma jornada.
+  const fotosIncidenciaCheckinLocales = jornada.fotosIncidenciaCheckinUris ?? [];
+  let fotosIncidenciaCheckinSubidas: string[] = [];
+  if (fotosIncidenciaCheckinLocales.length > 0) {
+    const yaConfirmadas = new Set(jornada.fotosIncidenciaCheckin ?? []);
+    fotosIncidenciaCheckinSubidas = await Promise.all(
+      fotosIncidenciaCheckinLocales.map((uri, indice) => {
+        const ruta = `${jornada.choferId}/${jornada.id}-incidencia-checkin-${indice}.jpg`;
+        const urlEsperada = obtenerUrlPublicaEvidencia(ruta);
+        return yaConfirmadas.has(urlEsperada) ? urlEsperada : subirEvidencia(uri, ruta);
+      })
+    );
+  }
+  const fotosIncidenciaCheckinFinal =
+    fotosIncidenciaCheckinLocales.length > 0
+      ? Array.from(new Set([...(jornada.fotosIncidenciaCheckin ?? []), ...fotosIncidenciaCheckinSubidas]))
+      : jornada.fotosIncidenciaCheckin;
+  if (fotosIncidenciaCheckinLocales.length > 0) {
+    urlsNuevas.fotosIncidenciaCheckin = JSON.stringify(fotosIncidenciaCheckinFinal);
+  }
+
   if (Object.keys(urlsNuevas).length > 0) {
     await actualizarUrlsFotos(jornada.id, urlsNuevas);
   }
@@ -102,6 +125,12 @@ async function subirJornada(jornada: Jornada): Promise<void> {
     lat_inicial: jornada.latInicial,
     lng_inicial: jornada.lngInicial,
     fecha_check_in: jornada.fechaCheckIn,
+    // spec_incidencia_en_checkin.md — existe desde el momento del check-in, no solo al cerrar
+    // (a diferencia de la incidencia de check-out, más abajo).
+    tuvo_incidencia_checkin: jornada.tuvoIncidenciaCheckin ?? null,
+    tipo_incidencia_checkin: jornada.tipoIncidenciaCheckin ?? null,
+    detalle_incidencia_checkin: jornada.detalleIncidenciaCheckin ?? null,
+    fotos_incidencia_checkin: fotosIncidenciaCheckinFinal?.length ? fotosIncidenciaCheckinFinal : null,
     estado: jornada.estado,
     ...(jornada.estado === "cerrada"
       ? {
@@ -236,6 +265,10 @@ interface FilaJornadaAbiertaRemota {
   lat_inicial: number;
   lng_inicial: number;
   fecha_check_in: string;
+  tuvo_incidencia_checkin: boolean | null;
+  tipo_incidencia_checkin: TipoIncidencia | null;
+  detalle_incidencia_checkin: string | null;
+  fotos_incidencia_checkin: string[] | null;
 }
 
 // ⚠️ SecureStore exige que la clave completa sea alfanumérica + "." "-" "_" — un ":" acá
@@ -463,7 +496,7 @@ export async function sincronizarCambiosDelServidor(
   const { data: abiertasRemoto, error: errorAbiertas } = await supabase
     .from("jornadas")
     .select(
-      "id, chofer_nombre, empresa, matricula, ruta, incidencias, km_inicial, combustible_inicial, foto_tacometro_inicial_url, foto_ruta_url, lat_inicial, lng_inicial, fecha_check_in"
+      "id, chofer_nombre, empresa, matricula, ruta, incidencias, km_inicial, combustible_inicial, foto_tacometro_inicial_url, foto_ruta_url, lat_inicial, lng_inicial, fecha_check_in, tuvo_incidencia_checkin, tipo_incidencia_checkin, detalle_incidencia_checkin, fotos_incidencia_checkin"
     )
     .eq("chofer_id", choferId)
     .eq("estado", "abierta")
@@ -494,6 +527,10 @@ export async function sincronizarCambiosDelServidor(
         latInicial: fila.lat_inicial,
         lngInicial: fila.lng_inicial,
         fechaCheckIn: fila.fecha_check_in,
+        tuvoIncidenciaCheckin: fila.tuvo_incidencia_checkin,
+        tipoIncidenciaCheckin: fila.tipo_incidencia_checkin,
+        detalleIncidenciaCheckin: fila.detalle_incidencia_checkin,
+        fotosIncidenciaCheckin: fila.fotos_incidencia_checkin,
       };
       recuperadas.push(await insertarJornadaRecuperada(remoto));
     }

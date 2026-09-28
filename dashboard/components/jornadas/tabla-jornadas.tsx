@@ -89,12 +89,15 @@ function TarjetaJornada({
         <span>Check-out: {formatFechaHora(jornada.fecha_check_out)}</span>
       </div>
 
-      {(jornada.tuvo_incidencia || jornada.fue_editado) && (
+      {(jornada.tuvo_incidencia || jornada.tuvo_incidencia_checkin || jornada.fue_editado) && (
         <div className="flex flex-wrap items-center gap-2">
-          {jornada.tuvo_incidencia && (
+          {/* spec_incidencia_en_checkin.md: una jornada puede tener incidencia en cualquiera de
+              las dos etapas (o las dos) — esta tarjeta compacta muestra una sola señal de "hay
+              algo que mirar"; el detalle completo de cada etapa vive en JornadaDetalleDialog. */}
+          {(jornada.tuvo_incidencia || jornada.tuvo_incidencia_checkin) && (
             <Badge variant="danger">
               <AlertTriangle className="h-3 w-3" />
-              {jornada.tipo_incidencia ?? "Incidencia"}
+              {jornada.tipo_incidencia ?? jornada.tipo_incidencia_checkin ?? "Incidencia"}
             </Badge>
           )}
           {jornada.fue_editado && (
@@ -155,10 +158,10 @@ export function TablaJornadas({ jornadas, cargando, onSeleccionar }: TablaJornad
                   </Badge>
                 </td>
                 <td className="px-3 py-2">
-                  {jornada.tuvo_incidencia ? (
+                  {jornada.tuvo_incidencia || jornada.tuvo_incidencia_checkin ? (
                     <Badge variant="danger">
                       <AlertTriangle className="h-3 w-3" />
-                      {jornada.tipo_incidencia ?? "Sí"}
+                      {jornada.tipo_incidencia ?? jornada.tipo_incidencia_checkin ?? "Sí"}
                     </Badge>
                   ) : (
                     <span className="text-muted-foreground">—</span>
