@@ -3,6 +3,7 @@ import {
   DNI_VALIDO_REGEX,
   edadMinimaCumplida,
   generarContrasenaTemporal,
+  normalizarDni,
   numeroEmpleadoAEmail,
   SEXOS,
 } from "@/lib/choferes";
@@ -48,6 +49,7 @@ interface CuerpoPeticion {
   fechaNacimiento?: unknown;
   paisNacimiento?: unknown;
   sexo?: unknown;
+  telefono?: unknown;
 }
 
 function validarCuerpo(body: CuerpoPeticion): { campos: CrearChoferRequest } | { error: string } {
@@ -60,9 +62,9 @@ function validarCuerpo(body: CuerpoPeticion): { campos: CrearChoferRequest } | {
   const apellidos = typeof body.apellidos === "string" ? body.apellidos.trim() : "";
   if (!apellidos) return { error: "Faltan los apellidos." };
 
-  const dni = typeof body.dni === "string" ? body.dni.trim().toUpperCase() : "";
+  const dni = typeof body.dni === "string" ? normalizarDni(body.dni) : "";
   if (!DNI_VALIDO_REGEX.test(dni)) {
-    return { error: "El DNI debe tener entre 5 y 20 caracteres alfanuméricos." };
+    return { error: "El DNI debe tener 9 caracteres (DNI o NIE español)." };
   }
 
   const fechaNacimiento = typeof body.fechaNacimiento === "string" ? body.fechaNacimiento : "";
@@ -81,6 +83,9 @@ function validarCuerpo(body: CuerpoPeticion): { campos: CrearChoferRequest } | {
     return { error: "El sexo debe ser Masculino, Femenino u Otro." };
   }
 
+  const telefono = typeof body.telefono === "string" ? body.telefono.trim() : "";
+  if (!telefono) return { error: "Falta el teléfono." };
+
   return {
     campos: {
       numeroEmpleado,
@@ -90,6 +95,7 @@ function validarCuerpo(body: CuerpoPeticion): { campos: CrearChoferRequest } | {
       fechaNacimiento,
       paisNacimiento,
       sexo: sexo as SexoChofer,
+      telefono,
     },
   };
 }
@@ -152,6 +158,36 @@ export async function POST(request: Request) {
     return NextResponse.json(respuesta, { status: 409 });
   }
 
+  // spec_normalizacion_dni_matricula_telefono.md, criterio 3: mismo patrón que el chequeo de
+  // número de empleado de arriba — antes de tocar Auth para nada, se avisa con un mensaje legible
+  // en vez de dejar que el UNIQUE de la base (choferes_dni_unique) devuelva un error genérico de
+  // Postgres. El DNI ya llega normalizado (normalizarDni en validarCuerpo), así que es
+  // comparación exacta, igual que la columna guardada.
+  const { data: dniExistente, error: errorLecturaDni } = await supabase
+    .from("choferes")
+    .select("id, numero_empleado, nombre, activo")
+    .eq("dni", campos.dni)
+    .maybeSingle();
+
+  if (errorLecturaDni) {
+    return NextResponse.json(
+      { mensaje: "No se pudo verificar si el DNI ya existe.", detalle: errorLecturaDni.message },
+      { status: 500 }
+    );
+  }
+  if (dniExistente) {
+    const respuesta: ChoferDuplicadoResponse = {
+      mensaje: `Ya existe un chofer con este DNI: ${dniExistente.nombre} (n.º ${dniExistente.numero_empleado}, ${dniExistente.activo ? "activo" : "de baja"}).`,
+      choferExistente: {
+        id: dniExistente.id,
+        numeroEmpleado: dniExistente.numero_empleado,
+        nombre: dniExistente.nombre,
+        activo: dniExistente.activo,
+      },
+    };
+    return NextResponse.json(respuesta, { status: 409 });
+  }
+
   const email = numeroEmpleadoAEmail(campos.numeroEmpleado);
   const contrasenaTemporal = generarContrasenaTemporal();
 
@@ -178,6 +214,7 @@ export async function POST(request: Request) {
     fecha_nacimiento: campos.fechaNacimiento,
     pais_nacimiento: campos.paisNacimiento,
     sexo: campos.sexo,
+    telefono: campos.telefono,
     activo: true,
     debe_cambiar_contrasena: true,
   };

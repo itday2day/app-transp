@@ -4,6 +4,7 @@ import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesInsert } from "@/lib/supabase/database.types";
 import type { JornadaRow, TipoIncidencia } from "@/lib/types";
+import { MATRICULA_LONGITUD, normalizarMatricula } from "@/lib/vehiculos";
 
 // POST /api/jornadas/crear (spec_rutas_asignadas_admin.md)
 //
@@ -78,7 +79,11 @@ export async function POST(request: Request) {
 
   const choferId = stringNoVacio(cuerpo.choferId);
   const empresa = stringNoVacio(cuerpo.empresa);
-  const matricula = stringNoVacio(cuerpo.matricula);
+  // spec_normalizacion_dni_matricula_telefono.md: defensa en profundidad — llega ya normalizada
+  // desde crear-jornada-dialog.tsx (matricula del vehículo elegido, ya validada al cargarlo en
+  // /flota), esto cubre cualquier otro cliente de la API.
+  const matriculaCruda = stringNoVacio(cuerpo.matricula);
+  const matricula = matriculaCruda ? normalizarMatricula(matriculaCruda) : undefined;
   const ruta = stringNoVacio(cuerpo.ruta);
   const kmInicial = numeroValido(cuerpo.kmInicial);
   const combustibleInicial = numeroValido(cuerpo.combustibleInicial);
@@ -96,6 +101,12 @@ export async function POST(request: Request) {
         mensaje:
           "Faltan datos obligatorios de check-in (chofer, empresa, matrícula, ruta, km y combustible).",
       },
+      { status: 400 }
+    );
+  }
+  if (matricula.length !== MATRICULA_LONGITUD) {
+    return NextResponse.json(
+      { mensaje: `La matrícula debe tener ${MATRICULA_LONGITUD} caracteres.` },
       { status: 400 }
     );
   }

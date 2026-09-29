@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { normalizarMatricula } from "@/lib/vehiculos";
+import { MATRICULA_LONGITUD, normalizarMatricula } from "@/lib/vehiculos";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesUpdate } from "@/lib/supabase/database.types";
 import type {
@@ -48,9 +48,12 @@ export async function POST(request: Request) {
   const actualizacion: TablesUpdate<"vehiculos"> = {};
 
   if (body.matricula !== undefined) {
-    const matricula = typeof body.matricula === "string" ? body.matricula.trim() : "";
-    if (!matricula) {
-      return NextResponse.json({ mensaje: "La matrícula no puede quedar vacía." }, { status: 400 });
+    const matricula = typeof body.matricula === "string" ? normalizarMatricula(body.matricula) : "";
+    if (matricula.length !== MATRICULA_LONGITUD) {
+      return NextResponse.json(
+        { mensaje: `La matrícula debe tener ${MATRICULA_LONGITUD} caracteres.` },
+        { status: 400 }
+      );
     }
     actualizacion.matricula = matricula;
   }

@@ -4,6 +4,7 @@ import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesUpdate } from "@/lib/supabase/database.types";
 import type { CamposEditablesJornada, JornadaRow, TipoIncidencia } from "@/lib/types";
+import { MATRICULA_LONGITUD, normalizarMatricula } from "@/lib/vehiculos";
 
 // POST /api/jornadas/editar
 // Body: multipart/form-data — { id, motivoEdicion, empresa?, matricula?,
@@ -181,6 +182,17 @@ export async function POST(request: Request) {
       { mensaje: "La hora de check-out no es una fecha válida." },
       { status: 400 }
     );
+  }
+  // spec_normalizacion_dni_matricula_telefono.md: defensa en profundidad — el diálogo de
+  // corrección ya normaliza y limita a 7 caracteres, esto cubre cualquier otro cliente de la API.
+  if (cuerpo.matricula !== undefined) {
+    cuerpo.matricula = normalizarMatricula(cuerpo.matricula);
+    if (cuerpo.matricula.length !== MATRICULA_LONGITUD) {
+      return NextResponse.json(
+        { mensaje: `La matrícula debe tener ${MATRICULA_LONGITUD} caracteres.` },
+        { status: 400 }
+      );
+    }
   }
 
   const errorIncidencia = validarIncidencia(cuerpo);

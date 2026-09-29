@@ -61,11 +61,20 @@ proyecto nuevo; el segundo archivo es idempotente, se puede reintentar sin rompe
 Tablas y objetos clave:
 
 - `choferes` — `id` = `auth.users.id`, `numero_empleado`, `nombre`, `apellidos`, `dni`,
-  `fecha_nacimiento`, `pais_nacimiento`, `sexo`.
+  `fecha_nacimiento`, `pais_nacimiento`, `sexo`, `telefono` (nullable — agregada en
+  `schema_v14_normalizacion_dni_matricula_telefono.sql`, exigida solo en el alta desde el
+  Dashboard, no retroactiva). `dni` es `UNIQUE`, siempre normalizado antes de guardar (mayúsculas,
+  sin espacios ni guiones — `normalizarDni()` en `dashboard/lib/choferes.ts`); el `CHECK
+  (length(dni) = 9)` queda **pendiente** de aplicar contra la base real hasta corregir a mano los
+  DNIs de prueba fuera de formato (ver ese archivo de migración).
 - `jornadas` — mismos campos que el tipo `Jornada` del móvil, en `snake_case`, más 4 columnas de
   auditoría agregadas en `schema_v5_edicion_jornadas.sql`: `fue_editado boolean`, `editado_por
 text`, `editado_en timestamptz`, `motivo_edicion text` (ver "Edición de jornadas y auditoría" en
-  §4).
+  §4). `matricula` (acá y en `vehiculos`) tiene `CHECK (length(matricula) = 7) NOT VALID` desde
+  `schema_v14_normalizacion_dni_matricula_telefono.sql` — `NOT VALID` no exige corregir las filas
+  legado (la jornada con matrícula `HBJN` y el vehículo `QPOI12` quedan como están), pero sí rige
+  para cualquier UPDATE futuro de esas filas puntuales, toquen o no la matrícula (comportamiento de
+  Postgres, no de la app — revalida la fila completa en cada UPDATE).
 - `ubicaciones_tracking` — `chofer_id`, `jornada_ids uuid[]`, `ubicacion geography(Point,4326)`,
   `velocidad_kmh`, `timestamp`.
 - vista `ultimas_posiciones` — última posición por chofer, con `lat`/`lng` ya planos (no
@@ -2100,6 +2109,59 @@ futuro, ni de cargar una entrega que ya se hizo y recién se avisa días despué
     reusa (`ChoferDialog`/`VehiculoDialog`) ya está probado end-to-end desde los Hallazgos #24/#25,
     lo único sin cubrir por esa prueba anterior es el cableado nuevo alrededor (invalidar la
     consulta y preseleccionar el id creado).
+
+**Hallazgo #33 — DNI único de 9 caracteres, matrícula de 7 caracteres en todo el sistema, y
+teléfono del chofer (2026-09-29)**: `spec_normalizacion_dni_matricula_telefono.md`. Tres pedidos de
+estandarización de datos que identifican personas/vehículos, no cosmético: el DNI sustenta pagos
+por chofer, la matrícula es la base de los cobros a empresas (mismo riesgo que el #24 ya había
+dejado anotado — un mismo camión apareciendo como dos vehículos distintos por un formato
+inconsistente).
+
+- **Fase 1 redujo el alcance real**: `crear-jornada-dialog.tsx` (el diálogo del #32) NO tiene un
+  input propio de matrícula — elige el vehículo de un `Select` y la matrícula sale de
+  `vehiculo.matricula`; su atajo "+ Nuevo" reusa `VehiculoDialog` tal cual (ya documentado en el
+  #32). Corregir `VehiculoDialog`/`/api/vehiculos` alcanza para ese punto, sin tocar ese diálogo.
+  La app móvil (`SelectorMatricula.tsx`) ya normalizaba mayúsculas + largo (`maxLength={7}`) desde
+  antes de esta spec; solo faltaba también quitar guiones (antes solo `\s+`), y blindar el camino
+  de "elegir de la lista de matrículas frecuentes" (que no pasaba por esa normalización) en
+  `CheckInForm.tsx`.
+- **Causa raíz de `QPOI12` (6 caracteres) confirmada, no asumida**: `/api/vehiculos` nunca
+  validaba el LARGO de la matrícula, solo la unicidad (vía `normalizarMatricula()` comparado
+  contra las filas existentes) — y la columna se guardaba con el texto crudo tipeado, no
+  normalizado. `normalizarMatricula()` (`dashboard/lib/vehiculos.ts`) ahora es también lo que se
+  GUARDA, en los tres puntos de entrada del Dashboard (`/flota`, corrección de jornada, alta desde
+  el #32) y server-side como defensa en profundidad.
+- ⚠️ **Detalle de Postgres no cubierto por la spec original, confirmado y resuelto con el
+  usuario**: un `CHECK ... NOT VALID` no valida las filas ya existentes al crearse, pero SÍ se
+  evalúa en cualquier `UPDATE` futuro de esa fila — toque o no la columna revisada (Postgres
+  revalida la fila completa, no solo la columna tocada). Decisión: se acepta tal cual pide la
+  spec — el vehículo `QPOI12` y la jornada `HBJN` quedan legibles siempre, pero si alguna vez hace
+  falta editar OTRO campo de esas 2 filas puntuales, hay que corregir la matrícula en ese mismo
+  guardado (bloqueado tanto a nivel de Postgres como por la validación del lado del Dashboard, que
+  falla con el mismo mensaje claro en vez de un error genérico).
+- **DNI**: `normalizarDni()` (`dashboard/lib/choferes.ts`, mismo criterio que
+  `normalizarMatricula()`) reemplaza el regex genérico de 5-20 caracteres (documentado en el
+  código como pensado para choferes con documento extranjero de otro formato, pero el registro
+  propio desde el móvil está deshabilitado hace tiempo y el DNI hoy solo se carga desde
+  `ChoferDialog` — no se usa en ningún otro lado del sistema, confirmado por búsqueda antes de
+  normalizar). `choferes.dni` es `UNIQUE` (aplicado, 0 duplicados reales); el `CHECK (length = 9)`
+  queda pendiente hasta que se corrijan a mano los 2 choferes de prueba fuera de formato — ver
+  `schema_v14_normalizacion_dni_matricula_telefono.sql`. Duplicado de DNI al crear/editar devuelve
+  409 con mensaje legible, mismo patrón que ya usaba `numero_empleado`.
+- **Teléfono**: columna nueva nullable, exigida solo en el alta desde `ChoferDialog` (no
+  retroactiva); se puede editar un chofer existente sin completarla. Visible en `TablaChoferes`
+  (tabla de escritorio y tarjeta de móvil) junto a DNI/país.
+- **Verificación**: `tsc`/`lint`/`format:check` limpios en `dashboard/` y en la raíz (app móvil).
+  Contra Supabase real y la API real del Dashboard (sesión de administrador de prueba, creada y
+  borrada al terminar): alta de vehículo con espacios/guiones se normaliza (`1234 abc` →
+  `1234ABC`), el mismo valor con guiones distinto (`1234-ABC`) se rechaza como duplicado, una
+  matrícula de 8 caracteres se rechaza; `QPOI12` y la jornada `HBJN` siguen presentes e intactas
+  después de la migración; alta de chofer sin teléfono bloqueada, con teléfono guardada (DNI
+  normalizado a 9 caracteres); un DNI duplicado con minúsculas/guiones distintos se rechaza con
+  mensaje legible; editar un chofer de prueba sin teléfono se guarda sin exigirlo.
+  - **No verificado desde este entorno**: check-in real desde la app móvil con matrícula con
+    espacios/guiones — bloqueado por la misma cuota de builds de EAS que los Hallazgos #31/#32
+    hasta 2026-10-01.
 
 ## 5. Estándares de calidad y reglas de código
 

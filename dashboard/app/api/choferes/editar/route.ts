@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
-import { DNI_VALIDO_REGEX, edadMinimaCumplida, SEXOS } from "@/lib/choferes";
+import { DNI_VALIDO_REGEX, edadMinimaCumplida, normalizarDni, SEXOS } from "@/lib/choferes";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesUpdate } from "@/lib/supabase/database.types";
-import type { ChoferRow, EditarChoferResponse, SexoChofer } from "@/lib/types";
+import type {
+  ChoferDuplicadoResponse,
+  ChoferRow,
+  EditarChoferResponse,
+  SexoChofer,
+} from "@/lib/types";
 
 // Duración de ban efectivamente permanente — mismo valor que usa la documentación oficial de
 // Supabase para "banear indefinidamente" (no existe un "para siempre" real en la API, así que
@@ -17,6 +22,7 @@ interface CuerpoPeticion {
   fechaNacimiento?: unknown;
   paisNacimiento?: unknown;
   sexo?: unknown;
+  telefono?: unknown;
   activo?: unknown;
 }
 
@@ -60,14 +66,18 @@ export async function POST(request: Request) {
     actualizacion.apellidos = apellidos;
   }
   if (body.dni !== undefined) {
-    const dni = typeof body.dni === "string" ? body.dni.trim().toUpperCase() : "";
+    const dni = typeof body.dni === "string" ? normalizarDni(body.dni) : "";
     if (!DNI_VALIDO_REGEX.test(dni)) {
       return NextResponse.json(
-        { mensaje: "El DNI debe tener entre 5 y 20 caracteres alfanuméricos." },
+        { mensaje: "El DNI debe tener 9 caracteres (DNI o NIE español)." },
         { status: 400 }
       );
     }
     actualizacion.dni = dni;
+  }
+  if (body.telefono !== undefined) {
+    actualizacion.telefono =
+      typeof body.telefono === "string" && body.telefono.trim() ? body.telefono.trim() : null;
   }
   if (body.fechaNacimiento !== undefined) {
     const fecha = typeof body.fechaNacimiento === "string" ? body.fechaNacimiento : "";
@@ -114,6 +124,38 @@ export async function POST(request: Request) {
   }
 
   const supabase = crearClienteSupabaseAdmin();
+
+  // spec_normalizacion_dni_matricula_telefono.md, criterio 3: misma regla de unicidad legible que
+  // POST /api/choferes, aplicada también al editar — sin esto, editar sería la puerta trasera para
+  // guardar el DNI de otro chofer que el alta ya rechaza. `id !== id actual` para que un chofer
+  // nunca "choque contra sí mismo" cuando edita otro campo sin tocar el DNI.
+  if (actualizacion.dni) {
+    const { data: dniExistente, error: errorLecturaDni } = await supabase
+      .from("choferes")
+      .select("id, numero_empleado, nombre, activo")
+      .eq("dni", actualizacion.dni)
+      .neq("id", id)
+      .maybeSingle();
+
+    if (errorLecturaDni) {
+      return NextResponse.json(
+        { mensaje: "No se pudo verificar si el DNI ya existe.", detalle: errorLecturaDni.message },
+        { status: 500 }
+      );
+    }
+    if (dniExistente) {
+      const respuesta: ChoferDuplicadoResponse = {
+        mensaje: `Ya existe otro chofer con este DNI: ${dniExistente.nombre} (n.º ${dniExistente.numero_empleado}, ${dniExistente.activo ? "activo" : "de baja"}).`,
+        choferExistente: {
+          id: dniExistente.id,
+          numeroEmpleado: dniExistente.numero_empleado,
+          nombre: dniExistente.nombre,
+          activo: dniExistente.activo,
+        },
+      };
+      return NextResponse.json(respuesta, { status: 409 });
+    }
+  }
 
   // El ban/unban de Auth se hace ANTES de tocar la tabla: si esto falla, se corta acá sin haber
   // marcado `activo` — evita el estado inconsistente "la tabla dice de baja pero Auth lo sigue

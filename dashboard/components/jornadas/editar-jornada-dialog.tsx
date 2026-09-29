@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { componentesEnEspana, instanteEnEspanaComoUtc } from "@/lib/hora-espana";
+import { MATRICULA_LONGITUD, normalizarMatricula } from "@/lib/vehiculos";
 import type {
   EditarJornadaRequest,
   EditarJornadaResponse,
@@ -350,6 +351,11 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
       setError('El detalle es obligatorio cuando el tipo de incidencia es "Otro".');
       return;
     }
+    const matriculaNormalizada = normalizarMatricula(matricula);
+    if (matriculaNormalizada.length !== MATRICULA_LONGITUD) {
+      setError(`La matrícula debe tener ${MATRICULA_LONGITUD} caracteres.`);
+      return;
+    }
     const fechaCheckOutCambio =
       fechaCheckOutFecha !== fechaCheckOutFechaInicial ||
       fechaCheckOutHora !== fechaCheckOutHoraInicial;
@@ -370,7 +376,7 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
       id: jornada.id,
       motivoEdicion: motivoEdicion.trim(),
       empresa: empresa.trim(),
-      matricula: matricula.trim(),
+      matricula: matriculaNormalizada,
       ruta: ruta.trim(),
       kmInicial: Number(kmInicial),
       combustibleInicial: Number(combustibleInicial),
@@ -441,7 +447,8 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
             <Input
               id="edit-matricula"
               value={matricula}
-              onChange={(e) => setMatricula(e.target.value)}
+              onChange={(e) => setMatricula(normalizarMatricula(e.target.value))}
+              maxLength={MATRICULA_LONGITUD}
             />
           </div>
         </div>

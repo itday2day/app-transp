@@ -10,7 +10,7 @@ interface TablaChoferesProps {
   onSeleccionar: (chofer: ChoferRow) => void;
 }
 
-const COLUMNAS = ["N.º empleado", "Nombre", "DNI", "País", "Estado", ""];
+const COLUMNAS = ["N.º empleado", "Nombre", "DNI", "País", "Teléfono", "Estado", ""];
 
 function EstadoBadge({ chofer }: { chofer: ChoferRow }) {
   return (
@@ -51,6 +51,7 @@ function TarjetaChofer({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span>DNI: {chofer.dni}</span>
         <span>{chofer.pais_nacimiento}</span>
+        {chofer.telefono && <span>Tel: {chofer.telefono}</span>}
       </div>
 
       {chofer.debe_cambiar_contrasena && (
@@ -91,6 +92,7 @@ export function TablaChoferes({ choferes, cargando, onSeleccionar }: TablaChofer
                 </td>
                 <td className="px-3 py-2">{chofer.dni}</td>
                 <td className="px-3 py-2">{chofer.pais_nacimiento}</td>
+                <td className="px-3 py-2">{chofer.telefono ?? "—"}</td>
                 <td className="px-3 py-2">
                   <EstadoBadge chofer={chofer} />
                 </td>

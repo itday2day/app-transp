@@ -32,9 +32,18 @@ export function generarContrasenaTemporal(): string {
 
 export const SEXOS: SexoChofer[] = ["Masculino", "Femenino", "Otro"];
 
-// Mismo patrón que DNI_VALIDO en RegistroScreen.tsx (app móvil) — el documento de identidad
-// varía de formato según el país de origen, así que la validación es genérica.
-export const DNI_VALIDO_REGEX = /^[A-Z0-9]{5,20}$/;
+// spec_normalizacion_dni_matricula_telefono.md: 9 caracteres fijos (cubre DNI y NIE español).
+// El registro propio desde la app móvil está deshabilitado (el DNI solo se carga desde acá, el
+// Dashboard) y contra la base real no hay ningún chofer con documento de otro formato salvo 2
+// perfiles de prueba, corregidos a mano antes de esta migración.
+export const DNI_VALIDO_REGEX = /^[A-Z0-9]{9}$/;
+
+/** Mismo criterio que normalizarMatricula() en dashboard/lib/vehiculos.ts (mayúsculas, sin
+ * caracteres no alfanuméricos) — se usa antes de guardar Y antes de comparar duplicados, así la
+ * columna en la base queda siempre en su forma normalizada. */
+export function normalizarDni(dni: string): string {
+  return dni.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
 
 /** Misma regla que SelectorFecha.tsx (edadMinima=18 por defecto, el caso real de este
  * formulario) — replicada acá porque el Dashboard no puede reusar un componente de React

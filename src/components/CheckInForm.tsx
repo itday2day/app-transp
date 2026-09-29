@@ -94,7 +94,10 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
 
     onEnviar({
       empresa,
-      matricula: matricula.trim().toUpperCase(),
+      // spec_normalizacion_dni_matricula_telefono.md: red de seguridad además de la que ya aplica
+      // SelectorMatricula en la entrada manual — cubre el camino de "elegir de la lista" de
+      // matrículas frecuentes, que no pasa por esa normalización.
+      matricula: matricula.toUpperCase().replace(/[^A-Z0-9]/g, ""),
       ruta: ruta.trim(),
       kmInicial: Number(kmInicial),
       combustibleInicial: combustible,

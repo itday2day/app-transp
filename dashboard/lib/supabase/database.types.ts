@@ -51,6 +51,7 @@ export type Database = {
           numero_empleado: string;
           pais_nacimiento: string;
           sexo: string;
+          telefono: string | null;
         };
         Insert: {
           activo?: boolean;
@@ -64,6 +65,7 @@ export type Database = {
           numero_empleado: string;
           pais_nacimiento: string;
           sexo: string;
+          telefono?: string | null;
         };
         Update: {
           activo?: boolean;
@@ -77,6 +79,7 @@ export type Database = {
           numero_empleado?: string;
           pais_nacimiento?: string;
           sexo?: string;
+          telefono?: string | null;
         };
         Relationships: [];
       };

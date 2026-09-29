@@ -7,7 +7,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { numeroEmpleadoAEmail, SEXOS } from "@/lib/choferes";
+import { normalizarDni, numeroEmpleadoAEmail, SEXOS } from "@/lib/choferes";
 import type {
   ChoferDuplicadoResponse,
   ChoferRow,
@@ -99,6 +99,7 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   const [fechaNacimiento, setFechaNacimiento] = useState(chofer?.fecha_nacimiento ?? "");
   const [paisNacimiento, setPaisNacimiento] = useState(chofer?.pais_nacimiento ?? "");
   const [sexo, setSexo] = useState<SexoChofer | "">(chofer?.sexo ?? "");
+  const [telefono, setTelefono] = useState(chofer?.telefono ?? "");
 
   const [enviando, setEnviando] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
@@ -125,6 +126,9 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     if (!fechaNacimiento) return setError("Falta la fecha de nacimiento.");
     if (!paisNacimiento.trim()) return setError("Falta el país de nacimiento.");
     if (!sexo) return setError("Elegí el sexo.");
+    // Obligatorio solo al crear — un chofer ya cargado sin teléfono se tiene que poder seguir
+    // editando sin exigírselo retroactivo (spec_normalizacion_dni_matricula_telefono.md).
+    if (!esEdicion && !telefono.trim()) return setError("Falta el teléfono.");
 
     setEnviando(true);
     try {
@@ -132,10 +136,11 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
       const camposComunes = {
         nombre: nombre.trim(),
         apellidos: apellidos.trim(),
-        dni: dni.trim().toUpperCase(),
+        dni: normalizarDni(dni),
         fechaNacimiento,
         paisNacimiento: paisNacimiento.trim(),
         sexo,
+        telefono: telefono.trim() || null,
       };
       const body = esEdicion
         ? { id: chofer.id, ...camposComunes }
@@ -288,7 +293,8 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
             <Input
               id="chf-dni"
               value={dni}
-              onChange={(e) => setDni(e.target.value.toUpperCase())}
+              onChange={(e) => setDni(normalizarDni(e.target.value))}
+              maxLength={9}
               disabled={deshabilitarCampos}
             />
           </div>
@@ -330,6 +336,16 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
               disabled={deshabilitarCampos}
             />
           </div>
+        </div>
+
+        <div>
+          <Label htmlFor="chf-telefono">Teléfono{esEdicion ? " (opcional)" : ""}</Label>
+          <Input
+            id="chf-telefono"
+            value={telefono}
+            onChange={(e) => setTelefono(e.target.value)}
+            disabled={deshabilitarCampos}
+          />
         </div>
 
         {error && (

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { normalizarMatricula } from "@/lib/vehiculos";
+import { MATRICULA_LONGITUD, normalizarMatricula } from "@/lib/vehiculos";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesInsert } from "@/lib/supabase/database.types";
 import type {
@@ -112,8 +112,15 @@ export async function POST(request: Request) {
   }
   const { campos } = validacion;
 
-  const supabase = crearClienteSupabaseAdmin();
   const normalizada = normalizarMatricula(campos.matricula);
+  if (normalizada.length !== MATRICULA_LONGITUD) {
+    return NextResponse.json(
+      { mensaje: `La matrícula debe tener ${MATRICULA_LONGITUD} caracteres.` },
+      { status: 400 }
+    );
+  }
+
+  const supabase = crearClienteSupabaseAdmin();
 
   const { data: existentes, error: errorLectura } = await supabase
     .from("vehiculos")
@@ -142,7 +149,7 @@ export async function POST(request: Request) {
   }
 
   const nuevoVehiculo: TablesInsert<"vehiculos"> = {
-    matricula: campos.matricula,
+    matricula: normalizada,
     tipo_propiedad: campos.tipoPropiedad,
     capacidad_tanque_litros: campos.capacidadTanqueLitros ?? null,
     marca: campos.marca ?? null,

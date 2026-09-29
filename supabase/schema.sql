@@ -40,15 +40,22 @@ create extension if not exists postgis;
 --
 -- Alta/edición/baja/reseteo de contraseña se administran desde el Dashboard
 -- (dashboard/app/api/choferes/) — el registro propio desde la app móvil se deshabilitó.
+-- dni: único, y desde schema_v14_normalizacion_dni_matricula_telefono.sql se guarda siempre ya
+-- normalizado (mayúsculas, sin espacios ni guiones -- ver normalizarDni() en
+-- dashboard/lib/choferes.ts). El CHECK de longitud = 9 (DNI/NIE español) queda pendiente de
+-- aplicar contra la base real -- ver ese archivo de migración, sección "DNI — CHECK de longitud".
+-- telefono: nullable -- no se le exige retroactivo a los choferes ya cargados antes de esa
+-- migración; el Dashboard es el que exige completarlo en el alta de un chofer nuevo desde ahí.
 create table public.choferes (
   id uuid primary key references auth.users(id) on delete cascade,
   numero_empleado text unique not null,
   nombre text not null,
   apellidos text not null,
-  dni text not null,
+  dni text not null unique,
   fecha_nacimiento date not null,
   pais_nacimiento text not null,
   sexo text not null check (sexo in ('Masculino', 'Femenino', 'Otro')),
+  telefono text,
   -- activo=false impide el acceso en los dos sistemas a la vez: en la tabla Y baneando la
   -- credencial de Auth (ban_duration, ver dashboard/app/api/choferes/editar/route.ts) — marcar
   -- solo la columna no le impide a Supabase Auth dejarlo entrar.
@@ -68,7 +75,11 @@ create table public.jornadas (
   chofer_id uuid not null references public.choferes(id) on delete cascade,
   chofer_nombre text not null,
   empresa text not null,
-  matricula text not null,
+  -- Desde schema_v14_normalizacion_dni_matricula_telefono.sql, 7 caracteres, ya normalizada
+  -- (mayúsculas, sin espacios ni guiones -- ver normalizarMatricula() en dashboard/lib/vehiculos.ts).
+  -- CHECK agregado NOT VALID contra la base real (no exige corregir jornadas ya cargadas) -- en un
+  -- proyecto nuevo, sin datos legado, no hace falta ese NOT VALID.
+  matricula text not null check (length(matricula) = 7),
   ruta text not null,
   incidencias text,
 
@@ -205,7 +216,9 @@ create trigger jornadas_proteger_correcciones_admin_trigger
 -- vehiculo_id es una segunda etapa deliberadamente fuera de esta.
 create table public.vehiculos (
   id uuid primary key default gen_random_uuid(),
-  matricula text not null,
+  -- Desde schema_v14_normalizacion_dni_matricula_telefono.sql, 7 caracteres, ya normalizada --
+  -- mismo criterio que jornadas.matricula arriba.
+  matricula text not null check (length(matricula) = 7),
   tipo_propiedad text not null check (tipo_propiedad in ('propio', 'alquilado', 'autonomo')),
   capacidad_tanque_litros numeric check (capacidad_tanque_litros > 0),
   marca text,

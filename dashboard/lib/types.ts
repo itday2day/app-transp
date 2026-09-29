@@ -292,6 +292,7 @@ export interface ChoferRow {
   fecha_nacimiento: string;
   pais_nacimiento: string;
   sexo: SexoChofer;
+  telefono: string | null;
   activo: boolean;
   debe_cambiar_contrasena: boolean;
   created_at: string;
@@ -313,6 +314,10 @@ export interface CamposChofer {
   fechaNacimiento: string; // YYYY-MM-DD
   paisNacimiento: string;
   sexo: SexoChofer;
+  /** Obligatorio al crear (spec_normalizacion_dni_matricula_telefono.md); al editar es opcional
+   * vía EditarChoferRequest (Partial<CamposChofer>) — un chofer ya cargado sin teléfono se puede
+   * seguir guardando sin exigírselo retroactivo. */
+  telefono: string;
 }
 
 export type CrearChoferRequest = CamposChofer;
@@ -336,7 +341,8 @@ export interface EditarChoferResponse {
 }
 
 /** Devuelto con 409 cuando el número de empleado (comparación exacta, sin normalizar — ver
- * spec_alta_choferes_dashboard.md, Fase 1, punto 4) ya existe. */
+ * spec_alta_choferes_dashboard.md, Fase 1, punto 4) o el DNI (normalizado — ver
+ * spec_normalizacion_dni_matricula_telefono.md) ya existen. */
 export interface ChoferDuplicadoResponse {
   mensaje: string;
   choferExistente: {

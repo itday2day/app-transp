@@ -7,7 +7,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { TIPOS_PROPIEDAD_LEGIBLES } from "@/lib/vehiculos";
+import { MATRICULA_LONGITUD, normalizarMatricula, TIPOS_PROPIEDAD_LEGIBLES } from "@/lib/vehiculos";
 import type {
   CrearVehiculoRequest,
   EditarVehiculoRequest,
@@ -61,15 +61,20 @@ export function VehiculoDialog({ vehiculo, onClose, onGuardado }: VehiculoDialog
   const [duplicado, setDuplicado] = useState<VehiculoDuplicadoResponse | null>(null);
 
   function construirCampos(): CrearVehiculoRequest | null {
-    if (!matricula.trim()) {
+    const matriculaNormalizada = normalizarMatricula(matricula);
+    if (!matriculaNormalizada) {
       setError("La matrícula es obligatoria.");
+      return null;
+    }
+    if (matriculaNormalizada.length !== MATRICULA_LONGITUD) {
+      setError(`La matrícula debe tener ${MATRICULA_LONGITUD} caracteres.`);
       return null;
     }
     if (!tipoPropiedad) {
       setError("Elegí el tipo de propiedad.");
       return null;
     }
-    const campos: CrearVehiculoRequest = { matricula: matricula.trim(), tipoPropiedad };
+    const campos: CrearVehiculoRequest = { matricula: matriculaNormalizada, tipoPropiedad };
     if (capacidadTanque.trim()) {
       const numero = Number(capacidadTanque);
       if (!Number.isFinite(numero) || numero <= 0) {
@@ -183,7 +188,8 @@ export function VehiculoDialog({ vehiculo, onClose, onGuardado }: VehiculoDialog
           <Input
             id="veh-matricula"
             value={matricula}
-            onChange={(e) => setMatricula(e.target.value)}
+            onChange={(e) => setMatricula(normalizarMatricula(e.target.value))}
+            maxLength={MATRICULA_LONGITUD}
             disabled={guardado}
           />
         </div>

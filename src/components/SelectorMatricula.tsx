@@ -27,8 +27,11 @@ export function SelectorMatricula({ valor, onCambiar, opciones }: Props) {
     return () => clearTimeout(temporizador);
   }, [modoManual]);
 
+  // spec_normalizacion_dni_matricula_telefono.md: mismo criterio que normalizarMatricula() del
+  // Dashboard (dashboard/lib/vehiculos.ts) — mayúsculas, sin espacios NI GUIONES. Antes solo se
+  // quitaban espacios; el maxLength={7} de abajo ya limitaba el largo.
   function manejarTextoManual(texto: string) {
-    onCambiar(texto.toUpperCase().replace(/\s+/g, ""));
+    onCambiar(texto.toUpperCase().replace(/[^A-Z0-9]/g, ""));
   }
 
   if (modoManual) {
