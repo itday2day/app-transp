@@ -45,6 +45,33 @@ export function normalizarDni(dni: string): string {
   return dni.toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
+// spec_telefono_e164_y_pais_desplegable.md: E.164 — un "+" seguido de 8 a 15 dígitos, el primero
+// distinto de 0. No valida que el número sea real ni alcanzable, solo el formato.
+export const TELEFONO_VALIDO_REGEX = /^\+[1-9]\d{7,14}$/;
+
+/** Se usa en el input mientras se tipea: descarta todo lo que no sea dígito, y conserva el "+"
+ * solo si es el primer carácter (un "+" en cualquier otra posición se descarta, no se mueve). */
+export function normalizarTelefonoAlTipear(valor: string): string {
+  const conPlusInicial = valor.startsWith("+");
+  const soloDigitos = valor.replace(/\D/g, "");
+  return (conPlusInicial ? "+" : "") + soloDigitos;
+}
+
+/** Se usa al perder foco: si ya hay algo tipeado pero no empieza con "+", se lo agrega — cubre al
+ * chofer/admin que tipeó el número sin el signo. Un valor vacío se deja vacío (el teléfono es
+ * opcional al editar, ver Hallazgo #34). */
+export function agregarPlusSiFalta(valor: string): string {
+  if (!valor) return valor;
+  return valor.startsWith("+") ? valor : `+${valor}`;
+}
+
+/** Mismo criterio que normalizarDni()/normalizarMatricula(), pero para COMPARAR nombres de país,
+ * nunca para lo que se guarda (eso siempre es el string exacto de PAISES) — mayúsculas y sin
+ * diacríticos, así "Espana" (dato real sin tilde, cargado antes de este spec) matchea "España". */
+export function normalizarParaComparar(texto: string): string {
+  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+}
+
 /** Misma regla que SelectorFecha.tsx (edadMinima=18 por defecto, el caso real de este
  * formulario) — replicada acá porque el Dashboard no puede reusar un componente de React
  * Native. */

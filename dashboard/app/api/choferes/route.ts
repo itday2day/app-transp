@@ -6,7 +6,9 @@ import {
   normalizarDni,
   numeroEmpleadoAEmail,
   SEXOS,
+  TELEFONO_VALIDO_REGEX,
 } from "@/lib/choferes";
+import { PAISES } from "@/lib/paises";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesInsert } from "@/lib/supabase/database.types";
 import type {
@@ -77,6 +79,9 @@ function validarCuerpo(body: CuerpoPeticion): { campos: CrearChoferRequest } | {
 
   const paisNacimiento = typeof body.paisNacimiento === "string" ? body.paisNacimiento.trim() : "";
   if (!paisNacimiento) return { error: "Falta el país de nacimiento." };
+  if (!PAISES.includes(paisNacimiento)) {
+    return { error: "El país de nacimiento debe ser uno de la lista." };
+  }
 
   const sexo = body.sexo;
   if (typeof sexo !== "string" || !SEXOS.includes(sexo as SexoChofer)) {
@@ -85,6 +90,11 @@ function validarCuerpo(body: CuerpoPeticion): { campos: CrearChoferRequest } | {
 
   const telefono = typeof body.telefono === "string" ? body.telefono.trim() : "";
   if (!telefono) return { error: "Falta el teléfono." };
+  if (!TELEFONO_VALIDO_REGEX.test(telefono)) {
+    return {
+      error: "El teléfono debe tener formato internacional, por ejemplo +34612345678.",
+    };
+  }
 
   return {
     campos: {

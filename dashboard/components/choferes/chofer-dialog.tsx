@@ -7,7 +7,16 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { normalizarDni, numeroEmpleadoAEmail, SEXOS } from "@/lib/choferes";
+import {
+  agregarPlusSiFalta,
+  normalizarDni,
+  normalizarParaComparar,
+  normalizarTelefonoAlTipear,
+  numeroEmpleadoAEmail,
+  SEXOS,
+  TELEFONO_VALIDO_REGEX,
+} from "@/lib/choferes";
+import { PAISES } from "@/lib/paises";
 import type {
   ChoferDuplicadoResponse,
   ChoferRow,
@@ -39,6 +48,17 @@ function mensajeDeError(cuerpo: unknown, fallback: string): string {
   return cuerpo && typeof cuerpo === "object" && "mensaje" in cuerpo
     ? String((cuerpo as { mensaje: unknown }).mensaje)
     : fallback;
+}
+
+/** spec_telefono_e164_y_pais_desplegable.md: si el país guardado matchea una opción de PAISES
+ * ignorando mayúsculas/acentos (ej. "Espana" sin tilde, dato real de antes de este spec), el
+ * desplegable arranca con esa opción preseleccionada — el valor exacto de la lista, no el crudo
+ * guardado. Si no matchea ninguna (país mal escrito, inventado, o inexistente en la lista), no
+ * preselecciona nada: el desplegable queda vacío y el formulario exige elegir uno real. */
+function paisPreseleccionado(paisGuardado: string | undefined): string {
+  if (!paisGuardado) return "";
+  const normalizado = normalizarParaComparar(paisGuardado);
+  return PAISES.find((pais) => normalizarParaComparar(pais) === normalizado) ?? "";
 }
 
 /** Tarjeta de contraseña temporal — se muestra UNA sola vez (al crear o al resetear), con copiar
@@ -97,7 +117,9 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   const [apellidos, setApellidos] = useState(chofer?.apellidos ?? "");
   const [dni, setDni] = useState(chofer?.dni ?? "");
   const [fechaNacimiento, setFechaNacimiento] = useState(chofer?.fecha_nacimiento ?? "");
-  const [paisNacimiento, setPaisNacimiento] = useState(chofer?.pais_nacimiento ?? "");
+  const [paisNacimiento, setPaisNacimiento] = useState(
+    paisPreseleccionado(chofer?.pais_nacimiento)
+  );
   const [sexo, setSexo] = useState<SexoChofer | "">(chofer?.sexo ?? "");
   const [telefono, setTelefono] = useState(chofer?.telefono ?? "");
 
@@ -129,6 +151,11 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     // Obligatorio solo al crear — un chofer ya cargado sin teléfono se tiene que poder seguir
     // editando sin exigírselo retroactivo (spec_normalizacion_dni_matricula_telefono.md).
     if (!esEdicion && !telefono.trim()) return setError("Falta el teléfono.");
+    // El FORMATO, en cambio, se exige siempre que haya algo tipeado — en alta y en edición
+    // (spec_telefono_e164_y_pais_desplegable.md, a diferencia de la obligatoriedad de arriba).
+    if (telefono.trim() && !TELEFONO_VALIDO_REGEX.test(telefono.trim())) {
+      return setError("El teléfono debe tener formato internacional, por ejemplo +34612345678.");
+    }
 
     setEnviando(true);
     try {
@@ -329,12 +356,19 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
           </div>
           <div>
             <Label htmlFor="chf-pais">País de nacimiento</Label>
-            <Input
+            <Select
               id="chf-pais"
               value={paisNacimiento}
               onChange={(e) => setPaisNacimiento(e.target.value)}
               disabled={deshabilitarCampos}
-            />
+            >
+              <option value="">Elegir…</option>
+              {PAISES.map((pais) => (
+                <option key={pais} value={pais}>
+                  {pais}
+                </option>
+              ))}
+            </Select>
           </div>
         </div>
 
@@ -343,7 +377,10 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
           <Input
             id="chf-telefono"
             value={telefono}
-            onChange={(e) => setTelefono(e.target.value)}
+            onChange={(e) => setTelefono(normalizarTelefonoAlTipear(e.target.value))}
+            onBlur={(e) => setTelefono(agregarPlusSiFalta(e.target.value))}
+            maxLength={16}
+            placeholder="+34612345678"
             disabled={deshabilitarCampos}
           />
         </div>

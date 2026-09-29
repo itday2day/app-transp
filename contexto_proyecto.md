@@ -2163,6 +2163,44 @@ inconsistente).
     espacios/guiones — bloqueado por la misma cuota de builds de EAS que los Hallazgos #31/#32
     hasta 2026-10-01.
 
+**Hallazgo #34 — teléfono en formato internacional (E.164) y país de nacimiento por desplegable
+(2026-09-29)**: `spec_telefono_e164_y_pais_desplegable.md`. Endurece el teléfono del #33 (hoy "sin
+formato particular") y reemplaza el `<input>` de texto libre de país de nacimiento en `ChoferDialog`
+por un desplegable — el propio dato real ya mostraba el problema: el chofer 01 tenía
+`pais_nacimiento = "Espana"` (sin tilde) mientras 02/03/05 tenían `"España"` (con tilde), el mismo
+país guardado de dos formas distintas.
+
+- **Lista de países reusada, no inventada**: `dashboard/lib/paises.ts` es copia exacta (mismas 193
+  cadenas, mismo orden, verificado programáticamente) de `src/data/paises.ts` — la lista que ya
+  usaba `SelectorPais.tsx` (móvil) antes de que el registro propio se deshabilitara (#25). Mismo
+  costo de duplicación ya documentado para `numeroEmpleadoAEmail()`: son dos proyectos npm
+  distintos sin lib compartido, así que un valor cargado desde el Dashboard tiene que poder
+  compararse con uno viejo cargado desde la app.
+- **`<select>` nativo, sin combobox nuevo**: con ~193 opciones, el `Select` que ya existía
+  (wrapper fino sobre `<select>`) alcanza — los navegadores ya resuelven "escribir para saltar" de
+  forma nativa. No hizo falta construir un componente de filtro por texto.
+- ⚠️ **Efecto secundario no obvio, confirmado contra datos reales**: editar un chofer cuyo país
+  guardado matchea una opción del desplegable solo por similitud (sin mayúsculas/acentos, ej.
+  "Espana" → "España") normaliza el valor guardado al string EXACTO de la lista la próxima vez que
+  se guarda el formulario — **aunque el cambio real haya sido en otro campo**, porque `ChoferDialog`
+  reenvía todos los campos en cada guardado (mismo patrón ya establecido para matrícula/DNI en el
+  #33). Verificado en producción: guardar el formulario del chofer 01 (sin tocar nada más que
+  reconfirmar) dejó `pais_nacimiento = "España"` en la base real. El chofer 04 (`"Albania"`, ya
+  coincidía exacto) se guardó sin alterarse.
+- **Teléfono E.164**: `^\+[1-9]\d{7,14}$`. El input descarta todo lo que no sea dígito al tipear
+  (conserva el "+" solo si es el primer carácter) y agrega el "+" al perder foco si falta
+  (`normalizarTelefonoAlTipear()`/`agregarPlusSiFalta()` en `dashboard/lib/choferes.ts`). El
+  `CHECK` de la migración (`schema_v15_telefono_e164.sql`) se aplicó **validado de entrada, sin
+  `NOT VALID`** — a diferencia del DNI/matrícula del #33, acá las 5 filas reales seguían con
+  `telefono = null` (reconfirmado justo antes de migrar), así que no había fila legado que
+  necesitara la excepción.
+- **Verificación**: `tsc`/`lint`/`format:check` limpios en `dashboard/`. Contra Supabase real y la
+  API real (sesión de administrador de prueba, creada y borrada al terminar): teléfono mal formado
+  (sin "+", con letras, muy corto) rechazado en alta y en edición, uno válido (`+34612345678`)
+  guardado; país elegido del desplegable se guarda exacto; chofer 01 y 04 verificados como arriba;
+  editar dejando el teléfono vacío sigue sin exigirlo; completar el teléfono por primera vez con
+  formato inválido rechazado, con uno válido guardado.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

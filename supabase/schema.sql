@@ -46,6 +46,10 @@ create extension if not exists postgis;
 -- aplicar contra la base real -- ver ese archivo de migración, sección "DNI — CHECK de longitud".
 -- telefono: nullable -- no se le exige retroactivo a los choferes ya cargados antes de esa
 -- migración; el Dashboard es el que exige completarlo en el alta de un chofer nuevo desde ahí.
+-- Desde schema_v15_telefono_e164.sql, formato E.164 (CHECK validado de entrada -- las 5 filas
+-- reales tenían telefono = null al aplicarlo, sin necesidad de NOT VALID). pais_nacimiento sigue
+-- siendo texto libre a nivel de base (el Dashboard lo restringe a una lista fija desde esa misma
+-- migración, ver PAISES en dashboard/lib/paises.ts, pero no se migran los valores ya cargados).
 create table public.choferes (
   id uuid primary key references auth.users(id) on delete cascade,
   numero_empleado text unique not null,
@@ -55,7 +59,7 @@ create table public.choferes (
   fecha_nacimiento date not null,
   pais_nacimiento text not null,
   sexo text not null check (sexo in ('Masculino', 'Femenino', 'Otro')),
-  telefono text,
+  telefono text check (telefono is null or telefono ~ '^\+[1-9]\d{7,14}$'),
   -- activo=false impide el acceso en los dos sistemas a la vez: en la tabla Y baneando la
   -- credencial de Auth (ban_duration, ver dashboard/app/api/choferes/editar/route.ts) — marcar
   -- solo la columna no le impide a Supabase Auth dejarlo entrar.

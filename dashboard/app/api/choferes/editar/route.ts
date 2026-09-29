@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server";
-import { DNI_VALIDO_REGEX, edadMinimaCumplida, normalizarDni, SEXOS } from "@/lib/choferes";
+import {
+  DNI_VALIDO_REGEX,
+  edadMinimaCumplida,
+  normalizarDni,
+  SEXOS,
+  TELEFONO_VALIDO_REGEX,
+} from "@/lib/choferes";
+import { PAISES } from "@/lib/paises";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesUpdate } from "@/lib/supabase/database.types";
 import type {
@@ -76,8 +83,14 @@ export async function POST(request: Request) {
     actualizacion.dni = dni;
   }
   if (body.telefono !== undefined) {
-    actualizacion.telefono =
-      typeof body.telefono === "string" && body.telefono.trim() ? body.telefono.trim() : null;
+    const telefono = typeof body.telefono === "string" ? body.telefono.trim() : "";
+    if (telefono && !TELEFONO_VALIDO_REGEX.test(telefono)) {
+      return NextResponse.json(
+        { mensaje: "El teléfono debe tener formato internacional, por ejemplo +34612345678." },
+        { status: 400 }
+      );
+    }
+    actualizacion.telefono = telefono || null;
   }
   if (body.fechaNacimiento !== undefined) {
     const fecha = typeof body.fechaNacimiento === "string" ? body.fechaNacimiento : "";
@@ -99,6 +112,12 @@ export async function POST(request: Request) {
     const pais = typeof body.paisNacimiento === "string" ? body.paisNacimiento.trim() : "";
     if (!pais)
       return NextResponse.json({ mensaje: "Falta el país de nacimiento." }, { status: 400 });
+    if (!PAISES.includes(pais)) {
+      return NextResponse.json(
+        { mensaje: "El país de nacimiento debe ser uno de la lista." },
+        { status: 400 }
+      );
+    }
     actualizacion.pais_nacimiento = pais;
   }
   if (body.sexo !== undefined) {
