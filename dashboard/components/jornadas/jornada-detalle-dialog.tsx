@@ -1,7 +1,8 @@
 "use client";
 
-import { AlertTriangle, ImageOff, MapPin, Pencil, Route } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, ImageOff, MapPin, Pencil, Route, X, ZoomIn } from "lucide-react";
+import { useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -68,18 +69,39 @@ function Ubicacion({
   );
 }
 
-function Foto({ titulo, url }: { titulo: string; url: string | null }) {
+function Foto({
+  titulo,
+  url,
+  onAmpliar,
+}: {
+  titulo: string;
+  url: string | null;
+  onAmpliar: (foto: { url: string; titulo: string }) => void;
+}) {
   return (
     <div>
       <p className="mb-1 text-xs text-muted-foreground">{titulo}</p>
       {url ? (
-        // Los buckets de Storage son de lectura pública: la URL sirve directo en <img>.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={url}
-          alt={titulo}
-          className="h-40 w-full rounded-md border border-border object-cover"
-        />
+        // spec_lightbox_detalle_jornada.md: click en la miniatura amplía la foto sobre el resto
+        // de la pantalla (Lightbox más abajo) — el ícono queda SIEMPRE visible, no solo al pasar
+        // el mouse, porque en el navegador de un teléfono (Hallazgos #11-#16) no existe "hover"
+        // y un cursor:pointer solo no se ve nunca ahí.
+        <button
+          type="button"
+          onClick={() => onAmpliar({ url, titulo })}
+          className="group relative block h-40 w-full overflow-hidden rounded-md border border-border"
+        >
+          {/* Los buckets de Storage son de lectura pública: la URL sirve directo en <img>. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt={titulo}
+            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+          />
+          <span className="absolute bottom-1.5 right-1.5 rounded-full bg-black/60 p-1 text-white">
+            <ZoomIn className="h-3.5 w-3.5" />
+          </span>
+        </button>
       ) : (
         <div className="flex h-40 w-full items-center justify-center rounded-md border border-dashed border-border text-muted-foreground">
           <ImageOff className="h-6 w-6" />
@@ -89,8 +111,49 @@ function Foto({ titulo, url }: { titulo: string; url: string | null }) {
   );
 }
 
+interface FotoAmpliada {
+  url: string;
+  titulo: string;
+}
+
+/**
+ * Visor ampliado de una foto (spec_lightbox_detalle_jornada.md) — overlay propio, NO el `Dialog`
+ * del proyecto: anidar dos `Dialog` duplicaba el cierre por Escape (cada uno registra su propio
+ * listener global sin coordinarse) y el cleanup de uno pisaba el `overflow: hidden` que el otro
+ * seguía necesitando (ver Fase 1 de la spec). z-[60], por encima del z-50 del Dialog, para
+ * garantizar que quede siempre arriba sin depender del orden de montaje de los portales.
+ */
+function LightboxFoto({ foto, onClose }: { foto: FotoAmpliada; onClose: () => void }) {
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
+      onClick={onClose}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Cerrar"
+        className="absolute right-4 top-4 rounded-md p-3.5 text-white hover:bg-white/10 lg:p-2"
+      >
+        <X className="h-6 w-6" />
+      </button>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={foto.url}
+        alt={foto.titulo}
+        className="max-h-full max-w-full rounded-md object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>,
+    document.body
+  );
+}
+
 export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDetalleDialogProps) {
   const [verRutaAbierto, setVerRutaAbierto] = useState(false);
+  const [fotoAmpliada, setFotoAmpliada] = useState<FotoAmpliada | null>(null);
   const [jornadaIdAnterior, setJornadaIdAnterior] = useState<string | null>(null);
 
   // Si cambia la jornada (se cierra el detalle, o se selecciona otra
@@ -103,10 +166,24 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
   if (jornadaIdActual !== jornadaIdAnterior) {
     setJornadaIdAnterior(jornadaIdActual);
     setVerRutaAbierto(false);
+    setFotoAmpliada(null);
   }
 
+  // spec_lightbox_detalle_jornada.md, Fase 1 punto 2: el Dialog exterior escucha Escape/
+  // click-afuera y llama a este `onClose` sin saber si el lightbox está abierto encima. En vez
+  // de sumar un segundo listener de Escape (que dispararía junto con este y cerraría los dos a
+  // la vez), se intercepta acá: con el lightbox abierto, el primer Escape/click-afuera lo cierra
+  // a él solo; recién el segundo (ya sin lightbox) llega a cerrar el detalle de jornada.
+  const manejarCierreDialog = useCallback(() => {
+    if (fotoAmpliada) {
+      setFotoAmpliada(null);
+      return;
+    }
+    onClose();
+  }, [fotoAmpliada, onClose]);
+
   return (
-    <Dialog open={jornada != null} onClose={onClose} title="Detalle de jornada">
+    <Dialog open={jornada != null} onClose={manejarCierreDialog} title="Detalle de jornada">
       {jornada && (
         <div className="flex flex-col gap-6">
           <div className="flex items-center justify-between">
@@ -202,7 +279,12 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
               </p>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 {jornada.fotos_incidencia_checkin.map((url, indice) => (
-                  <Foto key={url} titulo={`Foto ${indice + 1}`} url={url} />
+                  <Foto
+                    key={url}
+                    titulo={`Foto ${indice + 1}`}
+                    url={url}
+                    onAmpliar={setFotoAmpliada}
+                  />
                 ))}
               </div>
             </div>
@@ -232,16 +314,29 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
               </p>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                 {jornada.fotos_incidencia.map((url, indice) => (
-                  <Foto key={url} titulo={`Foto ${indice + 1}`} url={url} />
+                  <Foto
+                    key={url}
+                    titulo={`Foto ${indice + 1}`}
+                    url={url}
+                    onAmpliar={setFotoAmpliada}
+                  />
                 ))}
               </div>
             </div>
           )}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Foto titulo="Tacómetro inicial" url={jornada.foto_tacometro_inicial_url} />
-            <Foto titulo="Hoja de ruta" url={jornada.foto_ruta_url} />
-            <Foto titulo="Tacómetro final" url={jornada.foto_tacometro_final_url} />
+            <Foto
+              titulo="Tacómetro inicial"
+              url={jornada.foto_tacometro_inicial_url}
+              onAmpliar={setFotoAmpliada}
+            />
+            <Foto titulo="Hoja de ruta" url={jornada.foto_ruta_url} onAmpliar={setFotoAmpliada} />
+            <Foto
+              titulo="Tacómetro final"
+              url={jornada.foto_tacometro_final_url}
+              onAmpliar={setFotoAmpliada}
+            />
           </div>
 
           <RutaJornadaDialog
@@ -249,6 +344,10 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
             titulo={`Ruta de la jornada — ${jornada.chofer_nombre} (${jornada.matricula})`}
             onClose={() => setVerRutaAbierto(false)}
           />
+
+          {fotoAmpliada && (
+            <LightboxFoto foto={fotoAmpliada} onClose={() => setFotoAmpliada(null)} />
+          )}
         </div>
       )}
     </Dialog>

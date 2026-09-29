@@ -570,7 +570,11 @@ password_hash)`. Mensaje de error genérico ("Correo o contraseña incorrectos."
   modal de detalle (`jornada-detalle-dialog.tsx`) con las 3 fotos de la jornada (tacómetro
   inicial/ruta/final) + galería sin límite de fotos de respaldo de la incidencia
   (`jornada.fotos_incidencia`, mismo bucket `evidencias`). No muestra lat/lng ni enlaces de mapa.
-  Desde ahí también se abre la corrección de la jornada (ver más abajo).
+  Desde ahí también se abre la corrección de la jornada (ver más abajo). Click en cualquier
+  miniatura (las 3 fijas y ambas galerías de incidencia, check-in y check-out) abre un lightbox
+  propio (`LightboxFoto`, portal a `document.body`, no reutiliza `Dialog`) con la foto ampliada;
+  Escape/click-afuera cierran primero el lightbox y solo un segundo Escape/click-afuera cierra el
+  modal de detalle (spec_lightbox_detalle_jornada.md, 2026-09-29).
 - Botón exportar → `POST /api/reportes/exportar`, que reenvía a `server/mock`'s
   `/reports/export-excel`.
 - Botón "Corregir" (en el modal de detalle) → `POST /api/jornadas/editar`.
