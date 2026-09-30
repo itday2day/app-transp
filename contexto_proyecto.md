@@ -2273,6 +2273,54 @@ sobre todo en `HistorialScreen`.
     esta sesión — mismo motivo que el Hallazgo #35. El cambio no depende de ninguna capacidad
     nativa, se puede probar con `npx expo start` en cualquier momento.
 
+**Hallazgo #37 — dividir el input de teléfono en selector de país + número
+(2026-09-30)**: `spec_telefono_pais_selector.md`. Solo `dashboard/` (campo teléfono de
+`ChoferDialog`, alta y edición). Endurece la usabilidad del teléfono del Hallazgo #35 sin tocar el
+`CHECK` E.164 existente — sigue siendo el mismo string final, solo cambia cómo se arma.
+
+- **Dependencia nueva**: `libphonenumber-js` (entry point `/min`, no `/max` — solo se usa
+  `getCountryCallingCode(iso)`, nunca la validación/parseo completo de números, que sigue fuera de
+  alcance). `dashboard/lib/paises.ts` no tenía mapeo a ISO 3166 alpha-2 — se construyó uno nuevo
+  (`ISO_POR_PAIS`, 193/193 entradas, cruzado programáticamente contra `i18n-iso-countries` en
+  español y verificado a mano cada una de las 19 que no matchearon por transliteración distinta,
+  ej. "Bangladés" vs "Bangladesh") como export nuevo del mismo archivo — `PAISES: string[]` queda
+  intacto, sin ningún riesgo para el selector de país de nacimiento del #35.
+- ⚠️ **No había ningún listbox filtrable que reusar**: el desplegable de país de nacimiento del
+  #35 es un `<select>` nativo, sin filtro por texto. `SelectorCodigoPais` (nuevo,
+  `dashboard/components/choferes/selector-codigo-pais.tsx`) es el primer componente de este tipo
+  en el Dashboard — scoped ahí, no en `components/ui/`, mismo criterio que ya siguió la app móvil
+  con `SelectorPais.tsx`/`SelectorBuscable.tsx` (Hallazgo #10): generalizar recién con un segundo
+  uso real, no antes.
+- **El indicador de país es el ISO alpha-2 en texto** ("ES", "AR"), nunca un emoji de bandera (no
+  se renderiza en Windows) — y, a propósito, tampoco el nombre completo del país en el botón
+  cerrado. El nombre completo (filtrable) solo aparece dentro del panel desplegado.
+- **Sin breakpoint de columna**: como el botón cerrado nunca muestra el nombre del país (solo
+  "ES +34"), la fila [selector + número] no tiene ningún nombre largo que pueda truncar en pantallas
+  angostas — medido contra los ~390px de viewport ya establecidos en los Hallazgos #11-#16 (358px
+  de contenido real dentro del `Dialog`), el botón compacto entra sin problema. La spec preveía
+  este breakpoint como posible; no hizo falta.
+- **`separarTelefono()`** (`dashboard/lib/telefono-pais.ts`) reconstruye país + número al abrir
+  "editar" un chofer con teléfono ya guardado, con coincidencia de prefijo más largo primero —
+  verificado programáticamente que ningún código de marcación de los ~206 que expone la librería
+  es prefijo de otro (la asignación es libre de prefijos por diseño), así que el orden defensivo
+  no cambia ningún resultado real, pero se implementó igual tal como pedía la spec. Tres códigos
+  de los 193 sí son compartidos por más de un país (+1: 13 países del Caribe/NANP; +39: Italia/
+  Ciudad del Vaticano; +7: Rusia/Kazajistán) — sin más contexto no hay forma de saber cuál
+  exactamente (desambiguar por prefijo de área queda fuera de alcance), así que se elige
+  determinísticamente el primero en el orden alfabético de `PAISES`.
+- **Verificación**: `tsc`/`lint`/`format:check` limpios en `dashboard/`. Contra Supabase real y la
+  API real (admin de prueba, creado y borrado al terminar): los 5 choferes reales seguían sin
+  teléfono antes de implementar; alta con el país por defecto (España, +34) guarda exactamente
+  `+34` + el número, sin fricción contra el `CHECK` existente; `ISO_POR_PAIS["Argentina"]` y
+  `codigoMarcacion("Argentina")` resuelven a "AR"/"54" (confirmado contra el código real corriendo
+  en el servidor de desarrollo, no una reimplementación aparte); un chofer de prueba con
+  `+54911234567` se reeditó reconstruyendo el mismo valor exacto, sin duplicar el código ni perder
+  dígitos — borrado en los dos sistemas (tabla y Auth) al terminar.
+  - **No verificado desde este entorno**: la interacción visual del selector (abrir el panel,
+    escribir "argentina" y ver la lista filtrarse, el layout en una ventana angosta real) — sin
+    navegador disponible en esta sesión. La lógica de datos que sostiene esas pruebas sí se
+    verificó contra el código real, como se detalla arriba.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

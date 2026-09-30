@@ -7,16 +7,16 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { SelectorCodigoPais } from "@/components/choferes/selector-codigo-pais";
 import {
-  agregarPlusSiFalta,
   normalizarDni,
   normalizarParaComparar,
-  normalizarTelefonoAlTipear,
   numeroEmpleadoAEmail,
   SEXOS,
   TELEFONO_VALIDO_REGEX,
 } from "@/lib/choferes";
 import { PAISES } from "@/lib/paises";
+import { codigoMarcacion, separarTelefono } from "@/lib/telefono-pais";
 import type {
   ChoferDuplicadoResponse,
   ChoferRow,
@@ -121,7 +121,12 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     paisPreseleccionado(chofer?.pais_nacimiento)
   );
   const [sexo, setSexo] = useState<SexoChofer | "">(chofer?.sexo ?? "");
-  const [telefono, setTelefono] = useState(chofer?.telefono ?? "");
+  // spec_telefono_pais_selector.md: el país arranca en España (o en el que corresponda al
+  // teléfono ya guardado, separado por separarTelefono() — coincidencia de prefijo más largo
+  // primero) y el número es solo el resto de los dígitos, sin el código de marcación.
+  const telefonoSeparado = separarTelefono(chofer?.telefono);
+  const [paisTelefono, setPaisTelefono] = useState(telefonoSeparado.pais);
+  const [numeroTelefono, setNumeroTelefono] = useState(telefonoSeparado.numero);
 
   const [enviando, setEnviando] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
@@ -150,10 +155,15 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     if (!sexo) return setError("Elegí el sexo.");
     // Obligatorio solo al crear — un chofer ya cargado sin teléfono se tiene que poder seguir
     // editando sin exigírselo retroactivo (spec_normalizacion_dni_matricula_telefono.md).
-    if (!esEdicion && !telefono.trim()) return setError("Falta el teléfono.");
+    if (!esEdicion && !numeroTelefono.trim()) return setError("Falta el teléfono.");
     // El FORMATO, en cambio, se exige siempre que haya algo tipeado — en alta y en edición
     // (spec_telefono_e164_y_pais_desplegable.md, a diferencia de la obligatoriedad de arriba).
-    if (telefono.trim() && !TELEFONO_VALIDO_REGEX.test(telefono.trim())) {
+    // Se arma acá, no en el input: el selector de país ya garantiza el "+" + código correctos,
+    // el campo numérico ya solo deja tipear dígitos — esto solo concatena los dos.
+    const telefono = numeroTelefono.trim()
+      ? `+${codigoMarcacion(paisTelefono)}${numeroTelefono.trim()}`
+      : null;
+    if (telefono && !TELEFONO_VALIDO_REGEX.test(telefono)) {
       return setError("El teléfono debe tener formato internacional, por ejemplo +34612345678.");
     }
 
@@ -167,7 +177,7 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
         fechaNacimiento,
         paisNacimiento: paisNacimiento.trim(),
         sexo,
-        telefono: telefono.trim() || null,
+        telefono,
       };
       const body = esEdicion
         ? { id: chofer.id, ...camposComunes }
@@ -373,16 +383,28 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
         </div>
 
         <div>
-          <Label htmlFor="chf-telefono">Teléfono{esEdicion ? " (opcional)" : ""}</Label>
-          <Input
-            id="chf-telefono"
-            value={telefono}
-            onChange={(e) => setTelefono(normalizarTelefonoAlTipear(e.target.value))}
-            onBlur={(e) => setTelefono(agregarPlusSiFalta(e.target.value))}
-            maxLength={16}
-            placeholder="+34612345678"
-            disabled={deshabilitarCampos}
-          />
+          <Label htmlFor="chf-telefono-numero">Teléfono{esEdicion ? " (opcional)" : ""}</Label>
+          {/* spec_telefono_pais_selector.md: el "+" + código de marcación ya no se tipean — los
+              da el selector de país, elegido por nombre (filtrable), mostrado como ISO alpha-2 +
+              código. El campo numérico solo acepta dígitos; se concatenan los dos recién al
+              guardar (ver onSubmit). maxLength dinámico: E.164 admite hasta 15 dígitos en total
+              después del "+", de los que el código de marcación ya ocupa los suyos. */}
+          <div className="flex gap-2">
+            <SelectorCodigoPais
+              value={paisTelefono}
+              onChange={setPaisTelefono}
+              disabled={deshabilitarCampos}
+            />
+            <Input
+              id="chf-telefono-numero"
+              value={numeroTelefono}
+              onChange={(e) => setNumeroTelefono(e.target.value.replace(/\D/g, ""))}
+              maxLength={15 - codigoMarcacion(paisTelefono).length}
+              placeholder="612345678"
+              className="flex-1"
+              disabled={deshabilitarCampos}
+            />
+          </div>
         </div>
 
         {error && (
