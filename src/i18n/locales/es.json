@@ -17,14 +17,12 @@
     "errorCredenciales": "Número de empleado o contraseña incorrectos.",
     "errorConexion": "No pudimos conectar con el servidor. Verifica tu conexión e intenta de nuevo.",
     "botonIngresar": "Ingresar",
-    "enlaceRegistro": "¿No tienes cuenta? Crea una nueva",
-    "ayudaContrasena": "¿Olvidaste tu contraseña? Contacta a tu supervisor de flota."
+    "ayudaContrasena": "¿Olvidaste o querés cambiar tu contraseña?"
   },
   "navegacion": {
     "tabCheckIn": "Check-in",
     "tabHistorial": "Historial",
     "salir": "Salir",
-    "cambiarContrasena": "Contraseña",
     "tituloDetalleJornada": "Detalle de jornada",
     "tituloNuevoCheckIn": "Nueva ruta",
     "tituloCambiarContrasena": "Cambiar contraseña"
@@ -206,11 +204,6 @@
   "selectorDesplegable": {
     "sinOpciones": "No hay opciones cargadas para esta selección."
   },
-  "registro": {
-    "titulo": "Crear cuenta",
-    "mensajeDeshabilitado": "El acceso lo crea tu empresa. Pedíselo a tu administrador de flota.",
-    "botonVolver": "Volver a iniciar sesión"
-  },
   "cambiarContrasenaObligatorio": {
     "titulo": "Cambiá tu contraseña",
     "subtitulo": "Tu administrador te dio una contraseña temporal. Antes de continuar, elegí una nueva que solo vos conozcas.",
@@ -226,6 +219,8 @@
     "titulo": "Cambiar contraseña",
     "subtitulo": "Vas a necesitar tu contraseña actual.",
     "avisoSinRecuperacion": "Si olvidás la contraseña nueva, nadie puede devolvértela: no hay a dónde mandar un enlace. La única salida sería pedirle a tu administrador que te la resetee.",
+    "numeroEmpleadoEtiqueta": "Número de empleado",
+    "numeroEmpleadoPlaceholder": "Ej. 4821",
     "contrasenaActualEtiqueta": "Contraseña actual",
     "contrasenaActualPlaceholder": "Tu contraseña actual",
     "contrasenaNuevaEtiqueta": "Contraseña nueva",

@@ -1,5 +1,6 @@
-import React, { forwardRef } from "react";
-import { View, Text, TextInput, StyleSheet, TextInputProps } from "react-native";
+import React, { forwardRef, useState } from "react";
+import { View, Text, TextInput, Pressable, StyleSheet, TextInputProps } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios } from "@/theme/spacing";
@@ -7,21 +8,52 @@ import { espaciado, radios } from "@/theme/spacing";
 interface Props extends TextInputProps {
   etiqueta: string;
   error?: string;
+  /** spec_cambio_contrasena_login.md: solo tiene efecto junto con `secureTextEntry` — agrega un
+   * ícono de ojo que alterna mostrar/ocultar el texto tipeado al tocarlo (no cambia el tipo de
+   * teclado, `keyboardType` no se toca). No es el comportamiento por defecto de todo campo de
+   * contraseña del proyecto — cada pantalla lo pide explícitamente. */
+  alternarVisibilidad?: boolean;
 }
 
 export const CampoTexto = forwardRef<TextInput, Props>(function CampoTexto(
-  { etiqueta, error, style, ...resto },
+  { etiqueta, error, style, secureTextEntry, alternarVisibilidad, ...resto },
   ref
 ) {
+  const [visible, setVisible] = useState(false);
+  const ocultarTexto = alternarVisibilidad ? secureTextEntry && !visible : secureTextEntry;
+
   return (
     <View style={estilos.contenedor}>
       <Text style={estilos.etiqueta}>{etiqueta}</Text>
-      <TextInput
-        ref={ref}
-        style={[estilos.input, Boolean(error) && estilos.inputConError, style]}
-        placeholderTextColor={colores.textoSecundario}
-        {...resto}
-      />
+      <View style={alternarVisibilidad ? estilos.filaInput : undefined}>
+        <TextInput
+          ref={ref}
+          style={[
+            estilos.input,
+            alternarVisibilidad && estilos.inputConIcono,
+            Boolean(error) && estilos.inputConError,
+            style,
+          ]}
+          placeholderTextColor={colores.textoSecundario}
+          secureTextEntry={ocultarTexto}
+          {...resto}
+        />
+        {alternarVisibilidad && (
+          <Pressable
+            onPress={() => setVisible((actual) => !actual)}
+            style={estilos.iconoOjo}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
+          >
+            <Ionicons
+              name={visible ? "eye-off-outline" : "eye-outline"}
+              size={20}
+              color={colores.textoSecundario}
+            />
+          </Pressable>
+        )}
+      </View>
       {error ? <Text style={estilos.textoError}>{error}</Text> : null}
     </View>
   );
@@ -48,6 +80,18 @@ const estilos = StyleSheet.create({
   },
   inputConError: {
     borderColor: colores.peligro,
+  },
+  filaInput: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  inputConIcono: {
+    flex: 1,
+    paddingRight: espaciado.xl,
+  },
+  iconoOjo: {
+    position: "absolute",
+    right: espaciado.md,
   },
   textoError: {
     ...tipografia.ayuda,

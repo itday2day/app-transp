@@ -4,12 +4,15 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 
 export type RootStackParamList = {
   Login: undefined;
-  Registro: undefined;
+  // spec_cambio_contrasena_login.md: única ruta de cambio voluntario de contraseña, alcanzable
+  // sin sesión desde Login — reemplaza al enlace "Crear cuenta nueva" (RegistroScreen.tsx,
+  // eliminada) y al botón "Contraseña" que antes vivía en el header de PrincipalTabs (dos caminos
+  // para la misma acción era el patrón del Hallazgo #21).
+  CambiarContrasena: undefined;
   CambiarContrasenaObligatorio: undefined;
   Principal: undefined;
   DetalleJornada: { id: string };
   NuevoCheckIn: undefined;
-  CambiarContrasena: undefined;
 };
 
 export type TabsParamList = {

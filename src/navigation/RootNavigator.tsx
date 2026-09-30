@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, Text, View, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
-import { NavigationContainer, useNavigation } from "@react-navigation/native";
+import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,10 +10,9 @@ import { ClaveTraduccion } from "@/i18n";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
-import { RootStackNavigationProp, RootStackParamList, TabsParamList } from "./types";
+import { RootStackParamList, TabsParamList } from "./types";
 
 import LoginScreen from "@/screens/LoginScreen";
-import RegistroScreen from "@/screens/RegistroScreen";
 import CambiarContrasenaObligatorioScreen from "@/screens/CambiarContrasenaObligatorioScreen";
 import CambiarContrasenaScreen from "@/screens/CambiarContrasenaScreen";
 import CheckInScreen from "@/screens/CheckInScreen";
@@ -37,10 +36,6 @@ const CLAVE_TITULO_TAB: Record<keyof TabsParamList, ClaveTraduccion> = {
 function PrincipalTabs() {
   const { cerrarSesion } = useAuth();
   const { t } = useTranslation();
-  // Este componente es el que registra <Stack.Screen name="Principal" .../> más abajo, así que
-  // useNavigation() acá devuelve el navigator del STACK raíz (no el de cada tab por separado) —
-  // permite navegar a "CambiarContrasena", que vive en el stack, no en los tabs.
-  const navigation = useNavigation<RootStackNavigationProp>();
 
   // ⚠️ Sin `tabBarStyle` a propósito: `BottomTabBar` (@react-navigation/bottom-tabs)
   // ya suma `insets.bottom` a su propio paddingBottom por defecto (confirmado
@@ -59,14 +54,10 @@ function PrincipalTabs() {
         ),
         tabBarActiveTintColor: colores.primario,
         tabBarInactiveTintColor: colores.textoSecundario,
-        // "Contraseña" al lado de "Salir" (spec_deudas_app_movil.md): la app se usa con una
-        // mano y en movimiento, así que la opción de cambiarla va lejos de los botones que se
-        // tocan todos los días (Check-in, Historial), pegada a la de cerrar sesión.
+        // spec_cambio_contrasena_login.md: el botón "Contraseña" que vivía acá se retiró — el
+        // cambio voluntario ahora se hace desde Login (sin sesión), única vía para esa acción.
         headerRight: () => (
           <View style={estilos.filaHeader}>
-            <Pressable onPress={() => navigation.navigate("CambiarContrasena")} style={estilos.botonSalir}>
-              <Text style={estilos.textoSalir}>{t("navegacion.cambiarContrasena")}</Text>
-            </Pressable>
             <Pressable onPress={cerrarSesion} style={estilos.botonSalir}>
               <Text style={estilos.textoSalir}>{t("navegacion.salir")}</Text>
             </Pressable>
@@ -91,8 +82,8 @@ export function RootNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {usuario?.debeCambiarContrasena ? (
           // Única pantalla del stack mientras esto sea true — ni el resto de rutas autenticadas
-          // ni Login/Registro están montadas, así que no hay forma de "volver atrás" hacia
-          // ellas ni de llegar a ninguna pantalla que cargue datos (Fase 2, Parte B de
+          // ni Login/CambiarContrasena están montadas, así que no hay forma de "volver atrás"
+          // hacia ellas ni de llegar a ninguna pantalla que cargue datos (Fase 2, Parte B de
           // spec_alta_choferes_dashboard.md).
           <Stack.Screen name="CambiarContrasenaObligatorio" component={CambiarContrasenaObligatorioScreen} />
         ) : usuario ? (
@@ -108,19 +99,17 @@ export function RootNavigator() {
               component={NuevoCheckInScreen}
               options={{ headerShown: true, title: t("navegacion.tituloNuevoCheckIn") }}
             />
-            <Stack.Screen
-              name="CambiarContrasena"
-              component={CambiarContrasenaScreen}
-              options={{ headerShown: true, title: t("navegacion.tituloCambiarContrasena") }}
-            />
           </>
         ) : (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
+            {/* spec_cambio_contrasena_login.md: reemplaza a "Registro" (RegistroScreen.tsx,
+                eliminada) — el cambio voluntario de contraseña ahora se alcanza sin sesión desde
+                acá, en vez de solo después de haber iniciado sesión. */}
             <Stack.Screen
-              name="Registro"
-              component={RegistroScreen}
-              options={{ headerShown: true, title: t("registro.titulo") }}
+              name="CambiarContrasena"
+              component={CambiarContrasenaScreen}
+              options={{ headerShown: true, title: t("navegacion.tituloCambiarContrasena") }}
             />
           </>
         )}

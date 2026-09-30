@@ -266,8 +266,10 @@ pings duplicados (2026-09-14)**: `src/hooks/useSeguimientoGPS.ts` ahora descarta
 enviarlo si su lat/lng/timestamp coincide exactamente con el último ping ya enviado — ver el
 diagnóstico completo (causa sospechada vs. causa confirmada) en §6.
 
-**Pantallas**: `LoginScreen`, `RegistroScreen`, `CheckInScreen` (solo la lista de rutas activas),
-`NuevoCheckInScreen`, `HistorialScreen` (+ botón exportar), `DetalleJornadaScreen`. No existe una
+**Pantallas**: `LoginScreen`, `CambiarContrasenaScreen` (cambio voluntario, alcanzable sin sesión
+desde `LoginScreen` — ver Hallazgo #35; `RegistroScreen.tsx` se eliminó ahí mismo, ya no existe),
+`CheckInScreen` (solo la lista de rutas activas), `NuevoCheckInScreen`, `HistorialScreen` (+ botón
+exportar), `DetalleJornadaScreen`. No existe una
 pantalla `CheckOutScreen` propia — el check-out se hace desde `DetalleJornadaScreen` (revela
 `CheckOutForm` in situ). Navegación **totalmente tipada, sin `any`** (`src/navigation/types.ts`):
 `RootStackNavigationProp`, `TabsNavigationProp<T>` (composite type — los tabs necesitan navegar a
@@ -276,7 +278,7 @@ rutas del stack raíz, como `DetalleJornada`), `DetalleJornadaRouteProp`.
 ⚠️ **Corrección (2026-09-11)**: iniciar una ruta nueva **ya no es un formulario inline** dentro de
 `CheckInScreen` (que también muestra la lista de rutas activas) — es su propia pantalla del stack,
 `NuevoCheckInScreen` (ruta `NuevoCheckIn`, sin parámetros), con botón "Atrás" nativo (header, mismo
-patrón que `DetalleJornadaScreen`/`RegistroScreen`) + un botón "Cancelar" explícito al pie (mismo
+patrón que `DetalleJornadaScreen`/`CambiarContrasenaScreen`) + un botón "Cancelar" explícito al pie (mismo
 patrón que ya usa `CheckOutForm`). Antes, una vez abierto el formulario, no había ninguna forma de
 cancelarlo salvo enviarlo. `useJornadasAbiertas()` (en `CheckInScreen`) ya usaba `useFocusEffect`,
 así que la lista se refresca sola al volver con `goBack()` tras un check-in exitoso, sin necesidad
@@ -2200,6 +2202,54 @@ país guardado de dos formas distintas.
   guardado; país elegido del desplegable se guarda exacto; chofer 01 y 04 verificados como arriba;
   editar dejando el teléfono vacío sigue sin exigirlo; completar el teléfono por primera vez con
   formato inválido rechazado, con uno válido guardado.
+
+**Hallazgo #35 — cambio de contraseña desde el login, sin alta de cuenta nueva, y ver contraseña
+al escribirla (2026-09-30)**: `spec_cambio_contrasena_login.md`. Toca solo la app móvil
+(`dashboard/`/`supabase/` sin cambios). Tres pedidos sobre la pantalla de login: reubica el cambio
+de contraseña voluntario del #26 a un punto de entrada sin sesión, elimina `RegistroScreen.tsx`
+(alta exclusiva del Dashboard desde el #25), y agrega ícono de mostrar/ocultar contraseña.
+
+- **Se reubicó el punto de entrada, no el mecanismo**: `CambiarContrasenaScreen.tsx` sigue usando
+  `cambiarContrasenaVoluntaria()` (`authService.ts`, sin tocar) tal cual — la única diferencia es
+  que ahora pide también el número de empleado (antes lo tomaba de `useAuth().usuario`, que no
+  existe sin sesión) y su `<Stack.Screen>` se movió de la rama autenticada de `RootNavigator.tsx`
+  al lado de `Login` en la rama sin sesión. El botón "Contraseña" que vivía en el header de
+  `PrincipalTabs` junto a "Salir" se retiró — dos caminos para la misma acción era el patrón que ya
+  había causado el Hallazgo #21.
+- ⚠️ **"Entrar directo a la app" se resolvió reusando el mismo `iniciarSesion()` del login normal,
+  no reproduciéndolo a mano**: confirmado leyendo el código (Fase 1) que un login normal no dispara
+  nada más que `AuthContext.iniciarSesion()` (perfil + `SecureStore` + `setUsuario`) — toda la
+  sincronización de jornadas (`useJornadasAbiertas`, `NetworkContext`) es una REACCIÓN a que
+  `usuario` deje de ser `null`, no algo que `iniciarSesion()` dispare directamente. Por eso, tras un
+  cambio de contraseña exitoso, `CambiarContrasenaScreen` llama al mismo `iniciarSesion(numeroEmpleado,
+  contrasenaNueva)` que usa `LoginScreen` — mismo código, no una versión paralela — y
+  `RootNavigator.tsx` cambia de stack solo. Si ese auto-login puntual fallara (ej. un hipo de red
+  justo ahí, la contraseña YA cambió con éxito en ese momento), se reusa la pantalla de éxito que
+  ya existía en el archivo (antes servía para "volver" tras el cambio) para decirle al chofer que
+  entre a mano con la nueva.
+- **`RegistroScreen.tsx` eliminada del código, no solo desconectada**: ya era un stub sin
+  formulario desde el #25 (un mensaje + botón volver). Confirmado que las referencias que quedan
+  tras borrarla son todas comentarios históricos (`SelectorPais.tsx`, `SelectorBuscable.tsx`,
+  `authService.ts`, `NuevoCheckInScreen.tsx`) — ningún import ni ruta activa.
+- **Ícono de ver contraseña**: prop nueva `alternarVisibilidad` en `CampoTexto.tsx` (opt-in, no
+  cambia el comportamiento de los demás campos de contraseña del proyecto que no lo piden — ej.
+  `CambiarContrasenaObligatorioScreen.tsx`, fuera de alcance de esta spec) — alterna
+  `secureTextEntry` al tocar el ícono (`eye-outline`/`eye-off-outline`, `@expo/vector-icons`, mismo
+  patrón toggle-al-tocar que el resto de selectores del proyecto, no press-and-hold). Aplicado en
+  el campo de contraseña de `LoginScreen` y en los 3 de `CambiarContrasenaScreen` (actual, nueva,
+  confirmación).
+- **Verificación**: `tsc`/`lint`/`format:check` limpios en `src/`. Contra Supabase Auth real (dos
+  choferes de prueba, creados y borrados al terminar — tabla y Auth), replicando exactamente las
+  llamadas que hace `authService.ts` (mismo cliente `anon key`, sin el adaptador de `SecureStore`
+  que no existe fuera de React Native): contraseña actual equivocada rechazada; contraseña actual
+  correcta + nueva válida cambia la contraseña y el login posterior con la nueva entra directo, sin
+  tocar `debe_cambiar_contrasena`; la contraseña vieja deja de servir después del cambio; un chofer
+  con `debe_cambiar_contrasena = true` sigue viéndolo en `true` tras un login normal, intacto.
+  - **No verificado desde este entorno**: el ícono de ver contraseña alternando en pantalla — no
+    hay dispositivo ni emulador conectado en esta sesión (a diferencia de otras specs de este
+    proyecto, este cambio no depende de ninguna capacidad nativa, así que la limitación es del
+    entorno de esta sesión, no de la spec — se puede probar con `npx expo start` en cualquier
+    momento).
 
 ## 5. Estándares de calidad y reglas de código
 

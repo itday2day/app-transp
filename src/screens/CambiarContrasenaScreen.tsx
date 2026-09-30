@@ -12,44 +12,62 @@ import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
 
-// Cambio de contraseña por voluntad propia (spec_deudas_app_movil.md, Parte A) — a diferencia de
-// CambiarContrasenaObligatorioScreen (que bloquea toda la app hasta que se complete), esta
-// pantalla es una más del stack normal, con su propia flecha de "volver": el chofer entra cuando
-// quiere, no porque algo se lo exija. No toca la sesión ni la base local (ver el comentario largo
-// en cambiarContrasenaVoluntaria(), authService.ts) — se puede usar con una jornada abierta sin
-// ningún riesgo para ella.
+// Cambio de contraseña por voluntad propia (spec_cambio_contrasena_login.md, reemplaza al punto
+// de entrada post-login de spec_deudas_app_movil.md Parte A) — única vía para cambiarla estando
+// ya elegida por el propio chofer (dos caminos para lo mismo era el patrón del Hallazgo #21).
+// Vive en el stack SIN sesión, junto a Login: por eso pide numeroEmpleado (antes lo tomaba de
+// useAuth().usuario, que acá todavía no existe) y, al confirmar, entra a la app llamando al mismo
+// iniciarSesion() que usa un login normal — no solo abre una sesión de Supabase, reproduce
+// EXACTAMENTE lo mismo que un login (perfil, SecureStore, y todo lo que reacciona a que `usuario`
+// deje de ser null: sincronización de jornadas incluida, ver useJornadasAbiertas/NetworkContext).
+// Se puede usar con una jornada abierta sin riesgo para ella: ni esto ni cambiarContrasenaVoluntaria
+// tocan SQLite (ver el comentario largo en esa función, authService.ts).
 export default function CambiarContrasenaScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<RootStackNavigationProp>();
-  const { usuario } = useAuth();
+  const { iniciarSesion } = useAuth();
 
+  const [numeroEmpleado, setNumeroEmpleado] = useState("");
   const [contrasenaActual, setContrasenaActual] = useState("");
   const [contrasenaNueva, setContrasenaNueva] = useState("");
   const [confirmarContrasenaNueva, setConfirmarContrasenaNueva] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Solo se llega acá si la contraseña SÍ cambió pero el auto-login de después falló (ej. un hipo
+  // de red justo en ese instante) — no es un estado de error del cambio en sí, así que no reusa
+  // `error`: le dice al chofer que ya puede entrar a mano con la contraseña nueva.
   const [exito, setExito] = useState(false);
 
   const contrasenasCoinciden =
     confirmarContrasenaNueva.length === 0 || confirmarContrasenaNueva === contrasenaNueva;
   const puedeEnviar =
+    numeroEmpleado.trim().length > 0 &&
     contrasenaActual.length > 0 &&
     contrasenaNueva.length >= 6 &&
     confirmarContrasenaNueva === contrasenaNueva;
 
   async function manejarCambio() {
-    if (!puedeEnviar || !usuario) return;
+    if (!puedeEnviar) return;
     setError(null);
     setEnviando(true);
     try {
-      await cambiarContrasenaVoluntaria(usuario.numeroEmpleado, contrasenaActual, contrasenaNueva);
-      setExito(true);
+      await cambiarContrasenaVoluntaria(numeroEmpleado.trim(), contrasenaActual, contrasenaNueva);
     } catch (err) {
       if (err instanceof ErrorApi && err.status === 401) {
         setError(t("cambiarContrasena.errorContrasenaActual"));
       } else {
         setError(t("cambiarContrasena.errorGenerico"));
       }
+      setEnviando(false);
+      return;
+    }
+    try {
+      // Mismo iniciarSesion() que llama LoginScreen — no una versión propia (ver comentario de
+      // arriba). Al resolver, RootNavigator.tsx cambia de stack solo (usuario deja de ser null):
+      // no hace falta navegar a mano.
+      await iniciarSesion(numeroEmpleado.trim(), contrasenaNueva);
+    } catch {
+      setExito(true);
     } finally {
       setEnviando(false);
     }
@@ -75,9 +93,19 @@ export default function CambiarContrasenaScreen() {
         <Text style={estilos.subtitulo}>{t("cambiarContrasena.subtitulo")}</Text>
 
         <CampoTexto
+          etiqueta={t("cambiarContrasena.numeroEmpleadoEtiqueta")}
+          placeholder={t("cambiarContrasena.numeroEmpleadoPlaceholder")}
+          keyboardType="number-pad"
+          autoCapitalize="none"
+          value={numeroEmpleado}
+          onChangeText={setNumeroEmpleado}
+        />
+
+        <CampoTexto
           etiqueta={t("cambiarContrasena.contrasenaActualEtiqueta")}
           placeholder={t("cambiarContrasena.contrasenaActualPlaceholder")}
           secureTextEntry
+          alternarVisibilidad
           autoCapitalize="none"
           value={contrasenaActual}
           onChangeText={setContrasenaActual}
@@ -87,6 +115,7 @@ export default function CambiarContrasenaScreen() {
           etiqueta={t("cambiarContrasena.contrasenaNuevaEtiqueta")}
           placeholder={t("cambiarContrasena.contrasenaNuevaPlaceholder")}
           secureTextEntry
+          alternarVisibilidad
           autoCapitalize="none"
           value={contrasenaNueva}
           onChangeText={setContrasenaNueva}
@@ -96,6 +125,7 @@ export default function CambiarContrasenaScreen() {
           etiqueta={t("cambiarContrasena.confirmarContrasenaNuevaEtiqueta")}
           placeholder={t("cambiarContrasena.confirmarContrasenaNuevaPlaceholder")}
           secureTextEntry
+          alternarVisibilidad
           autoCapitalize="none"
           value={confirmarContrasenaNueva}
           onChangeText={setConfirmarContrasenaNueva}

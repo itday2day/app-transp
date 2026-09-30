@@ -17,14 +17,12 @@
     "errorCredenciales": "Incorrect employee number or password.",
     "errorConexion": "We couldn't connect to the server. Check your connection and try again.",
     "botonIngresar": "Log in",
-    "enlaceRegistro": "Don't have an account? Create one",
-    "ayudaContrasena": "Forgot your password? Contact your fleet supervisor."
+    "ayudaContrasena": "Forgot or want to change your password?"
   },
   "navegacion": {
     "tabCheckIn": "Check-in",
     "tabHistorial": "History",
     "salir": "Log out",
-    "cambiarContrasena": "Password",
     "tituloDetalleJornada": "Shift details",
     "tituloNuevoCheckIn": "New route",
     "tituloCambiarContrasena": "Change password"
@@ -206,11 +204,6 @@
   "selectorDesplegable": {
     "sinOpciones": "No options available for this selection."
   },
-  "registro": {
-    "titulo": "Create account",
-    "mensajeDeshabilitado": "Your company creates your access. Ask your fleet administrator for it.",
-    "botonVolver": "Back to sign in"
-  },
   "cambiarContrasenaObligatorio": {
     "titulo": "Change your password",
     "subtitulo": "Your administrator gave you a temporary password. Before continuing, choose a new one only you know.",
@@ -226,6 +219,8 @@
     "titulo": "Change password",
     "subtitulo": "You'll need your current password.",
     "avisoSinRecuperacion": "If you forget the new password, no one can give it back to you: there's nowhere to send a reset link. The only way out would be asking your administrator to reset it for you.",
+    "numeroEmpleadoEtiqueta": "Employee number",
+    "numeroEmpleadoPlaceholder": "E.g. 4821",
     "contrasenaActualEtiqueta": "Current password",
     "contrasenaActualPlaceholder": "Your current password",
     "contrasenaNuevaEtiqueta": "New password",

@@ -65,6 +65,7 @@ export default function LoginScreen() {
           etiqueta={t("login.contrasenaEtiqueta")}
           placeholder={t("login.contrasenaPlaceholder")}
           secureTextEntry
+          alternarVisibilidad
           autoCapitalize="none"
           value={contrasena}
           onChangeText={setContrasena}
@@ -80,11 +81,9 @@ export default function LoginScreen() {
           estilo={estilos.boton}
         />
 
-        <Pressable onPress={() => navigation.navigate("Registro")}>
-          <Text style={estilos.enlace}>{t("login.enlaceRegistro")}</Text>
+        <Pressable onPress={() => navigation.navigate("CambiarContrasena")}>
+          <Text style={estilos.enlace}>{t("login.ayudaContrasena")}</Text>
         </Pressable>
-
-        <Text style={estilos.ayuda}>{t("login.ayudaContrasena")}</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -126,11 +125,6 @@ const estilos = StyleSheet.create({
     color: colores.peligro,
     marginBottom: espaciado.md,
     textAlign: "center",
-  },
-  ayuda: {
-    ...tipografia.ayuda,
-    textAlign: "center",
-    marginTop: espaciado.lg,
   },
   enlace: {
     ...tipografia.cuerpo,
