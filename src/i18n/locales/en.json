@@ -149,6 +149,7 @@
   "tarjetaJornada": {
     "enCurso": "In progress",
     "cerrada": "Closed",
+    "sinEmpresa": "No company",
     "syncPendiente": "Pending upload",
     "syncEnviando": "Uploading…",
     "syncEnviado": "Uploaded",

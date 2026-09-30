@@ -48,7 +48,16 @@ export function TarjetaJornada({ jornada, onPress }: Props) {
   return (
     <Pressable onPress={onPress} style={estilos.tarjeta}>
       <View style={estilos.filaSuperior}>
-        <Text style={estilos.matricula}>{jornada.matricula}</Text>
+        {/* spec_tarjeta_jornada_empresa.md: la empresa pasa a ser el dato principal (antes era la
+            matrícula, ahora en estilos.matriculaSecundaria más abajo) — un chofer que reparte
+            para varias empresas necesita identificar para quién fue cada jornada de un vistazo,
+            sobre todo revisando el historial. `jornada.empresa` es obligatoria en el alta, pero
+            una fila local vieja (de antes de que esa columna existiera en SQLite, ver
+            agregarColumnasFaltantes() en database.ts) puede tener '' backfilleado — de ahí el
+            texto de reemplazo en vez de una línea en blanco. */}
+        <Text style={estilos.empresa}>
+          {jornada.empresa?.trim() ? jornada.empresa : t("tarjetaJornada.sinEmpresa")}
+        </Text>
         <View style={[estilos.insignia, jornada.estado === "abierta" && estilos.insigniaAbierta]}>
           <Text style={estilos.textoInsignia}>
             {t(jornada.estado === "abierta" ? "tarjetaJornada.enCurso" : "tarjetaJornada.cerrada")}
@@ -57,6 +66,7 @@ export function TarjetaJornada({ jornada, onPress }: Props) {
       </View>
 
       <Text style={estilos.chofer}>{jornada.choferNombre}</Text>
+      <Text style={estilos.matriculaSecundaria}>{jornada.matricula}</Text>
       <Text style={estilos.fecha}>{formatearFecha(jornada.fechaCheckIn)}</Text>
 
       <View style={estilos.filaInferior}>
@@ -90,8 +100,9 @@ const estilos = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  matricula: {
+  empresa: {
     ...tipografia.subtitulo,
+    flexShrink: 1,
   },
   insignia: {
     backgroundColor: colores.fondo,
@@ -107,6 +118,11 @@ const estilos = StyleSheet.create({
     fontWeight: "600",
   },
   chofer: {
+    ...tipografia.cuerpo,
+    color: colores.textoSecundario,
+    marginTop: espaciado.xs,
+  },
+  matriculaSecundaria: {
     ...tipografia.cuerpo,
     color: colores.textoSecundario,
     marginTop: espaciado.xs,

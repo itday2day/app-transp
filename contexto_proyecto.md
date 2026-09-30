@@ -2251,6 +2251,28 @@ de contraseña voluntario del #26 a un punto de entrada sin sesión, elimina `Re
     entorno de esta sesión, no de la spec — se puede probar con `npx expo start` en cualquier
     momento).
 
+**Hallazgo #36 — mostrar la empresa, no la matrícula, como dato principal de las tarjetas de
+jornada (2026-09-29)**: `spec_tarjeta_jornada_empresa.md`. Solo `src/`, jerarquía visual: un chofer
+que reparte para varias empresas necesita identificar para quién fue cada jornada de un vistazo,
+sobre todo en `HistorialScreen`.
+
+- **`TarjetaJornada.tsx` es el único componente, compartido por `CheckInScreen` e
+  `HistorialScreen`** (confirmado, ninguna otra pantalla lo reusa) — antes NO mostraba `empresa` en
+  absoluto (solo matrícula en negrita, chofer, fecha, km y estado de sincronización); no fue "subir
+  de rango" un dato ya visible, sino agregar `empresa` como línea principal y bajar la matrícula a
+  una línea secundaria nueva.
+- ⚠️ **Confirmado contra Supabase real antes de implementar**: 0 de 26 jornadas reales sin
+  `empresa`. Pero SQLite local sí tiene un camino real hacia una fila vacía: `agregarColumnasFaltantes()`
+  (`database.ts`) agrega la columna con `DEFAULT ''` en una instalación que no la tenía — un
+  dispositivo con datos de antes de esa migración podría tener `empresa = ''` aunque el alta actual
+  la exija. El texto de reemplazo ("Sin empresa") cubre ese caso aunque no haya ninguno real
+  encontrado hoy.
+- **Verificación**: `tsc`/`lint`/`format:check` limpios en `src/`.
+  - **No verificado desde este entorno**: las 4 pruebas de Fase 3 (abrir Check-In/Historial y
+    confirmar visualmente la tarjeta) requieren un dispositivo o emulador, sin uno conectado en
+    esta sesión — mismo motivo que el Hallazgo #35. El cambio no depende de ninguna capacidad
+    nativa, se puede probar con `npx expo start` en cualquier momento.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
