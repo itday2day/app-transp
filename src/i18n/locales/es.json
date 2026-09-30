@@ -126,6 +126,7 @@
     "seccionCheckIn": "Check-in",
     "fechaHora": "Fecha y hora",
     "empresa": "Empresa",
+    "sinEmpresa": "Sin empresa",
     "ruta": "Ruta",
     "incidencias": "Incidencias",
     "kmInicial": "Kilometraje inicial",

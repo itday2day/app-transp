@@ -25,6 +25,7 @@ import { CLAVE_TIPO_INCIDENCIA } from "@/components/IncidenciasForm";
 import { BannerConexion } from "@/components/BannerConexion";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { Jornada } from "@/types";
+import { textoEmpresa } from "@/utils/jornada";
 import { DetalleJornadaRouteProp, RootStackNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
@@ -166,8 +167,14 @@ export default function DetalleJornadaScreen() {
         contentContainerStyle={estilos.contenido}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={estilos.titulo}>{jornada.matricula}</Text>
+        {/* spec_tarjeta_jornada_empresa.md (ampliación 2026-09-30): mismo criterio que
+            TarjetaJornada.tsx (Hallazgo #37) — la empresa pasa a ser el dato principal, la
+            matrícula baja a una línea secundaria. La fila "Empresa" de la sección de check-in más
+            abajo no se toca (fuera de alcance de esta ampliación: solo la jerarquía título/
+            secundaria). */}
+        <Text style={estilos.titulo}>{textoEmpresa(jornada.empresa, t("detalleJornada.sinEmpresa"))}</Text>
         <Text style={estilos.chofer}>{jornada.choferNombre}</Text>
+        <Text style={estilos.matriculaSecundaria}>{jornada.matricula}</Text>
 
         <View style={estilos.seccion}>
           <Text style={estilos.seccionTitulo}>{t("detalleJornada.seccionCheckIn")}</Text>
@@ -309,6 +316,10 @@ const estilos = StyleSheet.create({
     ...tipografia.titulo,
   },
   chofer: {
+    ...tipografia.cuerpo,
+    color: colores.textoSecundario,
+  },
+  matriculaSecundaria: {
     ...tipografia.cuerpo,
     color: colores.textoSecundario,
     marginBottom: espaciado.md,

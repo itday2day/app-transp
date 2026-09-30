@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Jornada } from "@/types";
 import { ClaveTraduccion } from "@/i18n";
 import { MAX_INTENTOS } from "@/services/syncService";
+import { textoEmpresa } from "@/utils/jornada";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios } from "@/theme/spacing";
@@ -55,9 +56,7 @@ export function TarjetaJornada({ jornada, onPress }: Props) {
             una fila local vieja (de antes de que esa columna existiera en SQLite, ver
             agregarColumnasFaltantes() en database.ts) puede tener '' backfilleado — de ahí el
             texto de reemplazo en vez de una línea en blanco. */}
-        <Text style={estilos.empresa}>
-          {jornada.empresa?.trim() ? jornada.empresa : t("tarjetaJornada.sinEmpresa")}
-        </Text>
+        <Text style={estilos.empresa}>{textoEmpresa(jornada.empresa, t("tarjetaJornada.sinEmpresa"))}</Text>
         <View style={[estilos.insignia, jornada.estado === "abierta" && estilos.insigniaAbierta]}>
           <Text style={estilos.textoInsignia}>
             {t(jornada.estado === "abierta" ? "tarjetaJornada.enCurso" : "tarjetaJornada.cerrada")}

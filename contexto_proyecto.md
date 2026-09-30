@@ -2251,27 +2251,45 @@ de contraseña voluntario del #26 a un punto de entrada sin sesión, elimina `Re
     entorno de esta sesión, no de la spec — se puede probar con `npx expo start` en cualquier
     momento).
 
-**Hallazgo #36 — mostrar la empresa, no la matrícula, como dato principal de las tarjetas de
-jornada (2026-09-29)**: `spec_tarjeta_jornada_empresa.md`. Solo `src/`, jerarquía visual: un chofer
-que reparte para varias empresas necesita identificar para quién fue cada jornada de un vistazo,
-sobre todo en `HistorialScreen`.
+**Hallazgo #36 — mostrar la empresa, no la matrícula, como dato principal de las tarjetas y el
+detalle de jornada (2026-09-29, ampliado el 2026-09-30)**: `spec_tarjeta_jornada_empresa.md`. Solo
+`src/`, jerarquía visual: un chofer que reparte para varias empresas necesita identificar para
+quién fue cada jornada de un vistazo, sobre todo en `HistorialScreen`. La versión original excluyó
+el detalle de jornada a propósito; al ver el resultado ya desplegado (commit `53c3439`), el usuario
+pidió extender el mismo criterio al detalle antes de dar las pruebas de Fase 3 por cerradas — un
+toque en una tarjeta que abre un detalle con la matrícula en el lugar de la empresa rompía la
+consistencia que la spec buscaba.
 
-- **`TarjetaJornada.tsx` es el único componente, compartido por `CheckInScreen` e
-  `HistorialScreen`** (confirmado, ninguna otra pantalla lo reusa) — antes NO mostraba `empresa` en
+- **`TarjetaJornada.tsx` es el único componente de tarjeta**, compartido por `CheckInScreen` e
+  `HistorialScreen` (confirmado, ninguna otra pantalla lo reusa) — antes NO mostraba `empresa` en
   absoluto (solo matrícula en negrita, chofer, fecha, km y estado de sincronización); no fue "subir
   de rango" un dato ya visible, sino agregar `empresa` como línea principal y bajar la matrícula a
   una línea secundaria nueva.
-- ⚠️ **Confirmado contra Supabase real antes de implementar**: 0 de 26 jornadas reales sin
-  `empresa`. Pero SQLite local sí tiene un camino real hacia una fila vacía: `agregarColumnasFaltantes()`
-  (`database.ts`) agrega la columna con `DEFAULT ''` en una instalación que no la tenía — un
-  dispositivo con datos de antes de esa migración podría tener `empresa = ''` aunque el alta actual
-  la exija. El texto de reemplazo ("Sin empresa") cubre ese caso aunque no haya ninguno real
-  encontrado hoy.
+- **`DetalleJornadaScreen.tsx` es también un único componente compartido** por las dos pantallas
+  (misma ruta `DetalleJornada` del stack, confirmado en `RootNavigator.tsx`) — mismo patrón que la
+  tarjeta. Mostraba la matrícula como título (`tipografia.titulo`) y el chofer debajo; pasa a
+  mostrar la empresa como título y la matrícula a una línea secundaria nueva, debajo del chofer. La
+  fila "Empresa" que ya existía dentro de la sección de check-in **no se tocó** — queda fuera de
+  alcance de esta ampliación (solo la jerarquía título/secundaria), aunque ahora es información
+  repetida con el título.
+- ⚠️ **La lógica de "Sin empresa" estaba duplicada en potencia**: vivía como un ternario inline
+  dentro de `TarjetaJornada.tsx`, y copiarla tal cual dentro de `DetalleJornadaScreen.tsx` hubiera
+  sido una tercera copia del mismo criterio (mismo tipo de duplicación que ya causó el Hallazgo
+  #20 con `desfaseMinutos()`). Se extrajo a `textoEmpresa()` en `src/utils/jornada.ts` (nuevo
+  archivo — no existía ningún directorio `utils/` en la app móvil hasta ahora), y las dos pantallas
+  la importan.
+- ⚠️ **Confirmado contra Supabase real**: 0 de 27 jornadas reales sin `empresa` (8 empresas
+  distintas hoy: BTS-MAKRO, AMETLLER, FREDIST, SEUR, AMAZON, CULLIGAN, COSAEN, KEN FOODS -
+  ALCORCON). SQLite local sí tiene un camino real hacia una fila vacía:
+  `agregarColumnasFaltantes()` (`database.ts`) agrega la columna con `DEFAULT ''` en una
+  instalación que no la tenía — un dispositivo con datos de antes de esa migración podría tener
+  `empresa = ''` aunque el alta actual la exija. El texto de reemplazo ("Sin empresa") cubre ese
+  caso aunque no haya ninguno real encontrado hoy.
 - **Verificación**: `tsc`/`lint`/`format:check` limpios en `src/`.
-  - **No verificado desde este entorno**: las 4 pruebas de Fase 3 (abrir Check-In/Historial y
-    confirmar visualmente la tarjeta) requieren un dispositivo o emulador, sin uno conectado en
-    esta sesión — mismo motivo que el Hallazgo #35. El cambio no depende de ninguna capacidad
-    nativa, se puede probar con `npx expo start` en cualquier momento.
+  - **Pendiente de confirmación visual del usuario en dispositivo real** (las 7 pruebas de Fase 3,
+    4 originales + 3 de la ampliación) — a diferencia de otras specs de este proyecto, en esta
+    sesión el dispositivo de prueba SÍ llegó a conectar (troubleshooting de red aparte, ajeno a
+    esta spec), pero las pruebas todavía no se corrieron una por una.
 
 **Hallazgo #37 — dividir el input de teléfono en selector de país + número
 (2026-09-30)**: `spec_telefono_pais_selector.md`. Solo `dashboard/` (campo teléfono de

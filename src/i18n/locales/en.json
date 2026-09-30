@@ -126,6 +126,7 @@
     "seccionCheckIn": "Check-in",
     "fechaHora": "Date and time",
     "empresa": "Company",
+    "sinEmpresa": "No company",
     "ruta": "Route",
     "incidencias": "Notes",
     "kmInicial": "Starting mileage",
