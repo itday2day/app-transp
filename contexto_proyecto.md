@@ -2339,6 +2339,49 @@ consistencia que la spec buscaba.
     navegador disponible en esta sesión. La lógica de datos que sostiene esas pruebas sí se
     verificó contra el código real, como se detalla arriba.
 
+**Hallazgo #38 — un chofer que reinstala pierde su historial cerrado para siempre
+(2026-10-02)**: encontrado en vivo probando el build del Hallazgo #36 en un dispositivo real — el
+chofer de prueba (numero_empleado 01) mostraba el Historial casi vacío a pesar de tener 5 jornadas
+reales en Supabase.
+
+- **Diagnóstico contra el dispositivo real, no asumido**: `adb logcat` + instrumentación temporal
+  confirmaron que la tabla local tenía 3 filas (de 3 choferes de prueba distintos usados en ese
+  mismo teléfono con el tiempo) y que `listarHistorial()` devolvía 1 sola fila para este chofer —
+  la consulta y la migración de `database.ts` funcionaban bien, no eran la causa.
+- **Causa real**: `dumpsys package` mostró `firstInstallTime = 2026-09-26` para esta instalación —
+  de las 5 jornadas del chofer en Supabase, solo 1 es posterior a esa fecha. Las otras 4 son de
+  antes de que el teléfono (o la app en él) se reinstalara, y `sincronizarCambiosDelServidor()`
+  Parte 2 (Hallazgo #27/#32) nunca las trae: a propósito solo recupera jornadas `abierta` o
+  `creada_por_admin`, nunca jornadas cerradas normales ("ya pasaron por el teléfono al crearse",
+  razonamiento válido salvo cuando el teléfono deja de ser el mismo). No es una regresión de
+  ningún Hallazgo reciente — es un límite del diseño original que nunca se había notado antes.
+- **Decisión tomada con el usuario** (dos preguntas con costos distintos, no resueltas
+  unilateralmente): la recuperación histórica nueva corre **una sola vez por chofer por
+  dispositivo** (no en cada sincronización periódica, para no comparar todo el historial contra
+  SQLite para siempre) y **acotada a los últimos 90 días** (no todo el historial sin límite, para
+  no descargar años de jornadas con fotos de una sola vez en una reinstalación).
+- **Parte 3 nueva en `syncService.ts`**: un marcador en `SecureStore`
+  (`recuperacionHistoricaCompleta_<choferId>`, mismo patrón que la marca de agua de correcciones
+  ya existente) gatea una consulta única `estado='cerrada' AND creada_por_admin=false AND
+  fecha_check_in >= hace 90 días`, con el mismo chequeo de duplicados (`idsJornadasExistentes`) que
+  ya usaba la Parte 2. El flag solo se guarda si la consulta tuvo éxito — un error de red la
+  reintenta en la próxima sincronización en vez de darla por hecha.
+- ⚠️ **Las jornadas recuperadas por la Parte 3 nunca entran al array `recuperadas`** que ya
+  devolvía la función: ese array dispara el aviso "Encontramos una jornada abierta..."
+  (`jornadasRecuperadas.mensajeSingular`, `useJornadasAbiertas.ts`) — mostrar ese mensaje para una
+  jornada que ya está cerrada sería directamente falso. Las jornadas históricas aparecen solas en
+  el Historial la próxima vez que el chofer lo abra, sin ninguna alerta ni acción pendiente de su
+  parte.
+- El mapeo `fila de Supabase → JornadaRecuperadaRemota`, antes duplicado entre la Parte 2 y la
+  inserción histórica, se extrajo a `filaRecuperadaAJornadaRemota()` (mismo criterio que
+  `textoEmpresa()` del Hallazgo #36 ampliación — no sumar una tercera copia del mismo mapeo).
+- **Verificación**: `tsc`/`lint`/`format:check` limpios en `src/`. La consulta exacta de la Parte 3
+  se probó contra Supabase real para el chofer de prueba: devuelve las 5 jornadas (incluida la que
+  ya existe localmente, que el chequeo de duplicados ya existente descarta antes de insertar),
+  confirmando que las 4 que faltaban se recuperarían en el próximo inicio de sesión.
+  - **Pendiente**: build nuevo + prueba en el dispositivo real para confirmar que el Historial
+    termina mostrando las 5 jornadas tras un reinicio de la app.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

@@ -299,6 +299,65 @@ function claveMarcaAgua(choferId: string): string {
   return `${PREFIJO_MARCA_AGUA}${choferId}`;
 }
 
+// Hallazgo real en dispositivo (2026-10-02): un chofer cuyo teléfono se reinstaló pierde el
+// historial local de antes de esa reinstalación para siempre — la Parte 2 de abajo solo recupera
+// jornadas abiertas o creada_por_admin, nunca jornadas cerradas normales (a propósito, ver su
+// comentario). Parte 3, más abajo, cubre ese caso puntual sin repetir el riesgo que la Parte 2 ya
+// evitaba ("una sincronización sin límite"): corre UNA sola vez por chofer por dispositivo (este
+// marcador, mismo patrón que la marca de agua de arriba) y acotada a los últimos
+// `DIAS_RECUPERACION_HISTORICA` días — decisión tomada con el usuario, priorizando no descargar
+// años de historial (fotos incluidas) de una sola vez en una reinstalación.
+const PREFIJO_RECUPERACION_HISTORICA = "recuperacionHistoricaCompleta_";
+const DIAS_RECUPERACION_HISTORICA = 90;
+
+function claveRecuperacionHistorica(choferId: string): string {
+  return `${PREFIJO_RECUPERACION_HISTORICA}${choferId}`;
+}
+
+/** Misma forma en los dos lugares que recuperan una jornada remota completa (Parte 2 y Parte 3) —
+ * extraído para no duplicar el mapeo campo por campo (mismo criterio que ya se aplicó con
+ * textoEmpresa(), Hallazgo #36 ampliación). */
+function filaRecuperadaAJornadaRemota(
+  fila: FilaJornadaRecuperadaRemota,
+  choferId: string
+): JornadaRecuperadaRemota {
+  return {
+    id: fila.id,
+    choferId,
+    choferNombre: fila.chofer_nombre,
+    empresa: fila.empresa,
+    matricula: fila.matricula,
+    ruta: fila.ruta,
+    incidencias: fila.incidencias,
+    kmInicial: fila.km_inicial,
+    combustibleInicial: fila.combustible_inicial,
+    fotoTacometroInicialUrl: fila.foto_tacometro_inicial_url,
+    fotoRutaUrl: fila.foto_ruta_url,
+    latInicial: fila.lat_inicial,
+    lngInicial: fila.lng_inicial,
+    fechaCheckIn: fila.fecha_check_in,
+    tuvoIncidenciaCheckin: fila.tuvo_incidencia_checkin,
+    tipoIncidenciaCheckin: fila.tipo_incidencia_checkin,
+    detalleIncidenciaCheckin: fila.detalle_incidencia_checkin,
+    fotosIncidenciaCheckin: fila.fotos_incidencia_checkin,
+    kmFinal: fila.km_final,
+    combustibleFinal: fila.combustible_final,
+    fotoTacometroFinalUrl: fila.foto_tacometro_final_url,
+    latFinal: fila.lat_final,
+    lngFinal: fila.lng_final,
+    fechaCheckOut: fila.fecha_check_out,
+    tuvoIncidencia: fila.tuvo_incidencia,
+    tipoIncidencia: fila.tipo_incidencia,
+    detalleIncidencia: fila.detalle_incidencia,
+    fotosIncidencia: fila.fotos_incidencia,
+    creadaPorAdmin: fila.creada_por_admin,
+    creadaPor: fila.creada_por,
+  };
+}
+
+const COLUMNAS_JORNADA_RECUPERADA =
+  "id, chofer_nombre, empresa, matricula, ruta, incidencias, km_inicial, combustible_inicial, foto_tacometro_inicial_url, foto_ruta_url, lat_inicial, lng_inicial, fecha_check_in, tuvo_incidencia_checkin, tipo_incidencia_checkin, detalle_incidencia_checkin, fotos_incidencia_checkin, km_final, combustible_final, foto_tacometro_final_url, lat_final, lng_final, fecha_check_out, tuvo_incidencia, tipo_incidencia, detalle_incidencia, fotos_incidencia, creada_por_admin, creada_por";
+
 /** Epoch (1970) como valor por defecto — "nunca corrió esta consulta para este chofer todavía",
  * así la primera corrida en un teléfono nuevo trae TODO lo que tenga `editado_en`, sin importar
  * cuán viejo. Persistida con `almacenamientoSeguro` (no en SQLite): tiene que sobrevivir aunque se
@@ -522,9 +581,7 @@ export async function sincronizarCambiosDelServidor(
   // ajena a lo que pide esta spec.
   const { data: recuperadasRemoto, error: errorRecuperadas } = await supabase
     .from("jornadas")
-    .select(
-      "id, chofer_nombre, empresa, matricula, ruta, incidencias, km_inicial, combustible_inicial, foto_tacometro_inicial_url, foto_ruta_url, lat_inicial, lng_inicial, fecha_check_in, tuvo_incidencia_checkin, tipo_incidencia_checkin, detalle_incidencia_checkin, fotos_incidencia_checkin, km_final, combustible_final, foto_tacometro_final_url, lat_final, lng_final, fecha_check_out, tuvo_incidencia, tipo_incidencia, detalle_incidencia, fotos_incidencia, creada_por_admin, creada_por"
-    )
+    .select(COLUMNAS_JORNADA_RECUPERADA)
     .eq("chofer_id", choferId)
     .or("estado.eq.abierta,creada_por_admin.eq.true")
     .returns<FilaJornadaRecuperadaRemota[]>();
@@ -539,44 +596,52 @@ export async function sincronizarCambiosDelServidor(
     const existentes = await idsJornadasExistentes(recuperadasRemoto.map((fila) => fila.id));
     for (const fila of recuperadasRemoto) {
       if (existentes.has(fila.id)) continue;
-      const remoto: JornadaRecuperadaRemota = {
-        id: fila.id,
-        choferId,
-        choferNombre: fila.chofer_nombre,
-        empresa: fila.empresa,
-        matricula: fila.matricula,
-        ruta: fila.ruta,
-        incidencias: fila.incidencias,
-        kmInicial: fila.km_inicial,
-        combustibleInicial: fila.combustible_inicial,
-        fotoTacometroInicialUrl: fila.foto_tacometro_inicial_url,
-        fotoRutaUrl: fila.foto_ruta_url,
-        latInicial: fila.lat_inicial,
-        lngInicial: fila.lng_inicial,
-        fechaCheckIn: fila.fecha_check_in,
-        tuvoIncidenciaCheckin: fila.tuvo_incidencia_checkin,
-        tipoIncidenciaCheckin: fila.tipo_incidencia_checkin,
-        detalleIncidenciaCheckin: fila.detalle_incidencia_checkin,
-        fotosIncidenciaCheckin: fila.fotos_incidencia_checkin,
-        kmFinal: fila.km_final,
-        combustibleFinal: fila.combustible_final,
-        fotoTacometroFinalUrl: fila.foto_tacometro_final_url,
-        latFinal: fila.lat_final,
-        lngFinal: fila.lng_final,
-        fechaCheckOut: fila.fecha_check_out,
-        tuvoIncidencia: fila.tuvo_incidencia,
-        tipoIncidencia: fila.tipo_incidencia,
-        detalleIncidencia: fila.detalle_incidencia,
-        fotosIncidencia: fila.fotos_incidencia,
-        creadaPorAdmin: fila.creada_por_admin,
-        creadaPor: fila.creada_por,
-      };
-      recuperadas.push(await insertarJornadaRecuperada(remoto));
+      recuperadas.push(await insertarJornadaRecuperada(filaRecuperadaAJornadaRemota(fila, choferId)));
+    }
+  }
+
+  // Parte 3 (hallazgo real en dispositivo, 2026-10-02): recuperación histórica ACOTADA, una única
+  // vez por chofer por dispositivo — ver el comentario largo junto a `claveRecuperacionHistorica`
+  // más arriba. A diferencia de la Parte 2, nunca entra en `recuperadas`: esa variable alimenta el
+  // aviso "Encontramos una jornada ABIERTA..." (jornadasRecuperadas.mensajeSingular/Plural,
+  // useJornadasAbiertas.ts) — mostrarlo para una jornada que ya está cerrada sería un mensaje
+  // directamente falso. No hay ninguna acción que el chofer tenga que tomar con estas: aparecen
+  // solas en su Historial la próxima vez que lo abra, sin interrumpir con un aviso.
+  let historicasRecuperadas = 0;
+  const yaSeHizoRecuperacionHistorica = await obtenerValor(claveRecuperacionHistorica(choferId));
+  if (!yaSeHizoRecuperacionHistorica) {
+    const desde = new Date(Date.now() - DIAS_RECUPERACION_HISTORICA * 24 * 60 * 60 * 1000).toISOString();
+    const { data: historicoRemoto, error: errorHistorico } = await supabase
+      .from("jornadas")
+      .select(COLUMNAS_JORNADA_RECUPERADA)
+      .eq("chofer_id", choferId)
+      .eq("estado", "cerrada")
+      .eq("creada_por_admin", false)
+      .gte("fecha_check_in", desde)
+      .returns<FilaJornadaRecuperadaRemota[]>();
+
+    if (errorHistorico) {
+      // No se marca el flag: se reintenta en la próxima sincronización en vez de darla por hecha
+      // sin haber podido traer nada.
+      console.error(
+        `sincronizarCambiosDelServidor: no se pudo consultar el histórico (últimos ${DIAS_RECUPERACION_HISTORICA} días) del chofer ${choferId}:`,
+        errorHistorico
+      );
+    } else {
+      if (historicoRemoto && historicoRemoto.length > 0) {
+        const existentesHistorico = await idsJornadasExistentes(historicoRemoto.map((fila) => fila.id));
+        for (const fila of historicoRemoto) {
+          if (existentesHistorico.has(fila.id)) continue;
+          await insertarJornadaRecuperada(filaRecuperadaAJornadaRemota(fila, choferId));
+          historicasRecuperadas++;
+        }
+      }
+      await guardarValor(claveRecuperacionHistorica(choferId), "true");
     }
   }
 
   console.log(
-    `${LOG} terminó para chofer=${choferId}: recuperadas=${recuperadas.length}, cerradasRemoto=${cerradasRemoto.length}, corregidas=${corregidas.length}`
+    `${LOG} terminó para chofer=${choferId}: recuperadas=${recuperadas.length}, cerradasRemoto=${cerradasRemoto.length}, corregidas=${corregidas.length}, historicasRecuperadas=${historicasRecuperadas}`
   );
   return { recuperadas, cerradasRemoto, corregidas };
 }
