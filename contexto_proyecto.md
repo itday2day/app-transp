@@ -2291,7 +2291,7 @@ consistencia que la spec buscaba.
     sesión el dispositivo de prueba SÍ llegó a conectar (troubleshooting de red aparte, ajeno a
     esta spec), pero las pruebas todavía no se corrieron una por una.
 
-**Hallazgo #37 — dividir el input de teléfono en selector de país + número
+**Hallazgo #38 — dividir el input de teléfono en selector de país + número
 (2026-09-30)**: `spec_telefono_pais_selector.md`. Solo `dashboard/` (campo teléfono de
 `ChoferDialog`, alta y edición). Endurece la usabilidad del teléfono del Hallazgo #35 sin tocar el
 `CHECK` E.164 existente — sigue siendo el mismo string final, solo cambia cómo se arma.
@@ -2339,7 +2339,7 @@ consistencia que la spec buscaba.
     navegador disponible en esta sesión. La lógica de datos que sostiene esas pruebas sí se
     verificó contra el código real, como se detalla arriba.
 
-**Hallazgo #38 — un chofer que reinstala pierde su historial cerrado para siempre
+**Hallazgo #39 — un chofer que reinstala pierde su historial cerrado para siempre
 (2026-10-02)**: encontrado en vivo probando el build del Hallazgo #36 en un dispositivo real — el
 chofer de prueba (numero_empleado 01) mostraba el Historial casi vacío a pesar de tener 5 jornadas
 reales en Supabase.
