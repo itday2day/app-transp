@@ -1,4 +1,4 @@
-import { Truck } from "lucide-react";
+import Image from "next/image";
 import type { ReactNode } from "react";
 import { LogoutButton } from "@/components/logout-button";
 import { SidebarNav } from "@/components/sidebar-nav";
@@ -7,10 +7,21 @@ import { ThemeToggle } from "@/components/theme-toggle";
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row">
-      <aside className="hidden w-56 shrink-0 border-r border-border bg-card lg:flex lg:flex-col">
-        <div className="flex items-center gap-2 border-b border-border px-4 py-4">
-          <Truck className="h-5 w-5 text-primary" />
-          <span className="text-sm font-semibold">app-transp</span>
+      {/* spec_identidad_visual_day2day.md: 134px + fondo oscuro (ink) según la maqueta del canvas
+          — se mantiene la MISMA estructura responsive de siempre (esta aside solo se ve en
+          escritorio, lg:flex), nada de los modos de tablet/teléfono horizontal de más abajo
+          cambia de comportamiento, solo de color (decisión explícita del usuario). */}
+      {/* bg-[#000000] literal, no bg-ink: mismo motivo que el panel de marca del login — esta
+          barra es "chrome" de marca, siempre oscura, independiente del tema claro/oscuro. */}
+      <aside className="hidden w-[134px] shrink-0 bg-[#000000] lg:flex lg:flex-col">
+        <div className="px-4 py-6">
+          <Image
+            src="/logo-blanco.png"
+            alt="Day2Day Solutions"
+            width={106}
+            height={27}
+            className="h-auto w-full"
+          />
         </div>
         <SidebarNav />
       </aside>
@@ -29,8 +40,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               en vez de borrarlos, así vertical/escritorio no cambian nada. */}
           <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3 landscape:max-lg:hidden lg:justify-end">
             <div className="flex items-center gap-2 lg:hidden">
-              <Truck className="h-5 w-5 text-primary" />
-              <span className="text-sm font-semibold">app-transp</span>
+              <Image
+                src="/logo-negro.png"
+                alt="Day2Day Solutions"
+                width={96}
+                height={25}
+                className="h-auto w-24"
+              />
             </div>
             <div className="flex items-center gap-2">
               <ThemeToggle />

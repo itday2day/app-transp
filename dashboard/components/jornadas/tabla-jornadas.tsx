@@ -74,7 +74,7 @@ function TarjetaJornada({
         <div>
           <p className="font-medium">{jornada.chofer_nombre}</p>
           <p className="text-xs text-muted-foreground">
-            {jornada.empresa} · {jornada.matricula}
+            {jornada.empresa} · <span className="font-mono">{jornada.matricula}</span>
           </p>
         </div>
         <Badge variant={jornada.estado === "abierta" ? "primary" : "default"}>
@@ -85,8 +85,8 @@ function TarjetaJornada({
       <p className="text-xs text-muted-foreground">{jornada.ruta}</p>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span>Check-in: {formatFechaHora(jornada.fecha_check_in)}</span>
-        <span>Check-out: {formatFechaHora(jornada.fecha_check_out)}</span>
+        <span className="font-mono">Check-in: {formatFechaHora(jornada.fecha_check_in)}</span>
+        <span className="font-mono">Check-out: {formatFechaHora(jornada.fecha_check_out)}</span>
       </div>
 
       {(jornada.tuvo_incidencia ||
@@ -156,12 +156,12 @@ export function TablaJornadas({ jornadas, cargando, onSeleccionar }: TablaJornad
               >
                 <td className="px-3 py-2 font-medium">{jornada.chofer_nombre}</td>
                 <td className="px-3 py-2">{jornada.empresa}</td>
-                <td className="px-3 py-2">{jornada.matricula}</td>
+                <td className="px-3 py-2 font-mono">{jornada.matricula}</td>
                 <td className="px-3 py-2">{jornada.ruta}</td>
-                <td className="px-3 py-2 whitespace-nowrap">
+                <td className="px-3 py-2 whitespace-nowrap font-mono">
                   {formatFechaHora(jornada.fecha_check_in)}
                 </td>
-                <td className="px-3 py-2 whitespace-nowrap">
+                <td className="px-3 py-2 whitespace-nowrap font-mono">
                   {formatFechaHora(jornada.fecha_check_out)}
                 </td>
                 <td className="px-3 py-2">

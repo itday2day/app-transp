@@ -39,7 +39,7 @@ export default function JornadasPage() {
   return (
     <div className="flex flex-col gap-4 p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold">Jornadas</h1>
+        <h1 className="font-display text-3xl font-bold md:text-[40px]">Jornadas</h1>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setCrearAbierto(true)}>
             <Plus className="h-4 w-4" />

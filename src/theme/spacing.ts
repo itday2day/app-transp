@@ -18,9 +18,11 @@ export const espaciado = {
 // el resto de `espaciado`, por eso vive aparte con su propio nombre.
 export const ESPACIO_EXTRA_TECLADO = 300;
 
+// spec_identidad_visual_day2day.md: valores exactos de radius-* en tokens.json.
 export const radios = {
-  sm: 8,
-  md: 12,
+  xs: 4,
+  sm: 6,
+  md: 10,
   lg: 16,
-  full: 999,
+  full: 9999,
 };

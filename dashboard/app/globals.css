@@ -7,43 +7,73 @@
    además de) la preferencia del sistema. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* spec_identidad_visual_day2day.md: valores exactos de tokens.json (Day2Day Design System,
+   https://claude.ai/artifact/RBCb68KdkmJAM1JUn2nkUL). `--ink`/`--ink-muted`/`--surface`/
+   `--surface-raised`/`--border`/`--focus-ring`/`--success`/`--warning`/`--danger` son los 9
+   tokens reales; el resto de las variables de abajo (--background, --primary, etc.) son los
+   NOMBRES semánticos que ya usa todo el Dashboard (Button/Card/Input/Badge/...) — se mantienen
+   para no tocar cada componente, pero sus VALORES son siempre uno de los 9 tokens de arriba (o
+   una mezcla de ellos vía color-mix, nunca un color nuevo). La paleta Day2Day es monocromática:
+   no define un "primary" propio — los botones primarios usan `ink` directo (ver
+   Choferes.dc.html / DashboardLogin.dc.html del canvas), de ahí el alias --primary: var(--ink).
+   Modo oscuro: valores dark de tokens.json ya escritos (igual que decidió la spec), pero sin
+   verificación visual — eso queda para una spec futura. */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --border: #e2e8f0;
-  --muted: #f1f5f9;
-  --muted-foreground: #64748b;
-  --primary: #2563eb;
+  --ink: #000000;
+  --ink-muted: #4b4b49;
+  --surface: #f7f7f7;
+  --surface-raised: #ffffff;
+  --border: #e3e2e0;
+  --focus-ring: var(--ink);
+  --success: #146b46;
+  --warning: #8f5a00;
+  --danger: #c7362c;
+
+  --background: var(--surface);
+  --foreground: var(--ink);
+  --card: var(--surface-raised);
+  --card-foreground: var(--ink);
+  --muted: color-mix(in srgb, var(--ink) 6%, var(--surface));
+  --muted-foreground: var(--ink-muted);
+  --primary: var(--ink);
   --primary-foreground: #ffffff;
-  --accent: #eff6ff;
-  --ring: #2563eb;
-  --danger: #dc2626;
+  --accent: color-mix(in srgb, var(--ink) 10%, var(--surface));
+  --ring: var(--focus-ring);
   --danger-foreground: #ffffff;
-  --warning: #d97706;
-  --success: #16a34a;
 }
 
 .dark {
-  --background: #0b1220;
-  --foreground: #e2e8f0;
-  --card: #111a2c;
-  --card-foreground: #e2e8f0;
-  --border: #1e293b;
-  --muted: #16213a;
-  --muted-foreground: #94a3b8;
-  --primary: #3b82f6;
-  --primary-foreground: #0b1220;
-  --accent: #16213a;
-  --ring: #3b82f6;
-  --danger: #f87171;
-  --danger-foreground: #450a0a;
-  --warning: #fbbf24;
-  --success: #4ade80;
+  --ink: #ffffff;
+  --ink-muted: #c9c8c5;
+  --surface: #211f1d;
+  --surface-raised: #373735;
+  --border: #4a4846;
+  --focus-ring: var(--ink);
+  --success: #3fbe86;
+  --warning: #e0a233;
+  --danger: #e5685e;
+
+  --background: var(--surface);
+  --foreground: var(--ink);
+  --card: var(--surface-raised);
+  --card-foreground: var(--ink);
+  --muted: color-mix(in srgb, var(--ink) 8%, var(--surface));
+  --muted-foreground: var(--ink-muted);
+  --primary: var(--ink);
+  --primary-foreground: #000000;
+  --accent: color-mix(in srgb, var(--ink) 14%, var(--surface));
+  --ring: var(--focus-ring);
+  --danger-foreground: #000000;
 }
 
 @theme inline {
+  /* Nombres directos de tokens.json (bg-ink, text-ink-muted) — para los pocos casos (el panel de
+     marca del login, la barra lateral) que necesitan el token crudo, no el alias semántico. */
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -59,8 +89,18 @@
   --color-danger-foreground: var(--danger-foreground);
   --color-warning: var(--warning);
   --color-success: var(--success);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+
+  --font-sans: var(--font-ibm-plex-sans);
+  --font-mono: var(--font-ibm-plex-mono);
+  --font-display: var(--font-big-shoulders-display);
+
+  /* Radios reales de tokens.json — Tailwind ya trae rounded-sm/md/lg/full, esto redefine sus
+     valores para toda la app sin tocar cada className (Button/Card/Input/Dialog/Badge ya usan
+     esas utilidades). radius-xs no existía en la escala de Tailwind: se agrega acá. */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
 }
 
 body {

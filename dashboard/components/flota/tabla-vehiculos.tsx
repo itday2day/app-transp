@@ -41,7 +41,7 @@ function TarjetaVehiculo({
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-medium">{vehiculo.matricula}</p>
+          <p className="font-mono font-medium">{vehiculo.matricula}</p>
           <p className="text-xs text-muted-foreground">
             {TIPOS_PROPIEDAD_LEGIBLES[vehiculo.tipo_propiedad]}
           </p>
@@ -89,7 +89,7 @@ export function TablaVehiculos({ vehiculos, cargando, onSeleccionar }: TablaVehi
                   cargando && "opacity-60"
                 )}
               >
-                <td className="px-3 py-2 font-medium">{vehiculo.matricula}</td>
+                <td className="px-3 py-2 font-mono font-medium">{vehiculo.matricula}</td>
                 <td className="px-3 py-2">{TIPOS_PROPIEDAD_LEGIBLES[vehiculo.tipo_propiedad]}</td>
                 <td className="px-3 py-2">
                   {[vehiculo.marca, vehiculo.modelo].filter(Boolean).join(" ") || "—"}

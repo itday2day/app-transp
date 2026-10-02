@@ -12,7 +12,9 @@ import type { PuntoRuta } from "@/lib/types";
 // /jornadas). Debe montarse como hijo de un <MapContainer /> — useMap() solo
 // funciona dentro de su contexto.
 
-const ESTILO_TRAZADO = { color: "#2563eb", weight: 4, opacity: 0.8 };
+// spec_identidad_visual_day2day.md: --ink de globals.css (el trazado usa la marca, no un azul de
+// interfaz importado) — hex literal, mismo motivo que COLOR_POR_ESTADO en mapa-utils.ts.
+const ESTILO_TRAZADO = { color: "#000000", weight: 4, opacity: 0.8 };
 
 function icono(letra: string, color: string): L.DivIcon {
   return L.divIcon({
@@ -24,8 +26,8 @@ function icono(letra: string, color: string): L.DivIcon {
   });
 }
 
-const ICONO_INICIO = icono("I", "#16a34a");
-const ICONO_FIN = icono("F", "#dc2626");
+const ICONO_INICIO = icono("I", "#146b46");
+const ICONO_FIN = icono("F", "#c7362c");
 
 interface TrazadoRutaProps {
   trazado: [number, number][];

@@ -33,7 +33,7 @@ export function PanelChoferes({
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold">Choferes activos</h2>
+        <h2 className="font-display text-[22px] font-bold">Choferes activos</h2>
         <Badge variant="primary">{posiciones.length}</Badge>
       </div>
 
@@ -75,11 +75,11 @@ export function PanelChoferes({
                     <Badge variant={VARIANTE_BADGE[estado]}>{ETIQUETA_POR_ESTADO[estado]}</Badge>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                    {posicion.matricula && <span>{posicion.matricula}</span>}
+                    {posicion.matricula && <span className="font-mono">{posicion.matricula}</span>}
                     {posicion.empresa && <span>{posicion.empresa}</span>}
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
+                    <span className="inline-flex items-center gap-1 font-mono">
                       <Gauge className="h-3 w-3" />
                       {posicion.velocidadKmh != null
                         ? `${posicion.velocidadKmh.toFixed(0)} km/h`

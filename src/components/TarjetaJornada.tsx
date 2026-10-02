@@ -121,13 +121,15 @@ const estilos = StyleSheet.create({
     color: colores.textoSecundario,
     marginTop: espaciado.xs,
   },
+  // spec_identidad_visual_day2day.md: matrícula/fecha/km son datos reales -> tipografia.dato
+  // (IBM Plex Mono), no tipografia.cuerpo/ayuda (texto de UI general).
   matriculaSecundaria: {
-    ...tipografia.cuerpo,
+    ...tipografia.dato,
     color: colores.textoSecundario,
     marginTop: espaciado.xs,
   },
   fecha: {
-    ...tipografia.ayuda,
+    ...tipografia.datoChico,
     marginTop: espaciado.xs,
   },
   filaInferior: {
@@ -137,7 +139,7 @@ const estilos = StyleSheet.create({
     marginTop: espaciado.sm,
   },
   km: {
-    ...tipografia.cuerpo,
+    ...tipografia.dato,
   },
   filaSync: {
     flexDirection: "row",

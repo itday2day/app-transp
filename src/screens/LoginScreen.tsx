@@ -1,5 +1,14 @@
 import React, { useState } from "react";
-import { View, Text, Pressable, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  Image,
+  Pressable,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
@@ -48,7 +57,12 @@ export default function LoginScreen() {
         </View>
 
         <View style={estilos.encabezado}>
-          <Text style={estilos.titulo}>{t("login.titulo")}</Text>
+          <Image
+            source={require("../../assets/logo-negro.png")}
+            style={estilos.logo}
+            resizeMode="contain"
+            accessibilityLabel="Day2Day Solutions"
+          />
           <Text style={estilos.subtitulo}>{t("login.subtitulo")}</Text>
         </View>
 
@@ -106,10 +120,11 @@ const estilos = StyleSheet.create({
   },
   encabezado: {
     marginBottom: espaciado.xl,
+    alignItems: "center",
   },
-  titulo: {
-    ...tipografia.titulo,
-    textAlign: "center",
+  logo: {
+    width: 220,
+    height: 56,
   },
   subtitulo: {
     ...tipografia.cuerpo,

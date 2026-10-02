@@ -43,15 +43,15 @@ function TarjetaChofer({
           <p className="font-medium">
             {chofer.nombre} {chofer.apellidos}
           </p>
-          <p className="text-xs text-muted-foreground">N.º {chofer.numero_empleado}</p>
+          <p className="font-mono text-xs text-muted-foreground">N.º {chofer.numero_empleado}</p>
         </div>
         <EstadoBadge chofer={chofer} />
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span>DNI: {chofer.dni}</span>
+        <span className="font-mono">DNI: {chofer.dni}</span>
         <span>{chofer.pais_nacimiento}</span>
-        {chofer.telefono && <span>Tel: {chofer.telefono}</span>}
+        {chofer.telefono && <span className="font-mono">Tel: {chofer.telefono}</span>}
       </div>
 
       {chofer.debe_cambiar_contrasena && (
@@ -86,13 +86,13 @@ export function TablaChoferes({ choferes, cargando, onSeleccionar }: TablaChofer
                   cargando && "opacity-60"
                 )}
               >
-                <td className="px-3 py-2 font-medium">{chofer.numero_empleado}</td>
+                <td className="px-3 py-2 font-mono font-medium">{chofer.numero_empleado}</td>
                 <td className="px-3 py-2">
                   {chofer.nombre} {chofer.apellidos}
                 </td>
-                <td className="px-3 py-2">{chofer.dni}</td>
+                <td className="px-3 py-2 font-mono">{chofer.dni}</td>
                 <td className="px-3 py-2">{chofer.pais_nacimiento}</td>
-                <td className="px-3 py-2">{chofer.telefono ?? "—"}</td>
+                <td className="px-3 py-2 font-mono">{chofer.telefono ?? "—"}</td>
                 <td className="px-3 py-2">
                   <EstadoBadge chofer={chofer} />
                 </td>

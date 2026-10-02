@@ -65,7 +65,7 @@ Tablas y objetos clave:
   `schema_v14_normalizacion_dni_matricula_telefono.sql`, exigida solo en el alta desde el
   Dashboard, no retroactiva). `dni` es `UNIQUE`, siempre normalizado antes de guardar (mayúsculas,
   sin espacios ni guiones — `normalizarDni()` en `dashboard/lib/choferes.ts`); el `CHECK
-  (length(dni) = 9)` queda **pendiente** de aplicar contra la base real hasta corregir a mano los
+(length(dni) = 9)` queda **pendiente** de aplicar contra la base real hasta corregir a mano los
   DNIs de prueba fuera de formato (ver ese archivo de migración).
 - `jornadas` — mismos campos que el tipo `Jornada` del móvil, en `snake_case`, más 4 columnas de
   auditoría agregadas en `schema_v5_edicion_jornadas.sql`: `fue_editado boolean`, `editado_por
@@ -1078,7 +1078,7 @@ trampa (mismo tipo de problema, en el otro sentido, que el `h-full` sobre un pad
 #11: obvio una vez visto en el dispositivo, invisible leyendo código).
 
 - **Causa (medida sobre la página desplegada, no inferida)**: la raíz de `app/(dashboard)/
-  mapa/page.tsx` tenía `min-h-[600px]` **sin condicionar a ningún breakpoint** — un piso pensado
+mapa/page.tsx` tenía `min-h-[600px]` **sin condicionar a ningún breakpoint** — un piso pensado
   para que el mapa no quedara aplastado en una ventana de escritorio alta. Sumado al header y al
   selector Mapa/Lista (~122px), el contenido total medía 722px contra un viewport de apenas 549px en
   vertical (peor en horizontal, ~390px) — la página desbordaba y scrolleaba.
@@ -1088,7 +1088,7 @@ trampa (mismo tipo de problema, en el otro sentido, que el `h-full` sobre un pad
   mapa+panel (`flex min-h-0 flex-1 flex-col lg:flex-row`) y en los dos wrappers (mapa y `aside`) —
   no estrictamente necesario en este caso puntual (el contenido de ambos ya es 0 porque tanto
   `MapContainer` como `PanelChoferes` cuelgan de un wrapper `absolute inset-0`/`max-lg:absolute
-  max-lg:inset-0`, fuera del flujo normal, así que no aportan una altura mínima de contenido que
+max-lg:inset-0`, fuera del flujo normal, así que no aportan una altura mínima de contenido que
   compita), pero se agregó igual como refuerzo explícito contra el `min-height: auto` por defecto de
   un ítem flex — sin eso, cualquier contenido en flujo normal que se agregue después en esa cadena
   volvería a poder forzar el mismo desborde.
@@ -1096,7 +1096,7 @@ trampa (mismo tipo de problema, en el otro sentido, que el `h-full` sobre un pad
   vistas, no en uno específico), así que el mismo fix la cubre — no hizo falta ningún cambio aparte
   para que la Lista tampoco scrollee de página.
 - **Nada de lo del Hallazgo #11 (`absolute inset-0` del `MapContainer`) ni del #12 (`max-lg:absolute
-  max-lg:inset-0` del panel, el switch Mapa/Lista) se tocó** — esta spec cambió el alto disponible
+max-lg:inset-0` del panel, el switch Mapa/Lista) se tocó** — esta spec cambió el alto disponible
   de la cadena, no cómo cada panel lo ocupa dentro de ese alto.
 - **Nota para más adelante, no resuelta acá**: con la página ya sin scroll, en horizontal el mapa
   queda con poco alto real (viewport de ~390px menos header y selector, ~270px para el mapa) — usable
@@ -1122,7 +1122,7 @@ salir de ese total, no sumarse aparte.
   autorizaba — estado levantado, contexto, o portal): `layout.tsx` siempre renderiza un
   `<div id="selector-movil-horizontal" className="contents" />` vacío dentro de la fila de nav (no
   necesita saber en qué ruta está — en `/jornadas` ese slot simplemente no recibe nada). `mapa/
-  page.tsx` resuelve ese nodo con `useSyncExternalStore` (mismo patrón que `ThemeToggle` ya usa para
+page.tsx` resuelve ese nodo con `useSyncExternalStore` (mismo patrón que `ThemeToggle` ya usa para
   leer algo que solo se conoce en el cliente, sin el `setState` síncrono dentro de un efecto que
   bloquea el lint de este repo) y hace `createPortal` de sus botones "Mapa"/"Lista" ahí — **solo**
   visibles en `landscape:max-lg:` (`hidden landscape:max-lg:flex`); la fila original del selector,
@@ -1254,8 +1254,8 @@ instante UTC ocurre siempre del lado del servidor.**
 
 - **Diagnóstico (Fase 1, recorrida completa antes de tocar código)**: la interpretación del rango
   real estaba en los Route Handlers, no en el navegador ni en el mock server. `exportar-reporte-
-  dialog.tsx` manda las cadenas `"YYYY-MM-DD"` tal cual (sin convertir) a `POST /api/reportes/
-  exportar`; ese Route Handler (y, **con el mismo mecanismo**, `GET /api/jornadas` — los filtros de
+dialog.tsx` manda las cadenas `"YYYY-MM-DD"` tal cual (sin convertir) a `POST /api/reportes/
+exportar`; ese Route Handler (y, **con el mismo mecanismo**, `GET /api/jornadas` — los filtros de
   la tabla) armaban `` `${fecha}T00:00:00` ``/`` `${fecha}T23:59:59.999` `` **sin offset** y los
   comparaban contra `fecha_check_in` (`timestamptz`, confirmado en `supabase/schema.sql`) — Postgres
   interpreta una cadena así en la zona de la **sesión** (la de Supabase, UTC), no en la de España.
@@ -1273,7 +1273,7 @@ instante UTC ocurre siempre del lado del servidor.**
   (`+01:00`/`+02:00`) con `Intl.DateTimeFormat` (formatear un instante COMO SI se mostrara en
   España, interpretar esa hora de pared como si fuera UTC, y comparar contra el instante original —
   la diferencia es el desfase real ese día; nunca un número fijo a mano). Usado desde `GET /api/
-  jornadas` y `POST /api/reportes/exportar`, los dos con `.gte()`/`.lt()` (antes `.lte()` con
+jornadas` y `POST /api/reportes/exportar`, los dos con `.gte()`/`.lt()` (antes `.lte()` con
   `23:59:59.999`, el borde que pierde la última fracción de segundo que la spec pedía evitar) —
   **confirmado que ambos comparten el mecanismo, se corrigieron en la misma pasada**, así que la
   tabla y el reporte vuelven a coincidir exactamente para el mismo rango. Verificado con un script
@@ -1434,7 +1434,7 @@ navegador ni del proceso.**
 - **El camino de entrada estaba inconsistente, confirmado y corregido en la misma pasada**: el editor
   de check-out (`editar-jornada-dialog.tsx`) prellenaba con `isoAFechaLocal`/`isoAHoraLocal` (getters
   LOCALES del navegador — `getFullYear`/`getHours`/...) y, al guardar, interpretaba lo tipeado con
-  `` new Date(`${fecha}T${hora}`).toISOString() `` (sin offset, también zona del navegador). Los dos
+  ``new Date(`${fecha}T${hora}`).toISOString()`` (sin offset, también zona del navegador). Los dos
   caminos eran consistentes ENTRE SÍ (por eso la guarda anti-truncado de segundos, Hallazgo #6, nunca
   se rompió), pero quedaban inconsistentes con la pantalla, que ahora muestra España: un admin fuera
   de España iba a ver `"10:30"` en la tabla, escribir `"10:30"` en este campo, y guardar un instante
@@ -1459,7 +1459,7 @@ navegador ni del proceso.**
   (`desfaseMinutos(instante, zona)`), ya general — la de `hora-espana.ts` es la que se descarta.
   **Un tercer archivo comparte la misma decisión de negocio sin compartir este algoritmo**:
   `server/mock/reportes.js` (Hallazgo #18) también sabe de `Europe/Madrid`, pero usa `Intl`
-  directamente para *formatear* una hora, no para *calcular un desfase* — no hay código duplicado
+  directamente para _formatear_ una hora, no para _calcular un desfase_ — no hay código duplicado
   ahí, pero son 3 archivos en 2 sub-proyectos (`dashboard/` y `server/mock/`) que tienen que seguir
   de acuerdo sobre la misma zona horaria.
 - **Verificado con un script Node aparte** (mismo método que los Hallazgos #17-#19): conversión
@@ -1486,8 +1486,7 @@ aperturas; y el archivo declara sus propios filtros y su total, para que una fut
   vacíos = "todo el tiempo"), el diálogo sustituía en silencio ese "todo el tiempo" por un default
   de "últimos 7 días" que la tabla nunca usó, porque `POST /api/reportes/exportar` **exigía** un
   rango (400 si faltaba) mientras que `GET /api/jornadas` ya lo trataba como **opcional**. Filtrar
-  por "cesar" sin fecha → tabla: 18 (todo el tiempo) → diálogo: solo los últimos 7 días de esas 18 →
-  8. Confirmado leyendo el código, no el resultado, tal como pedía la spec.
+  por "cesar" sin fecha → tabla: 18 (todo el tiempo) → diálogo: solo los últimos 7 días de esas 18 → 8. Confirmado leyendo el código, no el resultado, tal como pedía la spec.
 - **`POST /api/reportes/exportar` sí recibía y aplicaba el filtro de chofer** (y empresa y estado) —
   confirmado en el código antes de asumir nada. No era el escenario grave (jornadas de otro chofer
   filtrándose adentro); era el reportado (jornadas propias quedando afuera).
@@ -1878,7 +1877,7 @@ el usuario antes de escribir código.
   commits separados a pedido explícito (consolidación pura primero, capacidad nueva después) para
   poder atribuir cualquier regresión a uno de los dos. La nueva Parte 1 reemplaza la vieja
   reconciliación id-por-id por una sola consulta acotada por chofer + `editado_en > marca de
-  agua` — `editar/route.ts` pone `editado_en` en CUALQUIER escritura del Dashboard, así que esa
+agua` — `editar/route.ts` pone `editado_en` en CUALQUIER escritura del Dashboard, así que esa
   única consulta cubre el cierre remoto y cualquier otra corrección de campo a la vez, sin iterar
   el historial completo del chofer (puede acumular cientos de jornadas).
   - La marca de agua es **todo-o-nada por lote**: solo avanza después de aplicar todo el lote con
@@ -1965,7 +1964,7 @@ antes ejecutada): una jornada creada sin señal, con fotos, no subía nunca — 
 pull-to-refresh forzado (9 intentos fallidos, todos con el mismo error).
 
 - **El bug, medido en el dispositivo**: `"No se pudo subir la evidencia (...): new row violates
-  row-level security policy"`. Mecanismo: `subirJornada()` sube las fotos antes de escribir la fila;
+row-level security policy"`. Mecanismo: `subirJornada()` sube las fotos antes de escribir la fila;
   en algún intento anterior una foto YA había llegado a Storage, pero la sincronización se cortó
   antes de que el teléfono se enterara (nunca llegó a `actualizarUrlsFotos`, que persiste las URLs
   recién al final, después de TODAS las fotos). Cada reintento posterior sube a la MISMA ruta con
@@ -2104,7 +2103,7 @@ futuro, ni de cargar una entrega que ya se hizo y recién se avisa días despué
   `UPDATE` que ya usa `editar/route.ts` la cierra sin código nuevo, `creada_por_admin` se mantiene
   en `true` después del cierre, y queda el mismo rastro de auditoría (`fue_editado`/`editado_por`)
   que cualquier otra corrección.
-  - **No verificado desde este entorno**: que el chofer *vea* la jornada asignada en su app
+  - **No verificado desde este entorno**: que el chofer _vea_ la jornada asignada en su app
     (abierta o en su historial, pruebas 1 y 2) — bloqueado por la misma cuota de builds de EAS que
     el Hallazgo #31 hasta 2026-10-01. Tampoco la prueba 4 (alta de chofer/vehículo desde los
     atajos) de punta a punta en el navegador — sin acceso a uno en este entorno; el componente que
@@ -2222,7 +2221,7 @@ de contraseña voluntario del #26 a un punto de entrada sin sesión, elimina `Re
   sincronización de jornadas (`useJornadasAbiertas`, `NetworkContext`) es una REACCIÓN a que
   `usuario` deje de ser `null`, no algo que `iniciarSesion()` dispare directamente. Por eso, tras un
   cambio de contraseña exitoso, `CambiarContrasenaScreen` llama al mismo `iniciarSesion(numeroEmpleado,
-  contrasenaNueva)` que usa `LoginScreen` — mismo código, no una versión paralela — y
+contrasenaNueva)` que usa `LoginScreen` — mismo código, no una versión paralela — y
   `RootNavigator.tsx` cambia de stack solo. Si ese auto-login puntual fallara (ej. un hipo de red
   justo ahí, la contraseña YA cambió con éxito en ese momento), se reusa la pantalla de éxito que
   ya existía en el archivo (antes servía para "volver" tras el cambio) para decirle al chofer que
@@ -2363,7 +2362,7 @@ reales en Supabase.
 - **Parte 3 nueva en `syncService.ts`**: un marcador en `SecureStore`
   (`recuperacionHistoricaCompleta_<choferId>`, mismo patrón que la marca de agua de correcciones
   ya existente) gatea una consulta única `estado='cerrada' AND creada_por_admin=false AND
-  fecha_check_in >= hace 90 días`, con el mismo chequeo de duplicados (`idsJornadasExistentes`) que
+fecha_check_in >= hace 90 días`, con el mismo chequeo de duplicados (`idsJornadasExistentes`) que
   ya usaba la Parte 2. El flag solo se guarda si la consulta tuvo éxito — un error de red la
   reintenta en la próxima sincronización en vez de darla por hecha.
 - ⚠️ **Las jornadas recuperadas por la Parte 3 nunca entran al array `recuperadas`** que ya
@@ -2429,6 +2428,80 @@ los datos sin riesgo de tocar algo sin querer.
   pudieron probar clickeando en un navegador real desde este entorno (sin herramienta de automatización
   de navegador disponible) — quedan pendientes de la prueba del usuario en el Dashboard real.
 
+**Hallazgo #41 — identidad visual Day2Day en el Dashboard y la app (2026-10-02)**: rebranding
+visual (mayormente cosmético, ningún dato ni cálculo cambia) a partir de
+`spec_identidad_visual_day2day.md`, llevando al código real los valores exactos del Day2Day Design
+System (`tokens.json`) y el layout validado en el canvas "Day2Day — Primera muestra". Toca
+`dashboard/` y `src/theme/` + pantallas que lo consumen; no toca `supabase/` ni `server/mock/`.
+
+- **Theming del Dashboard**: 100% CSS (`app/globals.css`, Tailwind v4 `@theme inline`,
+  `:root`/`.dark`), sin `tailwind.config.*`. Los 9 tokens reales (`ink`/`ink-muted`/`surface`/
+  `surface-raised`/`border`/`focus-ring`/`success`/`warning`/`danger`) se escriben como variables
+  propias; los nombres semánticos que ya usaba todo el Dashboard (`--background`, `--primary`,
+  etc.) se mantienen como alias de esos 9 — ningún componente (`Button`/`Card`/`Input`/`Badge`)
+  necesitó tocarse para heredar los colores nuevos. `tokens.json` no define un color "primary"
+  propio (paleta monocromática) — `--primary` queda aliaseado a `--ink`, igual que hacen las
+  maquetas reales. `--muted`/`--accent` (fondos de hover/selección, sin token propio en
+  `tokens.json`) se derivan con `color-mix()` sobre `ink`/`surface`, nunca un color nuevo. Valores
+  dark de `tokens.json` ya escritos en `.dark`, sin verificación visual (fuera de alcance,
+  decisión de la spec).
+- ⚠️ **La barra lateral ya existía, con 3 modos reales tuneados contra dispositivo en los
+  Hallazgos #13-#16** (sidebar 224px en escritorio, barra horizontal en tablet, columna 128px en
+  teléfono horizontal) — la maqueta solo definía el sidebar de escritorio. Decisión explícita del
+  usuario: restyle, no reemplazo — el sidebar de escritorio pasa a 134px/fondo negro fijo
+  (`#000000`, literal, NO `bg-ink`: ese alias se invierte a blanco en tema oscuro, lo que
+  volvería blanco-sobre-blanco un panel que la maqueta siempre quiere oscuro), los otros dos
+  modos (tablet/teléfono horizontal) mantienen su estructura y colores de siempre, sin tocar.
+  `components/sidebar-nav.tsx` distingue el caso `horizontal=false` (desktop, ahora fondo fijo
+  negro → texto blanco fijo, no `text-muted-foreground` que sería case invisible sobre negro en
+  tema claro) del caso `horizontal=true` (tablet/teléfono, sigue sobre `bg-card` de siempre, sin
+  cambios). Mismo razonamiento aplicado al panel de marca del login.
+- **Fuente**: `next/font/google`, `Geist`/`Geist_Mono` → `IBM_Plex_Sans` (400/600) +
+  `IBM_Plex_Mono` (500) + `Big_Shoulders` (700, para el grupo "Display" de `tokens.json`). ⚠️ Esta
+  versión de Next.js (16.3.4) no expone "Big Shoulders Display" como familia separada en
+  `next/font/google` (su `font-data.json` solo trae `Big Shoulders`/`Inline`/`Stencil`) — se usa
+  `Big_Shoulders` a secas, el mismo corte que Google Fonts mostraba como "Display" antes de
+  reorganizar la familia, sustitución correcta, no una aproximación.
+- **Logo real**: los PNG reales (`logo-negro.png`/`logo-blanco.png`) se trajeron directo del
+  canvas "Primera muestra" (`project/assets/`, el mismo archivo que usan las maquetas validadas) a
+  `dashboard/public/` y a un `assets/` nuevo en la app móvil — reemplazan el ícono `Truck` de
+  lucide-react que hacía de logo en 3 lugares del Dashboard (header del layout, `/login`, pie de
+  la barra lateral — este último se sacó directamente, redundante con el logo del header de la
+  barra) y el título de texto plano del login de la app.
+- **Tipografía por categoría de dato**: `font-display` en los títulos de página (`/choferes`,
+  `/flota`, `/jornadas`, panel "Choferes activos" de `/mapa`); `font-mono` en todo campo de dato
+  real (DNI, matrícula, teléfono, N.º de empleado, timestamps de check-in/check-out, velocidad
+  km/h) en las 3 tablas (`tabla-choferes`/`tabla-vehiculos`/`tabla-jornadas`, tabla y tarjetas
+  móviles), `panel-choferes.tsx`, y los diálogos "Ver chofer"/"Ver vehículo" (`VistaDatos` ganó un
+  flag `mono?: boolean` por campo). En la app móvil, `tipografia.dato`/`datoChico` (IBM Plex Mono)
+  nuevos en `src/theme/typography.ts`, aplicados a matrícula/fecha/km de `TarjetaJornada.tsx`
+  (compartida por `CheckInScreen`/`HistorialScreen`, los dos únicos consumidores). No se
+  extendió campo por campo a pantallas no nombradas explícitamente por la spec (ej.
+  `DetalleJornadaScreen.tsx`) — queda como mejora de menor riesgo, no como pendiente abierto.
+- **Marcadores de `/mapa`**: `lib/mapa-utils.ts` (`COLOR_POR_ESTADO`) y
+  `components/mapa/trazado-ruta.tsx` alimentan el `divIcon` de Leaflet con HTML crudo, fuera del
+  árbol de Tailwind — se actualizaron a hex literal con los valores nuevos de
+  success/warning/danger (y `ink` para el trazado azul, que pasa a negro). `panel-choferes.tsx` ya
+  usaba `Badge` centralizado, no necesitó tocarse para los colores (solo tipografía).
+- **App móvil — infraestructura nueva**: la app no tenía ninguna imagen en pantalla (todo íconos
+  vectoriales) ni ninguna familia de fuente propia. Se agregaron
+  `@expo-google-fonts/big-shoulders-display`, `@expo-google-fonts/ibm-plex-sans`,
+  `@expo-google-fonts/ibm-plex-mono` (`expo-font` ya estaba) y `cargarFuentes()` en `App.tsx`,
+  sumado a la MISMA `Promise.all` que ya gateaba el arranque (`obtenerBaseDeDatos` +
+  `cargarIdiomaGuardado`) — no hizo falta `expo-splash-screen` ni un segundo mecanismo.
+  `src/theme/colors.ts`/`typography.ts`/`spacing.ts` reescritos con los valores exactos de
+  `tokens.json` (tema claro — la app no tiene toggle de tema, modo oscuro no aplica). Logo real en
+  `LoginScreen.tsx` vía `require()`, reemplazando el título de texto (`tipografia.titulo` se
+  mantiene, lo siguen usando 5 pantallas sin relación con el login).
+- **Login del Dashboard**: de una tarjeta centrada a dos columnas (panel de marca + formulario),
+  siguiendo `DashboardLogin.dc.html` del canvas — oculto en móvil (`lg:flex`), el formulario solo
+  es lo imprescindible ahí.
+- **Verificación**: `tsc`/`lint`/`format:check` limpios en `dashboard/` y en la raíz (`src/`).
+  Build de producción del Dashboard (`npm run build`) exitoso (solo un warning cosmético de
+  Turbopack sobre métricas de fallback de `Big Shoulders`, sin impacto funcional). No verificado
+  visualmente contra el Dashboard/app reales desde este entorno (sin navegador ni dispositivo
+  disponible) — pendiente de la prueba del usuario, igual que el Hallazgo #40.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
@@ -2456,7 +2529,7 @@ los datos sin riesgo de tocar algo sin querer.
 - ✅ **Resuelto (2026-09-23): `Input`/`Select` (`components/ui/`) ya cumplen el piso de 44px de
   alto en mobile.** (encontrado 2026-09-22 revisando `spec_flota_vehiculos.md`, que daba esto por
   resuelto). El Hallazgo #11 había corregido la FUENTE de los dos (`text-sm` → `text-base
-  md:text-sm`, evita el zoom automático de Safari/iOS al enfocar) pero no el ALTO, que quedaba fijo
+md:text-sm`, evita el zoom automático de Safari/iOS al enfocar) pero no el ALTO, que quedaba fijo
   en `h-9` (36px) en cualquier tamaño de pantalla — a diferencia de `Button`, que ya tenía variante
   mobile (`h-11 md:h-9`). Arreglo: mismo criterio que `Button`, `h-11 md:h-9` en los dos
   componentes compartidos — como los dos son la base de TODO formulario del Dashboard (incluido
@@ -2476,7 +2549,7 @@ los datos sin riesgo de tocar algo sin querer.
 - ✅ **Resuelto (2026-09-22): `Database` generado y enganchado en los dos `createClient` — chequeo de
   nombres de columna encendido en toda consulta Supabase del Dashboard.** Cerraba la deuda anotada
   arriba en esta misma sección al revisar el escape de tipos del Hallazgo #21. `npm run
-  types:supabase` (`dashboard/package.json`) genera `dashboard/lib/supabase/database.types.ts`
+types:supabase` (`dashboard/package.json`) genera `dashboard/lib/supabase/database.types.ts`
   contra el proyecto real (`npx supabase gen types typescript --project-id ... | prettier --write`)
   y los dos `createClient<Database>(...)` (`lib/supabase/client.ts`, `lib/supabase/server.ts`) ya lo
   usan.
@@ -2490,7 +2563,7 @@ los datos sin riesgo de tocar algo sin querer.
   - ✅ **Resuelto (2026-09-22, commit aparte)**: las 4 columnas se plegaron a la definición de
     `jornadas` en `supabase/schema.sql`, siguiendo el mismo criterio ya usado con `schema_v3`/`v4`
     — se pliega la columna al `create table`, y el archivo de migración (`schema_v5_edicion_
-    jornadas.sql`) queda donde está, sin tocar, como documentación histórica (no se borra ni se
+jornadas.sql`) queda donde está, sin tocar, como documentación histórica (no se borra ni se
     anota "ya incorporado" — ninguno de los dos anteriores lo tenía tampoco). El motivo no era de
     prolijidad: alguien reconstruyendo la base desde `schema.sql` en un entorno nuevo obtenía una
     `jornadas` sin las columnas de auditoría, y `POST /api/jornadas/editar` se habría roto al
@@ -2503,7 +2576,7 @@ los datos sin riesgo de tocar algo sin querer.
     reales.
   - ⚠️ **El `as unknown as` de `aplicarFiltrosJornadas` se pudo sacar del todo — pero no por las
     buenas, a la primera.** Un primer intento (genérico auto-referenciado `Q extends {ilike(columna:
-    string, ...): Q, ...}`, sin ningún cast) compiló limpio — el error "excessively deep" que motivó
+string, ...): Q, ...}`, sin ningún cast) compiló limpio — el error "excessively deep" que motivó
     el cast original no reapareció con el `Database` ya generado. Probado con el mismo typo
     deliberado que pide la Fase 3 de la spec (`"chofer_nombr"`): **`tsc` no lo atrapó.** Causa: la
     constraint tipaba `columna` como `string` suelto — dentro del cuerpo de una función genérica,
@@ -2518,7 +2591,7 @@ los datos sin riesgo de tocar algo sin querer.
     confirmando que la verificación llegó a todo el Dashboard, no solo al filtro compartido.
     Revertido.
   - **Verificado además contra la base real, no solo contra tipos**: `.from("jornadas").select("*",
-    {count:"exact"})` y `.from("ultimas_posiciones").select("*")` corridos con la service_role key
+{count:"exact"})` y `.from("ultimas_posiciones").select("*")` corridos con la service_role key
     real devolvieron datos (26 jornadas, 5 posiciones) — confirma que envolver `Database` en
     `createClient` no cambió ningún comportamiento en runtime (los genéricos de TypeScript se borran
     al compilar). Se probó también un login real: se insertó un admin de prueba temporal, se

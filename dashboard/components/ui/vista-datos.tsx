@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+
 /** spec_modo_ver_editar_chofer_flota.md: lista de pares etiqueta/valor en texto plano, sin bordes
  * de formulario ni inputs — el modo "Ver" de ChoferDialog y VehiculoDialog, compartido desde el
  * primer uso porque tiene dos casos reales desde el día uno (no es generalizar antes de tiempo).
@@ -6,6 +8,8 @@
 export interface CampoVista {
   etiqueta: string;
   valor: string;
+  /** spec_identidad_visual_day2day.md: DNI, matrícula, teléfono, fechas — dato real, va en mono. */
+  mono?: boolean;
 }
 
 export function VistaDatos({ campos }: { campos: CampoVista[] }) {
@@ -14,7 +18,7 @@ export function VistaDatos({ campos }: { campos: CampoVista[] }) {
       {campos.map((campo) => (
         <div key={campo.etiqueta}>
           <dt className="text-xs text-muted-foreground">{campo.etiqueta}</dt>
-          <dd className="text-sm font-medium">{campo.valor}</dd>
+          <dd className={cn("text-sm font-medium", campo.mono && "font-mono")}>{campo.valor}</dd>
         </div>
       ))}
     </dl>

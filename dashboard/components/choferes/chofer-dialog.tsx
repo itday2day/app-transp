@@ -344,14 +344,14 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
 
   if (chofer && modo === "ver") {
     const campos: CampoVista[] = [
-      { etiqueta: "Número de empleado", valor: chofer.numero_empleado },
+      { etiqueta: "Número de empleado", valor: chofer.numero_empleado, mono: true },
       { etiqueta: "Nombre", valor: chofer.nombre },
       { etiqueta: "Apellidos", valor: chofer.apellidos },
-      { etiqueta: "DNI", valor: chofer.dni },
-      { etiqueta: "Fecha de nacimiento", valor: formatFecha(chofer.fecha_nacimiento) },
+      { etiqueta: "DNI", valor: chofer.dni, mono: true },
+      { etiqueta: "Fecha de nacimiento", valor: formatFecha(chofer.fecha_nacimiento), mono: true },
       { etiqueta: "País de nacimiento", valor: chofer.pais_nacimiento },
       { etiqueta: "Sexo", valor: chofer.sexo },
-      { etiqueta: "Teléfono", valor: chofer.telefono ?? "—" },
+      { etiqueta: "Teléfono", valor: chofer.telefono ?? "—", mono: true },
     ];
 
     return (

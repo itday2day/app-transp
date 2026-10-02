@@ -243,15 +243,16 @@ export function VehiculoDialog({ vehiculo, onClose, onGuardado }: VehiculoDialog
 
   if (vehiculo && modo === "ver") {
     const campos: CampoVista[] = [
-      { etiqueta: "Matrícula", valor: vehiculo.matricula },
+      { etiqueta: "Matrícula", valor: vehiculo.matricula, mono: true },
       { etiqueta: "Tipo de propiedad", valor: TIPOS_PROPIEDAD_LEGIBLES[vehiculo.tipo_propiedad] },
       { etiqueta: "Marca", valor: vehiculo.marca ?? "—" },
       { etiqueta: "Modelo", valor: vehiculo.modelo ?? "—" },
-      { etiqueta: "Año", valor: vehiculo.anio != null ? String(vehiculo.anio) : "—" },
+      { etiqueta: "Año", valor: vehiculo.anio != null ? String(vehiculo.anio) : "—", mono: true },
       {
         etiqueta: "Capacidad de tanque",
         valor:
           vehiculo.capacidad_tanque_litros != null ? `${vehiculo.capacidad_tanque_litros} L` : "—",
+        mono: true,
       },
     ];
 

@@ -53,9 +53,18 @@ export function SidebarNav({ horizontal = false }: { horizontal?: boolean }) {
               // #15 (landscape únicamente), w-full + justify-center centra
               // el ícono en el ancho angosto disponible.
               "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors max-lg:h-11 landscape:max-lg:w-full landscape:max-lg:justify-center",
-              activo
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              // spec_identidad_visual_day2day.md: esta instancia (horizontal=false) es siempre
+              // la barra de escritorio, ahora con fondo negro fijo (#000000, independiente del
+              // tema claro/oscuro — ver layout.tsx). text-muted-foreground/hover:bg-muted, que sí
+              // reaccionan al tema, quedarían casi invisibles sobre negro en tema claro — acá se
+              // usan tonos blancos fijos en su lugar. Las instancias horizontal=true (barra de
+              // tablet y columna de teléfono horizontal) siguen sobre `bg-card`, sin cambios.
+              !horizontal && activo && "bg-white/15 text-white",
+              !horizontal && !activo && "text-white/70 hover:bg-white/10 hover:text-white",
+              horizontal &&
+                (activo
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground")
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />
@@ -67,12 +76,6 @@ export function SidebarNav({ horizontal = false }: { horizontal?: boolean }) {
           </Link>
         );
       })}
-      {!horizontal && (
-        <div className="mt-auto flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-          <Truck className="h-4 w-4 shrink-0" />
-          app-transp
-        </div>
-      )}
     </nav>
   );
 }
