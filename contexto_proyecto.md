@@ -2383,6 +2383,52 @@ reales en Supabase.
     instalar el build y volver a entrar, el Historial ya muestra las 5 jornadas, incluidas las 4
     que la reinstalación del 26/09 había dejado inaccesibles. Cerrado.
 
+**Hallazgo #40 — modo "Ver" antes de "Editar" en los formularios de chofer y de vehículo
+(2026-10-02)**: pedido directo (no bug) a partir de `spec_modo_ver_editar_chofer_flota.md` — abrir
+un chofer o vehículo existente entraba directo al formulario editable, sin forma de solo consultar
+los datos sin riesgo de tocar algo sin querer.
+
+- Nuevo componente compartido `components/ui/vista-datos.tsx` (`VistaDatos` + tipo `CampoVista`):
+  lista de pares etiqueta/valor en texto plano, sin bordes de formulario ni inputs — se construyó
+  compartido desde el primer uso porque `ChoferDialog` y `VehiculoDialog` lo necesitan los dos desde
+  el día uno (no es generalizar antes de tiempo).
+- `ChoferDialog` y `VehiculoDialog` ganan un estado `modo: "ver" | "editar"`: abrir un registro
+  existente arranca siempre en "ver" (early return con `VistaDatos` + badge de estado + acciones de
+  Dar de baja/Reactivar/Cerrar/Editar); dar de alta sigue entrando directo al formulario de siempre,
+  sin pasar por "ver" (nada que mostrar todavía). Título del diálogo dinámico según modo y entidad
+  ("Ver chofer"/"Editar chofer", "Ver vehículo"/"Editar vehículo").
+- Dirty-tracking simple: un `useMemo(..., [])` captura los valores con los que arrancó el formulario
+  (estable porque el diálogo entero remonta con `key={chofer.id}`/`key={vehiculo.id}` al cambiar de
+  registro, mismo criterio que ya usaban los dos diálogos) y se compara campo a campo contra el
+  estado actual. "Cancelar" sin cambios vuelve a "Ver" sin avisos; con algún campo modificado,
+  muestra un confirm inline ("¿Descartar los cambios sin guardar?") antes de descartar — al
+  confirmar, cada campo vuelve a su valor del `useMemo`, nunca al que se había tipeado.
+- ⚠️ El modo "Ver" muestra los datos leyendo directo del prop (`chofer`/`vehiculo`, el registro
+  real guardado), no del estado editable en vivo — decisión tomada para no arrastrar al modo "Ver"
+  casos borde de normalización del formulario (ej. `paisPreseleccionado()` devuelve `""` si el país
+  guardado no matchea ninguna opción exacta de `PAISES`, lo que mostraría un campo vacío en "Ver"
+  aunque el dato real sí esté guardado).
+- **Decisión explícita del usuario sobre el comportamiento post-guardado**: la spec pedía que
+  guardar con éxito vuelva a "Ver" mostrando el valor nuevo; el comportamiento real de los dos
+  diálogos desde antes de esta spec es distinto (formulario "congelado" con banner de éxito y botón
+  "Cerrar", mecanismo que en `ChoferDialog` también sostiene la tarjeta de contraseña temporal de
+  alta/reseteo). Consultado explícitamente, el usuario eligió **mantener el comportamiento actual
+  tal cual**, no unificarlo con "Ver" — evita tocar el flujo de contraseña temporal, que no tiene
+  nada que ver con esta spec.
+- No se encontró ninguna acción de eliminar (borrado físico) en ninguno de los dos diálogos ni en
+  sus tablas — la única acción destructiva-adyacente ya existente es dar de baja (`activo`/`estado`
+  a falso), que esta spec no modifica.
+- **Verificación**: `tsc`/`lint`/`format:check` limpios en `dashboard/`. Los campos que muestra
+  "Ver" en los dos diálogos se confirmaron contra un chofer y un vehículo reales de Supabase (el
+  chofer de prueba de siempre y un vehículo real): todos los campos leídos existen con los nombres
+  usados, `formatFecha()` entiende el formato real de `fecha_nacimiento` (`"1979-08-09"` →
+  `09/08/1979`), `telefono: null` cae en el fallback `"—"`, y los mapeos `TIPOS_PROPIEDAD_LEGIBLES`/
+  `ESTADOS_VEHICULO_LEGIBLES` son `Record` tipados que cubren todos los valores reales posibles —
+  nada de esto puede mostrar un campo roto o en blanco con datos reales. Los pasos de interacción en
+  sí (abrir en "Ver", pulsar "Editar", cancelar con/sin cambios, confirmar el descarte) no se
+  pudieron probar clickeando en un navegador real desde este entorno (sin herramienta de automatización
+  de navegador disponible) — quedan pendientes de la prueba del usuario en el Dashboard real.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

@@ -1,12 +1,14 @@
 "use client";
 
-import { Check, Copy, KeyRound, RotateCcw, Save } from "lucide-react";
-import { useState } from "react";
+import { Check, Copy, KeyRound, Pencil, RotateCcw, Save } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { VistaDatos, type CampoVista } from "@/components/ui/vista-datos";
 import { SelectorCodigoPais } from "@/components/choferes/selector-codigo-pais";
 import {
   normalizarDni,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/choferes";
 import { PAISES } from "@/lib/paises";
 import { codigoMarcacion, separarTelefono } from "@/lib/telefono-pais";
+import { formatFecha } from "@/lib/utils";
 import type {
   ChoferDuplicadoResponse,
   ChoferRow,
@@ -127,6 +130,71 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   const telefonoSeparado = separarTelefono(chofer?.telefono);
   const [paisTelefono, setPaisTelefono] = useState(telefonoSeparado.pais);
   const [numeroTelefono, setNumeroTelefono] = useState(telefonoSeparado.numero);
+
+  // spec_modo_ver_editar_chofer_flota.md: alta siempre arranca en "editar" (nada que mostrar en
+  // "ver" todavía); abrir un chofer existente arranca en "ver". El componente remonta con
+  // `key={chofer.id}` desde la página (igual que ya hacía antes de esta spec), así que este
+  // estado inicial nunca "se pega" de un chofer anterior.
+  const [modo, setModo] = useState<"ver" | "editar">(esEdicion ? "ver" : "editar");
+  const [confirmandoDescarte, setConfirmandoDescarte] = useState(false);
+
+  // Snapshot de los valores con los que arrancó el formulario — estable mientras el componente
+  // esté montado (no depende de nada que cambie), para poder comparar contra los valores actuales
+  // sin duplicar la lógica de "¿hay cambios sin guardar?" en cada campo por separado.
+  const valoresIniciales = useMemo(
+    () => ({
+      nombre: chofer?.nombre ?? "",
+      apellidos: chofer?.apellidos ?? "",
+      dni: chofer?.dni ?? "",
+      fechaNacimiento: chofer?.fecha_nacimiento ?? "",
+      paisNacimiento: paisPreseleccionado(chofer?.pais_nacimiento),
+      sexo: (chofer?.sexo ?? "") as SexoChofer | "",
+      paisTelefono: telefonoSeparado.pais,
+      numeroTelefono: telefonoSeparado.numero,
+    }),
+    // A propósito solo una vez: el componente remonta entero (key={chofer.id}) cuando cambia de
+    // chofer, nunca actualiza estos valores "iniciales" en el medio de una edición.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+  const hayCambiosSinGuardar =
+    nombre !== valoresIniciales.nombre ||
+    apellidos !== valoresIniciales.apellidos ||
+    dni !== valoresIniciales.dni ||
+    fechaNacimiento !== valoresIniciales.fechaNacimiento ||
+    paisNacimiento !== valoresIniciales.paisNacimiento ||
+    sexo !== valoresIniciales.sexo ||
+    paisTelefono !== valoresIniciales.paisTelefono ||
+    numeroTelefono !== valoresIniciales.numeroTelefono;
+
+  function manejarCancelar() {
+    // El botón ya pasó a ser "Cerrar" (no "Cancelar") en el estado congelado post-guardado — no
+    // hay nada que descartar, es el mismo "Cerrar" de siempre. Igual el alta: no tiene modo "ver"
+    // a dónde volver, cancelar ahí sigue cerrando el diálogo tal cual ya hacía antes de esta spec.
+    if (guardado || !esEdicion) {
+      onClose();
+      return;
+    }
+    if (hayCambiosSinGuardar) {
+      setConfirmandoDescarte(true);
+      return;
+    }
+    setModo("ver");
+  }
+
+  function descartarCambios() {
+    setNombre(valoresIniciales.nombre);
+    setApellidos(valoresIniciales.apellidos);
+    setDni(valoresIniciales.dni);
+    setFechaNacimiento(valoresIniciales.fechaNacimiento);
+    setPaisNacimiento(valoresIniciales.paisNacimiento);
+    setSexo(valoresIniciales.sexo);
+    setPaisTelefono(valoresIniciales.paisTelefono);
+    setNumeroTelefono(valoresIniciales.numeroTelefono);
+    setError(null);
+    setConfirmandoDescarte(false);
+    setModo("ver");
+  }
 
   const [enviando, setEnviando] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
@@ -272,13 +340,76 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   const deshabilitarCampos = guardado;
   const estadoActual = choferGuardado?.activo ?? chofer?.activo ?? true;
 
+  const titulo = !esEdicion ? "Agregar chofer" : modo === "ver" ? "Ver chofer" : "Editar chofer";
+
+  if (chofer && modo === "ver") {
+    const campos: CampoVista[] = [
+      { etiqueta: "Número de empleado", valor: chofer.numero_empleado },
+      { etiqueta: "Nombre", valor: chofer.nombre },
+      { etiqueta: "Apellidos", valor: chofer.apellidos },
+      { etiqueta: "DNI", valor: chofer.dni },
+      { etiqueta: "Fecha de nacimiento", valor: formatFecha(chofer.fecha_nacimiento) },
+      { etiqueta: "País de nacimiento", valor: chofer.pais_nacimiento },
+      { etiqueta: "Sexo", valor: chofer.sexo },
+      { etiqueta: "Teléfono", valor: chofer.telefono ?? "—" },
+    ];
+
+    return (
+      <Dialog open onClose={onClose} title={titulo} className="max-w-lg">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <Badge variant={estadoActual ? "primary" : "default"}>
+              {estadoActual ? "Activo" : "De baja"}
+            </Badge>
+          </div>
+
+          <VistaDatos campos={campos} />
+
+          {error && (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={alternarActivo}
+                loading={cambiandoEstado}
+              >
+                <RotateCcw className="h-4 w-4" />
+                {estadoActual ? "Dar de baja" : "Reactivar"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetearContrasena}
+                loading={reseteando}
+              >
+                <KeyRound className="h-4 w-4" />
+                Resetear contraseña
+              </Button>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cerrar
+              </Button>
+              <Button type="button" onClick={() => setModo("editar")}>
+                <Pencil className="h-4 w-4" />
+                Editar
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={esEdicion ? "Editar chofer" : "Agregar chofer"}
-      className="max-w-lg"
-    >
+    <Dialog open onClose={onClose} title={titulo} className="max-w-lg">
       <div className="flex flex-col gap-4">
         <div>
           <Label htmlFor="chf-numero">Número de empleado</Label>
@@ -430,44 +561,58 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
           </p>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex gap-2">
-            {esEdicion && !contrasenaTemporal && (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={alternarActivo}
-                  loading={cambiandoEstado}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  {estadoActual ? "Dar de baja" : "Reactivar"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={resetearContrasena}
-                  loading={reseteando}
-                >
-                  <KeyRound className="h-4 w-4" />
-                  Resetear contraseña
-                </Button>
-              </>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              {guardado ? "Cerrar" : "Cancelar"}
-            </Button>
-            {!guardado && (
-              <Button type="button" onClick={onSubmit} loading={enviando}>
-                <Save className="h-4 w-4" />
-                {esEdicion ? "Guardar" : "Crear chofer"}
+        {confirmandoDescarte ? (
+          <div className="flex flex-col gap-3 rounded-md border border-warning/30 bg-warning/10 p-3">
+            <p className="text-sm">¿Descartar los cambios sin guardar?</p>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setConfirmandoDescarte(false)}>
+                Seguir editando
               </Button>
-            )}
+              <Button type="button" variant="outline" onClick={descartarCambios}>
+                Descartar cambios
+              </Button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex gap-2">
+              {esEdicion && !contrasenaTemporal && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={alternarActivo}
+                    loading={cambiandoEstado}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    {estadoActual ? "Dar de baja" : "Reactivar"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetearContrasena}
+                    loading={reseteando}
+                  >
+                    <KeyRound className="h-4 w-4" />
+                    Resetear contraseña
+                  </Button>
+                </>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={manejarCancelar}>
+                {guardado ? "Cerrar" : "Cancelar"}
+              </Button>
+              {!guardado && (
+                <Button type="button" onClick={onSubmit} loading={enviando}>
+                  <Save className="h-4 w-4" />
+                  {esEdicion ? "Guardar" : "Crear chofer"}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </Dialog>
   );

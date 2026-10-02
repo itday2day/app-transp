@@ -1,13 +1,20 @@
 "use client";
 
-import { CheckCircle2, RotateCcw, Save } from "lucide-react";
-import { useState } from "react";
+import { CheckCircle2, Pencil, RotateCcw, Save } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { MATRICULA_LONGITUD, normalizarMatricula, TIPOS_PROPIEDAD_LEGIBLES } from "@/lib/vehiculos";
+import { VistaDatos, type CampoVista } from "@/components/ui/vista-datos";
+import {
+  ESTADOS_VEHICULO_LEGIBLES,
+  MATRICULA_LONGITUD,
+  normalizarMatricula,
+  TIPOS_PROPIEDAD_LEGIBLES,
+} from "@/lib/vehiculos";
 import type {
   CrearVehiculoRequest,
   EditarVehiculoRequest,
@@ -50,6 +57,59 @@ export function VehiculoDialog({ vehiculo, onClose, onGuardado }: VehiculoDialog
   const [marca, setMarca] = useState(vehiculo?.marca ?? "");
   const [modelo, setModelo] = useState(vehiculo?.modelo ?? "");
   const [anio, setAnio] = useState(vehiculo?.anio != null ? String(vehiculo.anio) : "");
+
+  // spec_modo_ver_editar_chofer_flota.md: mismo criterio que ChoferDialog — alta arranca en
+  // "editar" (nada que mostrar en "ver" todavía), un vehículo existente arranca en "ver". El
+  // componente remonta con `key={vehiculo.id}` desde la página, así que este estado inicial nunca
+  // "se pega" de un vehículo anterior.
+  const [modo, setModo] = useState<"ver" | "editar">(esEdicion ? "ver" : "editar");
+  const [confirmandoDescarte, setConfirmandoDescarte] = useState(false);
+
+  const valoresIniciales = useMemo(
+    () => ({
+      matricula: vehiculo?.matricula ?? "",
+      tipoPropiedad: (vehiculo?.tipo_propiedad ?? "") as TipoPropiedadVehiculo | "",
+      capacidadTanque:
+        vehiculo?.capacidad_tanque_litros != null ? String(vehiculo.capacidad_tanque_litros) : "",
+      marca: vehiculo?.marca ?? "",
+      modelo: vehiculo?.modelo ?? "",
+      anio: vehiculo?.anio != null ? String(vehiculo.anio) : "",
+    }),
+    // A propósito solo una vez, ver mismo comentario en ChoferDialog.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+  const hayCambiosSinGuardar =
+    matricula !== valoresIniciales.matricula ||
+    tipoPropiedad !== valoresIniciales.tipoPropiedad ||
+    capacidadTanque !== valoresIniciales.capacidadTanque ||
+    marca !== valoresIniciales.marca ||
+    modelo !== valoresIniciales.modelo ||
+    anio !== valoresIniciales.anio;
+
+  function manejarCancelar() {
+    if (guardado || !esEdicion) {
+      onClose();
+      return;
+    }
+    if (hayCambiosSinGuardar) {
+      setConfirmandoDescarte(true);
+      return;
+    }
+    setModo("ver");
+  }
+
+  function descartarCambios() {
+    setMatricula(valoresIniciales.matricula);
+    setTipoPropiedad(valoresIniciales.tipoPropiedad);
+    setCapacidadTanque(valoresIniciales.capacidadTanque);
+    setMarca(valoresIniciales.marca);
+    setModelo(valoresIniciales.modelo);
+    setAnio(valoresIniciales.anio);
+    setError(null);
+    setConfirmandoDescarte(false);
+    setModo("ver");
+  }
 
   const [enviando, setEnviando] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
@@ -175,13 +235,73 @@ export function VehiculoDialog({ vehiculo, onClose, onGuardado }: VehiculoDialog
     }
   }
 
+  const titulo = !esEdicion
+    ? "Agregar vehículo"
+    : modo === "ver"
+      ? "Ver vehículo"
+      : "Editar vehículo";
+
+  if (vehiculo && modo === "ver") {
+    const campos: CampoVista[] = [
+      { etiqueta: "Matrícula", valor: vehiculo.matricula },
+      { etiqueta: "Tipo de propiedad", valor: TIPOS_PROPIEDAD_LEGIBLES[vehiculo.tipo_propiedad] },
+      { etiqueta: "Marca", valor: vehiculo.marca ?? "—" },
+      { etiqueta: "Modelo", valor: vehiculo.modelo ?? "—" },
+      { etiqueta: "Año", valor: vehiculo.anio != null ? String(vehiculo.anio) : "—" },
+      {
+        etiqueta: "Capacidad de tanque",
+        valor:
+          vehiculo.capacidad_tanque_litros != null ? `${vehiculo.capacidad_tanque_litros} L` : "—",
+      },
+    ];
+
+    return (
+      <Dialog open onClose={onClose} title={titulo} className="max-w-md">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <Badge variant={vehiculo.estado === "activo" ? "primary" : "default"}>
+              {ESTADOS_VEHICULO_LEGIBLES[vehiculo.estado]}
+            </Badge>
+          </div>
+
+          <VistaDatos campos={campos} />
+
+          {error && (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                cambiarEstado(vehiculo.id, vehiculo.estado === "activo" ? "baja" : "activo")
+              }
+              loading={cambiandoEstado}
+            >
+              <RotateCcw className="h-4 w-4" />
+              {vehiculo.estado === "activo" ? "Dar de baja" : "Reactivar"}
+            </Button>
+
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={onClose}>
+                Cerrar
+              </Button>
+              <Button type="button" onClick={() => setModo("editar")}>
+                <Pencil className="h-4 w-4" />
+                Editar
+              </Button>
+            </div>
+          </div>
+        </div>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      title={esEdicion ? "Editar vehículo" : "Agregar vehículo"}
-      className="max-w-md"
-    >
+    <Dialog open onClose={onClose} title={titulo} className="max-w-md">
       <div className="flex flex-col gap-4">
         <div>
           <Label htmlFor="veh-matricula">Matrícula</Label>
@@ -288,35 +408,49 @@ export function VehiculoDialog({ vehiculo, onClose, onGuardado }: VehiculoDialog
           </p>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            {esEdicion && !guardado && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  cambiarEstado(vehiculo.id, vehiculo.estado === "activo" ? "baja" : "activo")
-                }
-                loading={cambiandoEstado}
-              >
-                <RotateCcw className="h-4 w-4" />
-                {vehiculo.estado === "activo" ? "Dar de baja" : "Reactivar"}
+        {confirmandoDescarte ? (
+          <div className="flex flex-col gap-3 rounded-md border border-warning/30 bg-warning/10 p-3">
+            <p className="text-sm">¿Descartar los cambios sin guardar?</p>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setConfirmandoDescarte(false)}>
+                Seguir editando
               </Button>
-            )}
+              <Button type="button" variant="outline" onClick={descartarCambios}>
+                Descartar cambios
+              </Button>
+            </div>
           </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              {esEdicion && !guardado && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    cambiarEstado(vehiculo.id, vehiculo.estado === "activo" ? "baja" : "activo")
+                  }
+                  loading={cambiandoEstado}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  {vehiculo.estado === "activo" ? "Dar de baja" : "Reactivar"}
+                </Button>
+              )}
+            </div>
 
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>
-              {guardado ? "Cerrar" : "Cancelar"}
-            </Button>
-            {!guardado && (
-              <Button type="button" onClick={onSubmit} loading={enviando}>
-                <Save className="h-4 w-4" />
-                Guardar
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={manejarCancelar}>
+                {guardado ? "Cerrar" : "Cancelar"}
               </Button>
-            )}
+              {!guardado && (
+                <Button type="button" onClick={onSubmit} loading={enviando}>
+                  <Save className="h-4 w-4" />
+                  Guardar
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </Dialog>
   );
