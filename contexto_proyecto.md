@@ -2379,8 +2379,9 @@ reales en Supabase.
   se probó contra Supabase real para el chofer de prueba: devuelve las 5 jornadas (incluida la que
   ya existe localmente, que el chequeo de duplicados ya existente descarta antes de insertar),
   confirmando que las 4 que faltaban se recuperarían en el próximo inicio de sesión.
-  - **Pendiente**: build nuevo + prueba en el dispositivo real para confirmar que el Historial
-    termina mostrando las 5 jornadas tras un reinicio de la app.
+  - **Confirmado en dispositivo real** (commit `8548622`, chofer de prueba de siempre): tras
+    instalar el build y volver a entrar, el Historial ya muestra las 5 jornadas, incluidas las 4
+    que la reinstalación del 26/09 había dejado inaccesibles. Cerrado.
 
 ## 5. Estándares de calidad y reglas de código
 
