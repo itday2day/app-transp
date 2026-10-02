@@ -68,30 +68,8 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
     CREATE INDEX IF NOT EXISTS idx_jornadas_estado ON jornadas (estado);
   `);
 
-  // [DEBUG-HIST] instrumentación temporal, mismo criterio que el Hallazgo #28 — se retira en
-  // cuanto se confirme la causa real del Historial vacío en dispositivo.
-  const totalAntes = await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) as n FROM jornadas`);
-  console.log(`[DEBUG-HIST] filas en jornadas ANTES de migrar: ${totalAntes?.n}`);
-
   await agregarColumnasFaltantes(db);
-
-  const totalDespuesColumnas = await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) as n FROM jornadas`);
-  console.log(
-    `[DEBUG-HIST] filas en jornadas después de agregarColumnasFaltantes: ${totalDespuesColumnas?.n}`
-  );
-
-  try {
-    await relajarNotNullCheckIn(db);
-  } catch (err) {
-    console.log(
-      `[DEBUG-HIST] relajarNotNullCheckIn TIRÓ UNA EXCEPCIÓN: ${err instanceof Error ? err.message : String(err)}`
-    );
-    throw err;
-  }
-
-  const totalDespuesRelajar = await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) as n FROM jornadas`);
-  console.log(`[DEBUG-HIST] filas en jornadas después de relajarNotNullCheckIn: ${totalDespuesRelajar?.n}`);
-
+  await relajarNotNullCheckIn(db);
   await migrarCombustibleAPorcentaje(db);
 
   return db;
@@ -108,10 +86,6 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
 async function relajarNotNullCheckIn(db: SQLite.SQLiteDatabase): Promise<void> {
   const columnas = await db.getAllAsync<{ name: string; notnull: number }>(`PRAGMA table_info(jornadas)`);
   const fotoInicial = columnas.find((c) => c.name === "fotoTacometroInicialUri");
-  // [DEBUG-HIST] instrumentación temporal.
-  console.log(
-    `[DEBUG-HIST] relajarNotNullCheckIn: columna fotoTacometroInicialUri encontrada=${!!fotoInicial}, notnull=${fotoInicial?.notnull}, ${!fotoInicial || fotoInicial.notnull === 0 ? "SE SALTEA (ya migrada o tabla nueva)" : "VA A RECONSTRUIR LA TABLA"}`
-  );
   if (!fotoInicial || fotoInicial.notnull === 0) return;
 
   await db.execAsync(`

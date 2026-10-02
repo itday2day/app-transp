@@ -579,11 +579,6 @@ export async function listarHistorial(choferId: string, limite = 20): Promise<Jo
     `SELECT * FROM jornadas WHERE choferId = ? ORDER BY fechaCheckIn DESC LIMIT ?`,
     [choferId, limite]
   );
-  // [DEBUG-HIST] instrumentación temporal.
-  const totalSinFiltro = await db.getFirstAsync<{ n: number }>(`SELECT COUNT(*) as n FROM jornadas`);
-  console.log(
-    `[DEBUG-HIST] listarHistorial(choferId=${choferId}): ${filas.length} fila(s) devueltas, ${totalSinFiltro?.n} fila(s) totales en la tabla (todos los choferes)`
-  );
   return filas.map(filaAJornada);
 }
 
