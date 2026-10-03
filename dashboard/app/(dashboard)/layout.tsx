@@ -7,20 +7,24 @@ import { ThemeToggle } from "@/components/theme-toggle";
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col lg:flex-row">
-      {/* spec_identidad_visual_day2day.md: 134px + fondo oscuro (ink) según la maqueta del canvas
-          — se mantiene la MISMA estructura responsive de siempre (esta aside solo se ve en
-          escritorio, lg:flex), nada de los modos de tablet/teléfono horizontal de más abajo
-          cambia de comportamiento, solo de color (decisión explícita del usuario). */}
+      {/* spec_identidad_visual_day2day_enmienda.md: 134px (maqueta del canvas) no se vio bien en
+          producción real — se revierte al ancho de siempre (224px, w-56, el mismo de los
+          Hallazgos #13-#16), manteniendo el fondo negro y los tokens del Hallazgo #41. Los otros
+          dos modos responsive de más abajo (tablet, teléfono horizontal) no se tocan. */}
       {/* bg-[#000000] literal, no bg-ink: mismo motivo que el panel de marca del login — esta
           barra es "chrome" de marca, siempre oscura, independiente del tema claro/oscuro. */}
-      <aside className="hidden w-[134px] shrink-0 bg-[#000000] lg:flex lg:flex-col">
+      <aside className="hidden w-56 shrink-0 bg-[#000000] lg:flex lg:flex-col">
         <div className="px-4 py-6">
+          {/* h-7 w-auto (altura fija, ancho automático), no h-auto w-full: a 224px de contenedor,
+              un logo "w-full" se estira proporcionalmente mucho más grande de lo que se ve bien —
+              decisión explícita de la enmienda, nunca width:100%/height:100% sin preservar el
+              aspect ratio real del PNG. */}
           <Image
             src="/logo-blanco.png"
             alt="Day2Day Solutions"
             width={106}
             height={27}
-            className="h-auto w-full"
+            className="h-7 w-auto"
           />
         </div>
         <SidebarNav />

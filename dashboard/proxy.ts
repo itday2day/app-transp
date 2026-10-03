@@ -19,7 +19,16 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Protege todo excepto /login, las rutas de auth (login/logout) y los
-  // assets estáticos internos de Next.js.
-  matcher: ["/((?!login|api/auth|_next/static|_next/image|favicon.ico).*)"],
+  // Protege todo excepto /login, las rutas de auth (login/logout), los
+  // assets estáticos internos de Next.js, y los archivos sueltos de /public
+  // (spec_identidad_visual_day2day_enmienda.md, Hallazgo #41: el pedido que
+  // hace el propio optimizador de next/image a /logo-blanco.png pasaba por
+  // este proxy sin cookie de sesión en ese contexto y volvía el HTML de
+  // /login en vez de la imagen — 400 en /_next/image, logo roto en todos
+  // lados). Exclusión por extensión, no por nombre de archivo: así cubre
+  // cualquier asset que se agregue después a /public sin tener que volver a
+  // tocar este matcher.
+  matcher: [
+    "/((?!login|api/auth|_next/static|_next/image|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|woff2?|ttf|otf)$).*)",
+  ],
 };
