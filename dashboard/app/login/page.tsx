@@ -61,8 +61,20 @@ export default function LoginPage() {
         <p className="mt-4 text-sm italic text-white/70">Smart logistics — Panel administrativo</p>
       </div>
 
-      <div className="flex items-center justify-center bg-background p-6">
-        <div className="w-full max-w-sm rounded-lg bg-card p-8 text-card-foreground shadow-md">
+      {/* spec_marca_agua_y_navegacion_day2day.md (Hallazgo #42): marca de agua sutil, solo del
+          lado del formulario — el panel negro de marca de la izquierda no se toca. `relative
+          isolate overflow-hidden` para que el isotipo absoluto (`-z-10`) quede detrás de la
+          tarjeta y nunca se filtre fuera de esta columna. */}
+      <div className="relative isolate flex items-center justify-center overflow-hidden bg-background p-6">
+        <Image
+          src="/isotipo-d2d.png"
+          alt=""
+          aria-hidden="true"
+          width={899}
+          height={299}
+          className="pointer-events-none absolute -bottom-10 -right-10 -z-10 w-[90%] max-w-2xl select-none opacity-[0.05] dark:invert"
+        />
+        <div className="relative w-full max-w-sm rounded-lg bg-card p-8 text-card-foreground shadow-md">
           <h1 className="text-lg font-semibold">Ingresar</h1>
           <p className="mb-6 mt-1 text-sm text-muted-foreground">
             Accedé con tu cuenta de administrador.

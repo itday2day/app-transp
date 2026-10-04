@@ -14,7 +14,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       {/* bg-[#000000] literal, no bg-ink: mismo motivo que el panel de marca del login — esta
           barra es "chrome" de marca, siempre oscura, independiente del tema claro/oscuro. */}
       <aside className="hidden w-56 shrink-0 bg-[#000000] lg:flex lg:flex-col">
-        <div className="px-4 py-6">
+        {/* justify-center (Hallazgo #42): logo centrado en los 224px de la barra, sin estirarse
+            — sigue siendo h-7 w-auto, solo cambia su alineación dentro del contenedor. */}
+        <div className="flex justify-center px-4 py-6">
           {/* h-7 w-auto (altura fija, ancho automático), no h-auto w-full: a 224px de contenedor,
               un logo "w-full" se estira proporcionalmente mucho más grande de lo que se ve bien —
               decisión explícita de la enmienda, nunca width:100%/height:100% sin preservar el
@@ -42,17 +44,26 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           {/* landscape:max-lg:hidden — este header+nav (horizontales, arriba)
               se reemplazan por la columna vertical de abajo; se ocultan acá
               en vez de borrarlos, así vertical/escritorio no cambian nada. */}
-          <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3 landscape:max-lg:hidden lg:justify-end">
-            <div className="flex items-center gap-2 lg:hidden">
-              <Image
-                src="/logo-negro.png"
-                alt="Day2Day Solutions"
-                width={96}
-                height={25}
-                className="h-auto w-24"
-              />
-            </div>
-            <div className="flex items-center gap-2">
+          {/* grid grid-cols-[1fr_auto_1fr] por debajo de `lg` (tablet/teléfono vertical): el logo
+              (columna "auto") queda matemáticamente centrado en el ancho del header sin importar
+              cuánto ocupe el grupo de la derecha — las dos columnas "1fr" se reparten el resto en
+              partes iguales. Verificado por aritmética (sin navegador real, mismo método que los
+              Hallazgos #14-#16/#24): a 360px, el grupo derecho mide ~92px y cada columna 1fr tiene
+              124px de sobra (>92px, no se aprieta) — centrado exacto, no aproximado, en los 4
+              anchos medidos (360/390/768/1023). `lg:flex lg:justify-end`: en escritorio este
+              header vuelve a su comportamiento de siempre (sin grid, logo oculto via `lg:hidden`
+              de más abajo, controles pegados a la derecha) — el logo de esa pantalla es el de la
+              barra lateral, no este. `landscape:max-lg:hidden`: teléfono horizontal sin cambios. */}
+          <header className="grid grid-cols-[1fr_auto_1fr] items-center border-b border-border bg-card px-4 py-3 landscape:max-lg:hidden lg:flex lg:justify-end">
+            <div className="lg:hidden" />
+            <Image
+              src="/logo-negro.png"
+              alt="Day2Day Solutions"
+              width={96}
+              height={25}
+              className="h-auto w-24 justify-self-center lg:hidden"
+            />
+            <div className="flex items-center justify-end gap-2">
               <ThemeToggle />
               <LogoutButton />
             </div>
