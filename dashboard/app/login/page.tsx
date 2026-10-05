@@ -74,60 +74,77 @@ export default function LoginPage() {
           height={299}
           className="pointer-events-none absolute -bottom-10 -right-10 -z-10 w-[90%] max-w-2xl select-none opacity-[0.05] dark:invert"
         />
-        <div className="relative w-full max-w-sm rounded-lg bg-card p-8 text-card-foreground shadow-md">
-          <h1 className="text-lg font-semibold">Ingresar</h1>
-          <p className="mb-6 mt-1 text-sm text-muted-foreground">
-            Accedé con tu cuenta de administrador.
-          </p>
+        <div className="flex w-full max-w-sm flex-col items-center">
+          {/* Logo nuevo, solo <1024px y solo en vertical — en escritorio el logo es el del panel
+              negro (arriba), y en teléfono horizontal el alto ya es el recurso escaso (Hallazgos
+              #13-#15). width=160/height=71 (919:409 ≈ 2.247, el mismo archivo que el panel negro
+              y que el isotipo de la marca de agua) — h-auto preserva esa relación real, nunca
+              w-full. dark:invert: los píxeles opacos de logo-negro.png son casi negros (RGB 3-4,
+              confirmado con Pillow), invierten a un blanco limpio sobre el fondo oscuro, mismo
+              recurso que ya usa la marca de agua del #42 — no se agrega ningún archivo nuevo. */}
+          <Image
+            src="/logo-negro.png"
+            alt="Day2Day Solutions"
+            width={160}
+            height={71}
+            priority
+            className="mb-6 h-auto w-40 lg:hidden landscape:max-lg:hidden dark:invert"
+          />
+          <div className="relative w-full rounded-lg bg-card p-8 text-card-foreground shadow-md">
+            <h1 className="text-lg font-semibold">Ingresar</h1>
+            <p className="mb-6 mt-1 text-sm text-muted-foreground">
+              Accedé con tu cuenta de administrador.
+            </p>
 
-          <form onSubmit={onSubmit} className="flex flex-col gap-4">
-            <div>
-              <Label htmlFor="email">Correo</Label>
-              <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  autoFocus
-                  required
-                  className="pl-9"
-                  placeholder="admin@empresa.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
+            <form onSubmit={onSubmit} className="flex flex-col gap-4">
+              <div>
+                <Label htmlFor="email">Correo</Label>
+                <div className="relative">
+                  <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    autoFocus
+                    required
+                    className="pl-9"
+                    placeholder="admin@empresa.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <Label htmlFor="password">Contraseña</Label>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  className="pl-9"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+              <div>
+                <Label htmlFor="password">Contraseña</Label>
+                <div className="relative">
+                  <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    className="pl-9"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
               </div>
-            </div>
 
-            {error && (
-              <p role="alert" className="text-sm text-danger">
-                {error}
-              </p>
-            )}
+              {error && (
+                <p role="alert" className="text-sm text-danger">
+                  {error}
+                </p>
+              )}
 
-            <Button type="submit" loading={cargando} className="w-full">
-              Entrar
-            </Button>
-          </form>
+              <Button type="submit" loading={cargando} className="w-full">
+                Entrar
+              </Button>
+            </form>
 
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            Day2Day Solutions — uso interno
-          </p>
+            <p className="mt-6 text-center text-xs text-muted-foreground">
+              Day2Day Solutions — uso interno
+            </p>
+          </div>
         </div>
       </div>
     </div>
