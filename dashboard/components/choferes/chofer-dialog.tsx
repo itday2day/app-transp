@@ -371,38 +371,60 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
             </p>
           )}
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={alternarActivo}
-                loading={cambiandoEstado}
-              >
-                <RotateCcw className="h-4 w-4" />
-                {estadoActual ? "Dar de baja" : "Reactivar"}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={resetearContrasena}
-                loading={reseteando}
-              >
-                <KeyRound className="h-4 w-4" />
-                Resetear contraseña
-              </Button>
-            </div>
+          {/* Hallazgo #44: antes de este fix, resetearContrasena() ya guardaba la temporal en
+              estado (setContrasenaTemporal) pero este return de "Ver" nunca la dibujaba — la
+              contraseña del chofer se cambiaba igual (la API no tiene culpa) y el secreto se
+              perdía sin que nadie lo viera. Mismo componente y mismo numeroEmpleadoLogin que usa
+              el modo "Editar" (línea ~552), no una tarjeta nueva. */}
+          {contrasenaTemporal && (
+            <ContrasenaTemporal
+              numeroEmpleadoLogin={choferGuardado?.numero_empleado ?? chofer.numero_empleado}
+              contrasena={contrasenaTemporal}
+            />
+          )}
 
+          {contrasenaTemporal ? (
+            // Mismo criterio que "Editar": con la temporal a la vista, nada de Resetear/Dar de
+            // baja/Editar — así no se puede perder el secreto pulsando "Resetear" dos veces.
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={onClose}>
                 Cerrar
               </Button>
-              <Button type="button" onClick={() => setModo("editar")}>
-                <Pencil className="h-4 w-4" />
-                Editar
-              </Button>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={alternarActivo}
+                  loading={cambiandoEstado}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  {estadoActual ? "Dar de baja" : "Reactivar"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetearContrasena}
+                  loading={reseteando}
+                >
+                  <KeyRound className="h-4 w-4" />
+                  Resetear contraseña
+                </Button>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={onClose}>
+                  Cerrar
+                </Button>
+                <Button type="button" onClick={() => setModo("editar")}>
+                  <Pencil className="h-4 w-4" />
+                  Editar
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </Dialog>
     );
