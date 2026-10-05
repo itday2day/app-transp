@@ -50,6 +50,7 @@ export default function CambiarContrasenaObligatorioScreen() {
           etiqueta={t("cambiarContrasenaObligatorio.contrasenaEtiqueta")}
           placeholder={t("cambiarContrasenaObligatorio.contrasenaPlaceholder")}
           secureTextEntry
+          alternarVisibilidad
           autoCapitalize="none"
           value={contrasena}
           onChangeText={setContrasena}
@@ -59,6 +60,7 @@ export default function CambiarContrasenaObligatorioScreen() {
           etiqueta={t("cambiarContrasenaObligatorio.confirmarContrasenaEtiqueta")}
           placeholder={t("cambiarContrasenaObligatorio.confirmarContrasenaPlaceholder")}
           secureTextEntry
+          alternarVisibilidad
           autoCapitalize="none"
           value={confirmarContrasena}
           onChangeText={setConfirmarContrasena}
