@@ -42,8 +42,9 @@ create extension if not exists postgis;
 -- (dashboard/app/api/choferes/) — el registro propio desde la app móvil se deshabilitó.
 -- dni: único, y desde schema_v14_normalizacion_dni_matricula_telefono.sql se guarda siempre ya
 -- normalizado (mayúsculas, sin espacios ni guiones -- ver normalizarDni() en
--- dashboard/lib/choferes.ts). El CHECK de longitud = 9 (DNI/NIE español) queda pendiente de
--- aplicar contra la base real -- ver ese archivo de migración, sección "DNI — CHECK de longitud".
+-- dashboard/lib/choferes.ts). Desde schema_v16_check_dni_9_caracteres.sql, además, CHECK de
+-- longitud = 9 (DNI/NIE español) validado -- solo el largo, no el formato (8 dígitos + letra):
+-- hay un NIE real en la base (letra + 7 dígitos + letra) que un formato estricto rechazaría.
 -- telefono: nullable -- no se le exige retroactivo a los choferes ya cargados antes de esa
 -- migración; el Dashboard es el que exige completarlo en el alta de un chofer nuevo desde ahí.
 -- Desde schema_v15_telefono_e164.sql, formato E.164 (CHECK validado de entrada -- las 5 filas
@@ -55,7 +56,7 @@ create table public.choferes (
   numero_empleado text unique not null,
   nombre text not null,
   apellidos text not null,
-  dni text not null unique,
+  dni text not null unique check (length(dni) = 9),
   fecha_nacimiento date not null,
   pais_nacimiento text not null,
   sexo text not null check (sexo in ('Masculino', 'Femenino', 'Otro')),
