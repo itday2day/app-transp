@@ -1,6 +1,12 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
+import {
+  normalizarNombreEmpresa,
+  normalizarNombreRuta,
+  obtenerOCrearEmpresa,
+  obtenerOCrearRuta,
+} from "@/lib/catalogo";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesInsert } from "@/lib/supabase/database.types";
 import type { JornadaRow, TipoIncidencia } from "@/lib/types";
@@ -190,12 +196,22 @@ export async function POST(request: Request) {
     );
   }
 
+  // spec_catalogo_empresas_rutas.md (Hallazgo #48), ⚠️3: la empresa/ruta nueva se da de alta en
+  // el catálogo acá, al CONFIRMAR la jornada (nunca antes -- cancelar el diálogo del Dashboard
+  // nunca llega a este POST, así que nunca deja una entrada huérfana). empresa/ruta en `jornadas`
+  // guardan el mismo texto normalizado que termina en el catálogo, para que las dos fuentes nunca
+  // diverjan en mayúsculas/espacios.
+  const empresaNormalizada = normalizarNombreEmpresa(empresa);
+  const rutaNormalizada = normalizarNombreRuta(ruta);
+  const empresaId = await obtenerOCrearEmpresa(supabase, empresaNormalizada);
+  await obtenerOCrearRuta(supabase, empresaId, rutaNormalizada);
+
   const nuevaFila: TablesInsert<"jornadas"> = {
     chofer_id: choferId,
     chofer_nombre: chofer.nombre,
-    empresa,
+    empresa: empresaNormalizada,
     matricula,
-    ruta,
+    ruta: rutaNormalizada,
     km_inicial: kmInicial,
     combustible_inicial: combustibleInicial,
     // Nunca hay foto real de tacómetro ni GPS real -- Administración no tiene cámara ni ubicación

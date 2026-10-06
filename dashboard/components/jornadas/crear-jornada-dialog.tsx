@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +11,8 @@ import { Select } from "@/components/ui/select";
 import { ChoferDialog } from "@/components/choferes/chofer-dialog";
 import { VehiculoDialog } from "@/components/flota/vehiculo-dialog";
 import { useChoferes } from "@/lib/hooks/use-choferes";
+import { useEmpresas } from "@/lib/hooks/use-empresas";
+import { useRutas } from "@/lib/hooks/use-rutas";
 import { useVehiculos } from "@/lib/hooks/use-vehiculos";
 import { instanteEnEspanaComoUtc } from "@/lib/hora-espana";
 import type {
@@ -76,6 +79,8 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
   const queryClient = useQueryClient();
   const { data: choferesResp } = useChoferes();
   const { data: vehiculosResp } = useVehiculos();
+  const { data: empresasResp } = useEmpresas();
+  const { data: rutasResp } = useRutas();
   const choferesActivos = useMemo(
     () => (choferesResp?.data ?? []).filter((c) => c.activo),
     [choferesResp]
@@ -84,11 +89,35 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
     () => (vehiculosResp?.data ?? []).filter((v) => v.estado === "activo"),
     [vehiculosResp]
   );
+  const nombresEmpresas = useMemo(
+    () => (empresasResp?.data ?? []).map((e) => e.nombre),
+    [empresasResp]
+  );
 
   const [choferId, setChoferId] = useState("");
   const [vehiculoId, setVehiculoId] = useState("");
   const [empresa, setEmpresa] = useState("");
   const [ruta, setRuta] = useState("");
+  // Nombres, no ids: empresa/ruta en jornadas siguen siendo texto libre (spec_catalogo_empresas_rutas.md,
+  // decisión del usuario -- nunca FK), así que lo único que hace falta para filtrar las rutas de
+  // la empresa elegida es su nombre, no un id local. Si la empresa es nueva (todavía no existe en
+  // el catálogo), rutasDeLaEmpresa da [] -- correcto, esa empresa no tiene rutas propias todavía.
+  const rutasDeLaEmpresa = useMemo(() => {
+    const empresaMatch = (empresasResp?.data ?? []).find(
+      (e) => e.nombre.toLocaleLowerCase("es") === empresa.trim().toLocaleLowerCase("es")
+    );
+    if (!empresaMatch) return [];
+    return (rutasResp?.data ?? [])
+      .filter((r) => r.empresa_id === empresaMatch.id)
+      .map((r) => r.nombre);
+  }, [empresasResp, rutasResp, empresa]);
+
+  function manejarCambioEmpresa(nuevaEmpresa: string) {
+    setEmpresa(nuevaEmpresa);
+    // Mismo criterio que CheckInForm.tsx en la app: una ruta ya elegida deja de tener sentido en
+    // cuanto cambia la empresa.
+    setRuta("");
+  }
   const [kmInicial, setKmInicial] = useState("");
   const [combustibleInicial, setCombustibleInicial] = useState("");
   const inicioEspana = useMemo(() => fechaHoraActualEspana(), []);
@@ -232,16 +261,30 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="crear-empresa">Empresa</Label>
-              <Input
-                id="crear-empresa"
-                value={empresa}
-                onChange={(e) => setEmpresa(e.target.value)}
+              <Label htmlFor="crear-empresa-trigger">Empresa</Label>
+              <Combobox
+                idPrefix="crear-empresa"
+                etiqueta="Empresa"
+                placeholder="Elegir o agregar…"
+                textoAgregar="Agregar empresa nueva:"
+                valor={empresa}
+                opciones={nombresEmpresas}
+                onSeleccionar={manejarCambioEmpresa}
               />
             </div>
             <div>
-              <Label htmlFor="crear-ruta">Ruta</Label>
-              <Input id="crear-ruta" value={ruta} onChange={(e) => setRuta(e.target.value)} />
+              <Label htmlFor="crear-ruta-trigger">Ruta</Label>
+              <Combobox
+                idPrefix="crear-ruta"
+                etiqueta="Ruta"
+                placeholder="Elegir o agregar…"
+                textoDeshabilitado="Elegí una empresa primero"
+                textoAgregar="Agregar ruta nueva:"
+                valor={ruta}
+                opciones={rutasDeLaEmpresa}
+                deshabilitado={empresa.trim() === ""}
+                onSeleccionar={setRuta}
+              />
             </div>
           </div>
 

@@ -296,6 +296,47 @@ create policy "chofer lee su propio tracking"
   using (auth.uid() = chofer_id);
 
 -- ============================================================
+-- CATÁLOGO DE EMPRESAS Y RUTAS (schema_v17_catalogo_empresas_rutas.sql, Hallazgo #48)
+-- ============================================================
+-- jornadas.empresa/ruta SIGUEN siendo texto libre, sin FK a este catálogo -- alimenta solo las
+-- listas de selección (Dashboard y app) y evita variantes nuevas hacia adelante, nunca reescribe
+-- el historial. Empresas Y rutas en MAYÚSCULAS (CHECK validado en las dos -- el seed ya cumple;
+-- el de rutas se agregó después de aplicar la migración original, ver el UPDATE + ALTER TABLE
+-- documentado en schema_v17_catalogo_empresas_rutas.sql). Solo escribe el Dashboard
+-- (service_role, bypassa RLS); los choferes solo leen.
+create table public.empresas (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null check (nombre = upper(nombre)),
+  activo boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create unique index empresas_nombre_normalizado on public.empresas (lower(nombre));
+
+create table public.rutas (
+  id uuid primary key default gen_random_uuid(),
+  empresa_id uuid not null references public.empresas(id),
+  nombre text not null check (nombre = upper(nombre)),
+  activo boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create unique index rutas_empresa_nombre_normalizado on public.rutas (empresa_id, lower(nombre));
+
+alter table public.empresas enable row level security;
+alter table public.rutas enable row level security;
+
+create policy "choferes leen el catalogo de empresas"
+  on public.empresas for select
+  to authenticated
+  using (true);
+
+create policy "choferes leen el catalogo de rutas"
+  on public.rutas for select
+  to authenticated
+  using (true);
+
+-- ============================================================
 -- STORAGE (fotos de evidencias: tacómetro inicial/final, hoja de ruta)
 -- ============================================================
 insert into storage.buckets (id, name, public)

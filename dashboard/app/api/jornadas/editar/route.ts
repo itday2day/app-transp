@@ -1,6 +1,12 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
+import {
+  normalizarNombreEmpresa,
+  normalizarNombreRuta,
+  obtenerOCrearEmpresa,
+  obtenerOCrearRuta,
+} from "@/lib/catalogo";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesUpdate } from "@/lib/supabase/database.types";
 import type { CamposEditablesJornada, JornadaRow, TipoIncidencia } from "@/lib/types";
@@ -220,7 +226,9 @@ export async function POST(request: Request) {
   // profundidad, no reemplazable si ya existe).
   const { data: actual, error: errorLectura } = await supabase
     .from("jornadas")
-    .select("chofer_id, estado, fecha_check_in, fotos_incidencia, foto_tacometro_final_url")
+    .select(
+      "chofer_id, empresa, estado, fecha_check_in, fotos_incidencia, foto_tacometro_final_url"
+    )
     .eq("id", cuerpo.id)
     .single();
 
@@ -291,9 +299,24 @@ export async function POST(request: Request) {
     combustibleInicial: cuerpo.combustibleInicial,
     combustibleFinal: cuerpo.combustibleFinal,
   };
-  if (campos.empresa !== undefined) actualizacion.empresa = campos.empresa;
+  // spec_catalogo_empresas_rutas.md (Hallazgo #48), ⚠️4: mismo selector y mismo criterio de alta
+  // en el catálogo que crear-jornada-dialog.tsx -- si Administración corrige empresa y/o ruta,
+  // la versión nueva (o ya existente) queda registrada en el catálogo, y `jornadas.empresa`/`ruta`
+  // guardan el mismo texto normalizado. La ruta necesita saber de qué empresa es incluso si solo
+  // se corrigió la ruta (no la empresa): se usa `actual.empresa` como respaldo.
+  if (campos.empresa !== undefined) {
+    const empresaNormalizada = normalizarNombreEmpresa(campos.empresa);
+    await obtenerOCrearEmpresa(supabase, empresaNormalizada);
+    actualizacion.empresa = empresaNormalizada;
+  }
   if (campos.matricula !== undefined) actualizacion.matricula = campos.matricula;
-  if (campos.ruta !== undefined) actualizacion.ruta = campos.ruta;
+  if (campos.ruta !== undefined) {
+    const empresaDeLaRuta = campos.empresa !== undefined ? actualizacion.empresa! : actual.empresa;
+    const rutaNormalizada = normalizarNombreRuta(campos.ruta);
+    const empresaId = await obtenerOCrearEmpresa(supabase, empresaDeLaRuta);
+    await obtenerOCrearRuta(supabase, empresaId, rutaNormalizada);
+    actualizacion.ruta = rutaNormalizada;
+  }
   if (campos.kmInicial !== undefined) actualizacion.km_inicial = campos.kmInicial;
   if (campos.kmFinal !== undefined) actualizacion.km_final = campos.kmFinal;
   if (campos.combustibleInicial !== undefined)

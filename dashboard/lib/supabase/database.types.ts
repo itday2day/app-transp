@@ -83,6 +83,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      empresas: {
+        Row: {
+          activo: boolean;
+          created_at: string;
+          id: string;
+          nombre: string;
+        };
+        Insert: {
+          activo?: boolean;
+          created_at?: string;
+          id?: string;
+          nombre: string;
+        };
+        Update: {
+          activo?: boolean;
+          created_at?: string;
+          id?: string;
+          nombre?: string;
+        };
+        Relationships: [];
+      };
       jornadas: {
         Row: {
           campos_editados_admin: Json;
@@ -207,6 +228,38 @@ export type Database = {
             columns: ["chofer_id"];
             isOneToOne: false;
             referencedRelation: "choferes";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      rutas: {
+        Row: {
+          activo: boolean;
+          created_at: string;
+          empresa_id: string;
+          id: string;
+          nombre: string;
+        };
+        Insert: {
+          activo?: boolean;
+          created_at?: string;
+          empresa_id: string;
+          id?: string;
+          nombre: string;
+        };
+        Update: {
+          activo?: boolean;
+          created_at?: string;
+          empresa_id?: string;
+          id?: string;
+          nombre?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "rutas_empresa_id_fkey";
+            columns: ["empresa_id"];
+            isOneToOne: false;
+            referencedRelation: "empresas";
             referencedColumns: ["id"];
           },
         ];

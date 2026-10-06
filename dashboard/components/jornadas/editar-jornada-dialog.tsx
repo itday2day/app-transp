@@ -4,11 +4,14 @@ import { CheckCircle2, ImageOff, Save, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { componentesEnEspana, instanteEnEspanaComoUtc } from "@/lib/hora-espana";
+import { useEmpresas } from "@/lib/hooks/use-empresas";
+import { useRutas } from "@/lib/hooks/use-rutas";
 import { MATRICULA_LONGITUD, normalizarMatricula } from "@/lib/vehiculos";
 import type {
   EditarJornadaRequest,
@@ -285,6 +288,28 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
   const [empresa, setEmpresa] = useState(jornada.empresa);
   const [matricula, setMatricula] = useState(jornada.matricula);
   const [ruta, setRuta] = useState(jornada.ruta);
+  const { data: empresasResp } = useEmpresas();
+  const { data: rutasResp } = useRutas();
+  // Mismo criterio que crear-jornada-dialog.tsx (⚠️4 de la Fase 1: el mismo selector en edición,
+  // para no reintroducir variantes al corregir una jornada).
+  const nombresEmpresas = useMemo(
+    () => (empresasResp?.data ?? []).map((e) => e.nombre),
+    [empresasResp]
+  );
+  const rutasDeLaEmpresa = useMemo(() => {
+    const empresaMatch = (empresasResp?.data ?? []).find(
+      (e) => e.nombre.toLocaleLowerCase("es") === empresa.trim().toLocaleLowerCase("es")
+    );
+    if (!empresaMatch) return [];
+    return (rutasResp?.data ?? [])
+      .filter((r) => r.empresa_id === empresaMatch.id)
+      .map((r) => r.nombre);
+  }, [empresasResp, rutasResp, empresa]);
+
+  function manejarCambioEmpresa(nuevaEmpresa: string) {
+    setEmpresa(nuevaEmpresa);
+    setRuta("");
+  }
   const [kmInicial, setKmInicial] = useState(String(jornada.km_inicial));
   const [kmFinal, setKmFinal] = useState(jornada.km_final != null ? String(jornada.km_final) : "");
   const [combustibleInicial, setCombustibleInicial] = useState(String(jornada.combustible_inicial));
@@ -439,8 +464,16 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label htmlFor="edit-empresa">Empresa</Label>
-            <Input id="edit-empresa" value={empresa} onChange={(e) => setEmpresa(e.target.value)} />
+            <Label htmlFor="edit-empresa-trigger">Empresa</Label>
+            <Combobox
+              idPrefix="edit-empresa"
+              etiqueta="Empresa"
+              placeholder="Elegir o agregar…"
+              textoAgregar="Agregar empresa nueva:"
+              valor={empresa}
+              opciones={nombresEmpresas}
+              onSeleccionar={manejarCambioEmpresa}
+            />
           </div>
           <div>
             <Label htmlFor="edit-matricula">Matrícula</Label>
@@ -454,8 +487,18 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
         </div>
 
         <div>
-          <Label htmlFor="edit-ruta">Ruta</Label>
-          <Input id="edit-ruta" value={ruta} onChange={(e) => setRuta(e.target.value)} />
+          <Label htmlFor="edit-ruta-trigger">Ruta</Label>
+          <Combobox
+            idPrefix="edit-ruta"
+            etiqueta="Ruta"
+            placeholder="Elegir o agregar…"
+            textoDeshabilitado="Elegí una empresa primero"
+            textoAgregar="Agregar ruta nueva:"
+            valor={ruta}
+            opciones={rutasDeLaEmpresa}
+            deshabilitado={empresa.trim() === ""}
+            onSeleccionar={setRuta}
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-3">

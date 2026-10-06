@@ -20,14 +20,11 @@ export const EMPRESAS = [
   "VAMOS A COMER",
 ];
 
-// Rutas predeterminadas por empresa. Las empresas que no aparecen aquí (o que
-// no tienen rutas cargadas) solo mostrarán la opción de agregar la ruta a mano.
+// Rutas predeterminadas por empresa -- respaldo de CheckInForm.tsx para cuando todavía no hay
+// caché del catálogo de Supabase (spec_catalogo_empresas_rutas.md, Hallazgo #48: primer uso sin
+// red, antes de la primera descarga). Las empresas que no aparecen aquí (o que no tienen rutas
+// cargadas) solo mostrarán la opción de agregar la ruta a mano.
 export const RUTAS_POR_EMPRESA: Record<string, string[]> = {
   FREDIST: ["Barcelona", "Valles Oriental", "Mataro", "Terrasa"],
   "BTS-MAKRO": ["Sede Prat", "Sede Tarragona"],
 };
-
-export function obtenerRutasDeEmpresa(empresa: string | null): string[] {
-  if (!empresa) return [];
-  return RUTAS_POR_EMPRESA[empresa] ?? [];
-}

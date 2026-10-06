@@ -9,7 +9,8 @@ import { SelectorCombustible } from "@/components/SelectorCombustible";
 import { CapturaFoto } from "@/components/CapturaFoto";
 import { IncidenciasForm } from "@/components/IncidenciasForm";
 import { BotonPrimario } from "@/components/BotonPrimario";
-import { EMPRESAS, obtenerRutasDeEmpresa } from "@/data/empresas";
+import { EMPRESAS, RUTAS_POR_EMPRESA } from "@/data/empresas";
+import { obtenerCatalogoEmpresas, obtenerCatalogoRutasPorEmpresa } from "@/db/catalogoRepo";
 import { IncidenciaData, NivelCombustible, TipoIncidencia } from "@/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
@@ -59,7 +60,31 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
   const [incidencia, setIncidencia] = useState<IncidenciaData>(INCIDENCIA_INICIAL);
   const refRutaManual = useRef<TextInput>(null);
 
-  const rutasDisponibles = obtenerRutasDeEmpresa(empresa);
+  // spec_catalogo_empresas_rutas.md (Hallazgo #48): arranca con la lista incluida en la app
+  // (EMPRESAS/RUTAS_POR_EMPRESA) -- nunca un selector vacío, ni en el primer uso sin red ni
+  // mientras se resuelve esta consulta a SQLite -- y la reemplaza con la caché del catálogo de
+  // Supabase en cuanto está disponible (criterio 10: sin conexión usa la caché ya descargada; sin
+  // caché todavía, esta lista incluida es el único respaldo que queda).
+  const [empresasDisponibles, setEmpresasDisponibles] = useState<string[]>(EMPRESAS);
+  const [rutasPorEmpresa, setRutasPorEmpresa] = useState<Record<string, string[]>>(RUTAS_POR_EMPRESA);
+
+  useEffect(() => {
+    let activo = true;
+    (async () => {
+      const [empresasCache, rutasCache] = await Promise.all([
+        obtenerCatalogoEmpresas(),
+        obtenerCatalogoRutasPorEmpresa(),
+      ]);
+      if (!activo) return;
+      if (empresasCache.length > 0) setEmpresasDisponibles(empresasCache);
+      if (Object.keys(rutasCache).length > 0) setRutasPorEmpresa(rutasCache);
+    })();
+    return () => {
+      activo = false;
+    };
+  }, []);
+
+  const rutasDisponibles = empresa ? (rutasPorEmpresa[empresa] ?? []) : [];
 
   useEffect(() => {
     if (!rutaManual) return;
@@ -98,7 +123,11 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
       // SelectorMatricula en la entrada manual — cubre el camino de "elegir de la lista" de
       // matrículas frecuentes, que no pasa por esa normalización.
       matricula: matricula.toUpperCase().replace(/[^A-Z0-9]/g, ""),
-      ruta: ruta.trim(),
+      // spec_catalogo_empresas_rutas.md (Hallazgo #48): TODA la información de ruta se guarda en
+      // mayúsculas, igual que empresa -- mismo criterio que matricula arriba (red de seguridad
+      // además de lo que ya hace el teclado con autoCapitalize="characters" más abajo). Una ruta
+      // elegida de la lista ya viene en mayúsculas del catálogo; esto cubre la entrada manual.
+      ruta: ruta.trim().toLocaleUpperCase("es"),
       kmInicial: Number(kmInicial),
       combustibleInicial: combustible,
       fotoTacometroInicialUri: fotoTacometro,
@@ -118,7 +147,7 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
           etiqueta={t("checkInForm.empresaEtiqueta")}
           placeholder={t("checkInForm.empresaPlaceholder")}
           valor={empresa}
-          opciones={EMPRESAS}
+          opciones={empresasDisponibles}
           obtenerEtiqueta={(item) => item}
           onSeleccionar={manejarCambioEmpresa}
         />
@@ -131,6 +160,7 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
               placeholder={t("checkInForm.rutaPlaceholderManual")}
               value={ruta}
               onChangeText={setRuta}
+              autoCapitalize="characters"
               returnKeyType="done"
               onSubmitEditing={() => Keyboard.dismiss()}
             />

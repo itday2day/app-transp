@@ -6,6 +6,7 @@ import {
   hayJornadasPendientes,
   sincronizarPendientes,
   sincronizarCambiosDelServidor,
+  descargarCatalogo,
   JornadaCorregida,
 } from "@/services/syncService";
 import { Jornada } from "@/types";
@@ -42,6 +43,9 @@ interface NetworkContextValor {
 const NetworkContext = createContext<NetworkContextValor | undefined>(undefined);
 
 const INTERVALO_REVISION_MS = 15000;
+// spec_catalogo_empresas_rutas.md: 60 minutos entre descargas del catálogo cuando la app vuelve
+// a primer plano -- aparte de la descarga al arranque en frío (ultima=null la primera vez).
+const INTERVALO_CATALOGO_MS = 60 * 60 * 1000;
 
 export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const { usuario } = useAuth();
@@ -107,6 +111,27 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
     }
   }, [usuario]);
 
+  // Catálogo de empresas/rutas (spec_catalogo_empresas_rutas.md, Hallazgo #48): preocupación
+  // separada de sincronizarDescargaSiCorresponde de arriba -- "traer el catálogo compartido" no
+  // tiene nada que ver con "traer cambios de MIS jornadas", aunque las dos corran en el mismo
+  // ciclo de revisión. `catalogoUltimaDescargaRef` (en memoria, no persistido -- se reinicia en
+  // cada arranque frío a propósito) evita volver a pedirlo en cada corrida de 15s: solo descarga
+  // de nuevo si pasó más de INTERVALO_CATALOGO_MS desde la última vez que SÍ se pudo bajar. Nunca
+  // antes de que haya un chofer logueado (ver el `if (!usuario)` de abajo) -- sin sesión, Supabase
+  // ni se consulta.
+  const catalogoUltimaDescargaRef = useRef<number | null>(null);
+  const descargarCatalogoSiCorresponde = useCallback(async () => {
+    if (!usuario) return;
+    const ultima = catalogoUltimaDescargaRef.current;
+    if (ultima != null && Date.now() - ultima < INTERVALO_CATALOGO_MS) return;
+    try {
+      await descargarCatalogo();
+      catalogoUltimaDescargaRef.current = Date.now();
+    } catch (err) {
+      console.error("descargarCatalogoSiCorresponde falló:", err);
+    }
+  }, [usuario]);
+
   useEffect(() => {
     let activo = true;
 
@@ -126,6 +151,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
       if (haySenal) {
         sincronizarAhora();
         sincronizarDescargaSiCorresponde();
+        descargarCatalogoSiCorresponde();
       }
     }
 
@@ -140,7 +166,7 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
       clearInterval(intervalo);
       suscripcion.remove();
     };
-  }, [sincronizarAhora, sincronizarDescargaSiCorresponde]);
+  }, [sincronizarAhora, sincronizarDescargaSiCorresponde, descargarCatalogoSiCorresponde]);
 
   return (
     <NetworkContext.Provider

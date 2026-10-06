@@ -66,6 +66,21 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
 
     CREATE INDEX IF NOT EXISTS idx_jornadas_chofer ON jornadas (choferId);
     CREATE INDEX IF NOT EXISTS idx_jornadas_estado ON jornadas (estado);
+
+    -- spec_catalogo_empresas_rutas.md (Hallazgo #48): caché local del catálogo de Supabase --
+    -- nunca se escribe desde la app (solo el Dashboard da de alta), así que no necesita id propio
+    -- ni sincronizacion/intentosSincronizacion como jornadas. catalogoRepo.ts reemplaza el
+    -- contenido completo en cada descarga exitosa (la tabla es chica, decenas de filas), no hace
+    -- diff incremental.
+    CREATE TABLE IF NOT EXISTS catalogoEmpresas (
+      nombre TEXT PRIMARY KEY NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS catalogoRutas (
+      empresa TEXT NOT NULL,
+      nombre TEXT NOT NULL,
+      PRIMARY KEY (empresa, nombre)
+    );
   `);
 
   await agregarColumnasFaltantes(db);

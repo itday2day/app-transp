@@ -17,6 +17,7 @@ import {
   JornadaRecuperadaRemota,
   obtenerJornadasAbiertas,
 } from "@/db/jornadasRepo";
+import { reemplazarCatalogo, type ParEmpresaRuta } from "@/db/catalogoRepo";
 import { EstadoJornada, Jornada, NivelCombustible, TipoIncidencia, UrlsFotosJornada } from "@/types";
 
 // Exportado: TarjetaJornada.tsx lo usa para distinguir "todavía reintentando solo" de "ya se
@@ -730,4 +731,63 @@ export async function sincronizarCambiosDelServidor(
     `${LOG} terminó para chofer=${choferId}: recuperadas=${recuperadas.length}, cerradasRemoto=${cerradasRemoto.length}, corregidas=${corregidas.length}, historicasRecuperadas=${historicasRecuperadas}`
   );
   return { recuperadas, cerradasRemoto, corregidas };
+}
+
+/** Fila de empresas tal como la devuelve Supabase para el catálogo -- solo `nombre` (y
+ * `activo`, en el WHERE, no en el SELECT: un chofer no tiene por qué ver una empresa
+ * desactivada en el selector, pero una jornada ya guardada con ese texto no se ve afectada,
+ * sigue mostrándose tal cual, ver criterio 12). */
+interface FilaEmpresaCatalogo {
+  nombre: string;
+}
+
+/** `empresas(nombre)` es el embed de PostgREST sobre la FK rutas.empresa_id -> empresas.id --
+ * null solo si esa empresa fue borrada de verdad (no desactivada; `activo=false` todavía deja la
+ * fila), caso que esta spec no contempla (no hay forma de borrar una empresa desde el Dashboard). */
+interface FilaRutaCatalogo {
+  nombre: string;
+  empresas: { nombre: string } | null;
+}
+
+/**
+ * Descarga el catálogo de empresas/rutas de Supabase y reemplaza la caché local completa
+ * (spec_catalogo_empresas_rutas.md, Hallazgo #48). Función separada de
+ * `sincronizarCambiosDelServidor()` a propósito -- "traer el catálogo compartido" es una
+ * preocupación distinta de "traer cambios de MIS jornadas", mismo criterio que ya separa
+ * `sincronizarAhora`/`sincronizarDescargaSiCorresponde` en NetworkContext.tsx. El llamador decide
+ * CUÁNDO correr esto (una vez por sesión fría, o al volver a foreground tras 60 min -- ver
+ * NetworkContext.tsx); esta función no tiene ningún límite de frecuencia propio y siempre pisa
+ * la caché entera (la tabla es chica, no hace falta un diff incremental).
+ *
+ * Tira la excepción en vez de atraparla -- el llamador decide si reintentar y si actualizar su
+ * propio "última descarga correcta" (solo tiene sentido avanzarlo si esto no tiró nada).
+ */
+export async function descargarCatalogo(): Promise<void> {
+  const { data: empresasRemoto, error: errorEmpresas } = await supabase
+    .from("empresas")
+    .select("nombre")
+    .eq("activo", true)
+    .order("nombre", { ascending: true })
+    .returns<FilaEmpresaCatalogo[]>();
+
+  if (errorEmpresas) {
+    throw new Error(`descargarCatalogo: no se pudieron traer las empresas: ${errorEmpresas.message}`);
+  }
+
+  const { data: rutasRemoto, error: errorRutas } = await supabase
+    .from("rutas")
+    .select("nombre, empresas(nombre)")
+    .eq("activo", true)
+    .returns<FilaRutaCatalogo[]>();
+
+  if (errorRutas) {
+    throw new Error(`descargarCatalogo: no se pudieron traer las rutas: ${errorRutas.message}`);
+  }
+
+  const empresas = (empresasRemoto ?? []).map((fila) => fila.nombre);
+  const rutas: ParEmpresaRuta[] = (rutasRemoto ?? [])
+    .filter((fila): fila is FilaRutaCatalogo & { empresas: { nombre: string } } => fila.empresas != null)
+    .map((fila) => ({ empresa: fila.empresas.nombre, nombre: fila.nombre }));
+
+  await reemplazarCatalogo(empresas, rutas);
 }

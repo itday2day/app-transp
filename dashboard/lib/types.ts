@@ -303,6 +303,34 @@ export interface ChoferesResponse {
   data: ChoferRow[];
 }
 
+/** Fila cruda de public.empresas (schema_v17_catalogo_empresas_rutas.sql, Hallazgo #48) —
+ * catálogo compartido con la app móvil, nunca FK de jornadas.empresa (sigue siendo texto libre). */
+export interface EmpresaRow {
+  id: string;
+  nombre: string;
+  activo: boolean;
+  created_at: string;
+}
+
+/** Respuesta de GET /api/empresas. */
+export interface EmpresasResponse {
+  data: EmpresaRow[];
+}
+
+/** Fila cruda de public.rutas — depende de una empresa (empresa_id), nunca FK de jornadas.ruta. */
+export interface RutaRow {
+  id: string;
+  empresa_id: string;
+  nombre: string;
+  activo: boolean;
+  created_at: string;
+}
+
+/** Respuesta de GET /api/rutas. */
+export interface RutasResponse {
+  data: RutaRow[];
+}
+
 /** Campos que carga el administrador al crear un chofer — son los mismos que hoy exige
  * `registrarCuenta()` en la app móvil (RegistroScreen.tsx), menos la contraseña: la genera el
  * servidor (ver spec_alta_choferes_dashboard.md, Fase 1). */
