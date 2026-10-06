@@ -11,6 +11,8 @@ import {
   Platform,
   TextInput,
   LayoutChangeEvent,
+  StyleProp,
+  ImageStyle,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -76,6 +78,71 @@ function FilaUbicacion({
       )}
     </View>
   );
+}
+
+// Hallazgo #46 (spec_jornada_obsoleta_y_fotos_locales.md): una foto puede tener un URI local
+// (archivo del dispositivo) y/o una URL remota (ya subida) — hasta ahora esta pantalla solo
+// intentaba el URI local, y si fallaba (archivo purgado del caché, por ejemplo) quedaba un hueco
+// en blanco sin ningún aviso, porque ningún <Image> tenía onError. Medido en Fase 1: el fallo no
+// siempre es un error limpio — un fetch() sobre un archivo local roto puede quedarse colgado sin
+// resolver ni fallar nunca, así que un onError solo no alcanza; hace falta un tiempo de espera
+// explícito para forzar el siguiente intento.
+const TIEMPO_ESPERA_FOTO_MS = 8000;
+
+// Se instancia con `key={uri}|${url}` desde cada lugar que la usa (ver más abajo) -- así React
+// remonta una instancia nueva (indice y cargadaRef vuelven a cero) cada vez que cambia cuál foto
+// está mostrando, en vez de necesitar un efecto que resetee el estado a mano.
+function FotoEvidencia({ uri, url, estilo }: { uri?: string; url?: string; estilo: StyleProp<ImageStyle> }) {
+  const { t } = useTranslation();
+  // Orden de intento: local primero (no gasta datos del chofer), remota como respaldo.
+  const fuentes = [uri, url].filter((valor): valor is string => Boolean(valor));
+  const [indice, setIndice] = useState(0);
+  const cargadaRef = useRef(false);
+  const fuenteActual = fuentes[indice];
+
+  useEffect(() => {
+    cargadaRef.current = false;
+    if (!fuenteActual) return;
+    const temporizador = setTimeout(() => {
+      if (!cargadaRef.current) setIndice((i) => i + 1);
+    }, TIEMPO_ESPERA_FOTO_MS);
+    return () => clearTimeout(temporizador);
+  }, [fuenteActual]);
+
+  if (!fuenteActual) {
+    return (
+      <View style={[estilo, estilos.fotoNoDisponible]}>
+        <Ionicons name="image-outline" size={22} color={colores.textoSecundario} />
+        <Text style={estilos.textoFotoNoDisponible}>{t("detalleJornada.fotoNoDisponible")}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      // key fuerza un remount limpio al cambiar de fuente -- un <Image> que quedó esperando un
+      // archivo roto no debe arrastrar ningún estado interno a la URL de respaldo.
+      key={fuenteActual}
+      source={{ uri: fuenteActual }}
+      style={estilo}
+      onLoad={() => {
+        cargadaRef.current = true;
+      }}
+      onError={() => setIndice((i) => i + 1)}
+    />
+  );
+}
+
+/** Empareja por índice el arreglo de URIs locales con el de URLs remotas de un mismo grupo de
+ * fotos (incidencia de check-in o de check-out) — son dos columnas paralelas, nunca garantizado
+ * que tengan la misma longitud (una foto recuperada del servidor, Hallazgo #27/#46, puede no
+ * tener URI local). */
+function emparejarFotos(
+  uris: string[] | undefined,
+  urls: string[] | undefined
+): { uri?: string; url?: string }[] {
+  const cantidad = Math.max(uris?.length ?? 0, urls?.length ?? 0);
+  return Array.from({ length: cantidad }, (_, i) => ({ uri: uris?.[i], url: urls?.[i] }));
 }
 
 export default function DetalleJornadaScreen() {
@@ -158,6 +225,12 @@ export default function DetalleJornadaScreen() {
 
   if (!jornada) return null;
 
+  const fotosIncidenciaCheckin = emparejarFotos(
+    jornada.fotosIncidenciaCheckinUris,
+    jornada.fotosIncidenciaCheckin
+  );
+  const fotosIncidencia = emparejarFotos(jornada.fotosIncidenciaUris, jornada.fotosIncidencia);
+
   return (
     <KeyboardAvoidingView style={estilos.pantalla} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <BannerConexion />
@@ -195,11 +268,21 @@ export default function DetalleJornadaScreen() {
             {/* spec_rutas_asignadas_admin.md: una jornada creada_por_admin puede no tener foto
                 real de tacómetro -- ya no es un campo garantizado, a diferencia de una jornada
                 que nació del check-in del propio chofer. */}
-            {jornada.fotoTacometroInicialUri ? (
-              <Image source={{ uri: jornada.fotoTacometroInicialUri }} style={estilos.foto} />
+            {jornada.fotoTacometroInicialUri || jornada.fotoCheckInUrl ? (
+              <FotoEvidencia
+                key={`${jornada.fotoTacometroInicialUri}|${jornada.fotoCheckInUrl}`}
+                uri={jornada.fotoTacometroInicialUri}
+                url={jornada.fotoCheckInUrl}
+                estilo={estilos.foto}
+              />
             ) : null}
-            {jornada.fotoRutaUri ? (
-              <Image source={{ uri: jornada.fotoRutaUri }} style={estilos.foto} />
+            {jornada.fotoRutaUri || jornada.fotoRutaUrl ? (
+              <FotoEvidencia
+                key={`${jornada.fotoRutaUri}|${jornada.fotoRutaUrl}`}
+                uri={jornada.fotoRutaUri}
+                url={jornada.fotoRutaUrl}
+                estilo={estilos.foto}
+              />
             ) : null}
           </View>
           {/* spec_incidencia_en_checkin.md: incidencia estructurada del check-in, mismo patrón que
@@ -214,10 +297,15 @@ export default function DetalleJornadaScreen() {
                 : jornada.incidencias || t("detalleJornada.sinIncidencias")
             }
           />
-          {jornada.fotosIncidenciaCheckinUris && jornada.fotosIncidenciaCheckinUris.length > 0 ? (
+          {fotosIncidenciaCheckin.length > 0 ? (
             <View style={estilos.filaFotosIncidencia}>
-              {jornada.fotosIncidenciaCheckinUris.map((uri) => (
-                <Image key={uri} source={{ uri }} style={estilos.fotoIncidencia} />
+              {fotosIncidenciaCheckin.map((par, i) => (
+                <FotoEvidencia
+                  key={`${i}-${par.uri}|${par.url}`}
+                  uri={par.uri}
+                  url={par.url}
+                  estilo={estilos.fotoIncidencia}
+                />
               ))}
             </View>
           ) : null}
@@ -240,8 +328,13 @@ export default function DetalleJornadaScreen() {
               lat={jornada.latFinal}
               lng={jornada.lngFinal}
             />
-            {jornada.fotoTacometroFinalUri ? (
-              <Image source={{ uri: jornada.fotoTacometroFinalUri }} style={estilos.foto} />
+            {jornada.fotoTacometroFinalUri || jornada.fotoCheckOutUrl ? (
+              <FotoEvidencia
+                key={`${jornada.fotoTacometroFinalUri}|${jornada.fotoCheckOutUrl}`}
+                uri={jornada.fotoTacometroFinalUri}
+                url={jornada.fotoCheckOutUrl}
+                estilo={estilos.foto}
+              />
             ) : null}
             <FilaTexto
               etiqueta={t("detalleJornada.incidencia")}
@@ -251,10 +344,15 @@ export default function DetalleJornadaScreen() {
                   : t("detalleJornada.sinIncidencias")
               }
             />
-            {jornada.fotosIncidenciaUris && jornada.fotosIncidenciaUris.length > 0 ? (
+            {fotosIncidencia.length > 0 ? (
               <View style={estilos.filaFotosIncidencia}>
-                {jornada.fotosIncidenciaUris.map((uri) => (
-                  <Image key={uri} source={{ uri }} style={estilos.fotoIncidencia} />
+                {fotosIncidencia.map((par, i) => (
+                  <FotoEvidencia
+                    key={`${i}-${par.uri}|${par.url}`}
+                    uri={par.uri}
+                    url={par.url}
+                    estilo={estilos.fotoIncidencia}
+                  />
                 ))}
               </View>
             ) : null}
@@ -392,6 +490,21 @@ const estilos = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: radios.sm,
+  },
+  // Hallazgo #46: mismo radio/fondo que un <Image> real (foto o fotoIncidencia, según cuál de
+  // los dos estilos reciba via la prop `estilo` de FotoEvidencia) -- el placeholder ocupa
+  // exactamente el mismo lugar que hubiera ocupado la foto, nunca colapsa el layout.
+  fotoNoDisponible: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: espaciado.xs,
+    backgroundColor: colores.fondo,
+    borderWidth: 1,
+    borderColor: colores.borde,
+  },
+  textoFotoNoDisponible: {
+    ...tipografia.ayuda,
+    textAlign: "center",
   },
   textoAbierta: {
     ...tipografia.cuerpo,

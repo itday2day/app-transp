@@ -15,6 +15,7 @@ import {
   idsJornadasExistentes,
   insertarJornadaRecuperada,
   JornadaRecuperadaRemota,
+  obtenerJornadasAbiertas,
 } from "@/db/jornadasRepo";
 import { EstadoJornada, Jornada, NivelCombustible, TipoIncidencia, UrlsFotosJornada } from "@/types";
 
@@ -358,6 +359,29 @@ function filaRecuperadaAJornadaRemota(
 const COLUMNAS_JORNADA_RECUPERADA =
   "id, chofer_nombre, empresa, matricula, ruta, incidencias, km_inicial, combustible_inicial, foto_tacometro_inicial_url, foto_ruta_url, lat_inicial, lng_inicial, fecha_check_in, tuvo_incidencia_checkin, tipo_incidencia_checkin, detalle_incidencia_checkin, fotos_incidencia_checkin, km_final, combustible_final, foto_tacometro_final_url, lat_final, lng_final, fecha_check_out, tuvo_incidencia, tipo_incidencia, detalle_incidencia, fotos_incidencia, creada_por_admin, creada_por";
 
+// Extraído para reusar la misma lista de columnas entre la Parte 1 (correcciones por editado_en)
+// y la Parte 4 más abajo (Hallazgo #46) — las dos arman un FilaJornadaCorregidaRemota.
+const COLUMNAS_JORNADA_CORREGIDA =
+  "id, empresa, matricula, ruta, km_inicial, km_final, combustible_inicial, combustible_final, lat_final, lng_final, foto_tacometro_final_url, tuvo_incidencia, tipo_incidencia, detalle_incidencia, fotos_incidencia, fecha_check_out, estado, campos_editados_admin, editado_en";
+
+// Mismo orden que el switch de aplicarCorreccionesAdmin() en jornadasRepo.ts, acotado a los
+// campos que de verdad cambian al cerrar una jornada -- empresa/matricula/ruta/km_inicial/
+// combustible_inicial ya están bien localmente (este teléfono hizo el check-in), no hace falta
+// tocarlos.
+const CAMPOS_CIERRE: string[] = [
+  "estado",
+  "fecha_check_out",
+  "km_final",
+  "combustible_final",
+  "lat_final",
+  "lng_final",
+  "foto_tacometro_final_url",
+  "tuvo_incidencia",
+  "tipo_incidencia",
+  "detalle_incidencia",
+  "fotos_incidencia",
+];
+
 /** Epoch (1970) como valor por defecto — "nunca corrió esta consulta para este chofer todavía",
  * así la primera corrida en un teléfono nuevo trae TODO lo que tenga `editado_en`, sin importar
  * cuán viejo. Persistida con `almacenamientoSeguro` (no en SQLite): tiene que sobrevivir aunque se
@@ -440,9 +464,7 @@ export async function sincronizarCambiosDelServidor(
 
   const { data: corregidasRemoto, error: errorCorregidas } = await supabase
     .from("jornadas")
-    .select(
-      "id, empresa, matricula, ruta, km_inicial, km_final, combustible_inicial, combustible_final, lat_final, lng_final, foto_tacometro_final_url, tuvo_incidencia, tipo_incidencia, detalle_incidencia, fotos_incidencia, fecha_check_out, estado, campos_editados_admin, editado_en"
-    )
+    .select(COLUMNAS_JORNADA_CORREGIDA)
     .eq("chofer_id", choferId)
     .gt("editado_en", marcaAgua)
     .returns<FilaJornadaCorregidaRemota[]>();
@@ -637,6 +659,70 @@ export async function sincronizarCambiosDelServidor(
         }
       }
       await guardarValor(claveRecuperacionHistorica(choferId), "true");
+    }
+  }
+
+  // Parte 4 (Hallazgo #46, spec_jornada_obsoleta_y_fotos_locales.md): una jornada que ESTE
+  // dispositivo creó y sincronizó como abierta, pero que otro camino (otro teléfono del mismo
+  // chofer, nunca el Dashboard) cerró después. La Parte 1 no la detecta: solo mira `editado_en`,
+  // que únicamente escribe el Dashboard (`subirJornada()`, el UPSERT que hace la propia app, nunca
+  // lo setea). La Parte 2/3 tampoco: ya existe localmente, así que `idsJornadasExistentes` las
+  // descarta. Acotada por id, nunca "todo el historial" (mismo criterio que el resto del archivo,
+  // ver el comentario grande más arriba) -- solo las jornadas que ESTE teléfono ya tiene como
+  // abiertas, que por definición son pocas (Fase 1: sin límite de código, 0 en producción al
+  // medir). Misma guarda que la Parte 1: solo se toca una fila `sincronizacion = 'sincronizado'`,
+  // nunca una con cambios locales todavía sin subir.
+  const abiertasLocales = (await obtenerJornadasAbiertas(choferId)).filter(
+    (j) => j.sincronizacion === "sincronizado"
+  );
+  if (abiertasLocales.length > 0) {
+    const { data: cerradasEnServidor, error: errorCerradasServidor } = await supabase
+      .from("jornadas")
+      .select(COLUMNAS_JORNADA_CORREGIDA)
+      .in(
+        "id",
+        abiertasLocales.map((j) => j.id)
+      )
+      .eq("estado", "cerrada")
+      .returns<FilaJornadaCorregidaRemota[]>();
+
+    if (errorCerradasServidor) {
+      console.error(
+        `sincronizarCambiosDelServidor: no se pudo consultar el cierre remoto de las jornadas abiertas localmente del chofer ${choferId}:`,
+        errorCerradasServidor
+      );
+    } else {
+      for (const fila of cerradasEnServidor ?? []) {
+        const remoto: JornadaCorregidaRemota = {
+          id: fila.id,
+          empresa: fila.empresa,
+          matricula: fila.matricula,
+          ruta: fila.ruta,
+          kmInicial: fila.km_inicial,
+          kmFinal: fila.km_final,
+          combustibleInicial: fila.combustible_inicial,
+          combustibleFinal: fila.combustible_final,
+          latFinal: fila.lat_final,
+          lngFinal: fila.lng_final,
+          fotoTacometroFinalUrl: fila.foto_tacometro_final_url,
+          tuvoIncidencia: fila.tuvo_incidencia,
+          tipoIncidencia: fila.tipo_incidencia,
+          detalleIncidencia: fila.detalle_incidencia,
+          fotosIncidencia: fila.fotos_incidencia,
+          fechaCheckOut: fila.fecha_check_out,
+          estado: fila.estado,
+          camposCorregidos: CAMPOS_CIERRE,
+        };
+        try {
+          await aplicarCorreccionesAdmin(remoto);
+          cerradasRemoto.push(fila.id);
+        } catch (err) {
+          console.error(
+            `sincronizarCambiosDelServidor: no se pudo aplicar el cierre remoto de la jornada ${fila.id}:`,
+            err
+          );
+        }
+      }
     }
   }
 
