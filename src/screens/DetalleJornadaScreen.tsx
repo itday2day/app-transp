@@ -26,12 +26,20 @@ import { CheckOutForm, ValoresCheckOutForm } from "@/components/CheckOutForm";
 import { CLAVE_TIPO_INCIDENCIA } from "@/components/IncidenciasForm";
 import { BannerConexion } from "@/components/BannerConexion";
 import { BotonPrimario } from "@/components/BotonPrimario";
+import { TextoEnlace } from "@/components/TextoEnlace";
+import { VisorFotoAmpliada } from "@/components/VisorFotoAmpliada";
+import { useFuenteFoto } from "@/hooks/useFuenteFoto";
 import { Jornada } from "@/types";
 import { textoEmpresa } from "@/utils/jornada";
 import { DetalleJornadaRouteProp, RootStackNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios, ESPACIO_EXTRA_TECLADO } from "@/theme/spacing";
+
+interface FotoPar {
+  uri?: string;
+  url?: string;
+}
 
 function Fila({ etiqueta, valor }: { etiqueta: string; valor: string }) {
   return (
@@ -69,10 +77,7 @@ function FilaUbicacion({
     <View style={estilos.fila}>
       <Text style={estilos.filaEtiqueta}>{etiqueta}</Text>
       {lat != null && lng != null ? (
-        <Pressable accessibilityRole="button" onPress={() => abrirMapa(lat, lng)} style={estilos.enlaceMapa}>
-          <Ionicons name="location-outline" size={16} color={colores.primario} />
-          <Text style={estilos.textoEnlaceMapa}>{t("detalleJornada.verEnMapa")}</Text>
-        </Pressable>
+        <TextoEnlace texto={t("detalleJornada.verEnMapa")} onPress={() => abrirMapa(lat, lng)} externo />
       ) : (
         <Text style={estilos.textoUbicacionFaltante}>{t("detalleJornada.ubicacionNoRegistrada")}</Text>
       )}
@@ -80,34 +85,26 @@ function FilaUbicacion({
   );
 }
 
-// Hallazgo #46 (spec_jornada_obsoleta_y_fotos_locales.md): una foto puede tener un URI local
-// (archivo del dispositivo) y/o una URL remota (ya subida) — hasta ahora esta pantalla solo
-// intentaba el URI local, y si fallaba (archivo purgado del caché, por ejemplo) quedaba un hueco
-// en blanco sin ningún aviso, porque ningún <Image> tenía onError. Medido en Fase 1: el fallo no
-// siempre es un error limpio — un fetch() sobre un archivo local roto puede quedarse colgado sin
-// resolver ni fallar nunca, así que un onError solo no alcanza; hace falta un tiempo de espera
-// explícito para forzar el siguiente intento.
-const TIEMPO_ESPERA_FOTO_MS = 8000;
-
 // Se instancia con `key={uri}|${url}` desde cada lugar que la usa (ver más abajo) -- así React
-// remonta una instancia nueva (indice y cargadaRef vuelven a cero) cada vez que cambia cuál foto
-// está mostrando, en vez de necesitar un efecto que resetee el estado a mano.
-function FotoEvidencia({ uri, url, estilo }: { uri?: string; url?: string; estilo: StyleProp<ImageStyle> }) {
+// remonta una instancia nueva (useFuenteFoto vuelve a cero) cada vez que cambia cuál foto está
+// mostrando, en vez de necesitar un efecto que resetee el estado a mano.
+//
+// spec_mejoras_carga_jornada_fotos_enlaces.md (Pedido 3): `onAbrir` solo se conecta cuando ya hay
+// una fuente mostrándose con éxito (criterio 10: nunca abrir el visor sobre un hueco) -- mientras
+// se está probando una fuente o ninguna cargó, la miniatura no es tocable.
+function FotoEvidencia({
+  uri,
+  url,
+  estilo,
+  onAbrir,
+}: {
+  uri?: string;
+  url?: string;
+  estilo: StyleProp<ImageStyle>;
+  onAbrir?: () => void;
+}) {
   const { t } = useTranslation();
-  // Orden de intento: local primero (no gasta datos del chofer), remota como respaldo.
-  const fuentes = [uri, url].filter((valor): valor is string => Boolean(valor));
-  const [indice, setIndice] = useState(0);
-  const cargadaRef = useRef(false);
-  const fuenteActual = fuentes[indice];
-
-  useEffect(() => {
-    cargadaRef.current = false;
-    if (!fuenteActual) return;
-    const temporizador = setTimeout(() => {
-      if (!cargadaRef.current) setIndice((i) => i + 1);
-    }, TIEMPO_ESPERA_FOTO_MS);
-    return () => clearTimeout(temporizador);
-  }, [fuenteActual]);
+  const { fuenteActual, alCargar, alFallar } = useFuenteFoto(uri, url);
 
   if (!fuenteActual) {
     return (
@@ -118,18 +115,28 @@ function FotoEvidencia({ uri, url, estilo }: { uri?: string; url?: string; estil
     );
   }
 
-  return (
+  const imagen = (
     <Image
       // key fuerza un remount limpio al cambiar de fuente -- un <Image> que quedó esperando un
       // archivo roto no debe arrastrar ningún estado interno a la URL de respaldo.
       key={fuenteActual}
       source={{ uri: fuenteActual }}
       style={estilo}
-      onLoad={() => {
-        cargadaRef.current = true;
-      }}
-      onError={() => setIndice((i) => i + 1)}
+      onLoad={alCargar}
+      onError={alFallar}
     />
+  );
+
+  if (!onAbrir) return imagen;
+  return (
+    // `estilo` también va acá: FotoEvidencia se usa como hijo directo de un contenedor flex-row
+    // (las 2 fotos de check-in lado a lado, o la grilla de incidencias) y depende de `flex`/ancho
+    // fijo propios -- si solo el <Image> de adentro los tiene, este Pressable (sin estilo) se
+    // convierte en el verdadero hijo del row y colapsa a ancho ~0, dejando la foto invisible
+    // aunque cargue bien (ver onLoad arriba: carga, pero no se ve).
+    <Pressable accessibilityRole="button" onPress={onAbrir} style={estilo}>
+      {imagen}
+    </Pressable>
   );
 }
 
@@ -152,6 +159,7 @@ export default function DetalleJornadaScreen() {
   const [jornada, setJornada] = useState<Jornada | null>(null);
   const [mostrarFormularioCheckOut, setMostrarFormularioCheckOut] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const [visor, setVisor] = useState<{ fotos: FotoPar[]; indice: number } | null>(null);
   const { capturarUbicacion, obteniendo: obteniendoUbicacion } = useUbicacion();
   const { conectado, jornadasCorregidas } = useNetwork();
   const refScroll = useRef<ScrollView>(null);
@@ -274,6 +282,12 @@ export default function DetalleJornadaScreen() {
                 uri={jornada.fotoTacometroInicialUri}
                 url={jornada.fotoCheckInUrl}
                 estilo={estilos.foto}
+                onAbrir={() =>
+                  setVisor({
+                    fotos: [{ uri: jornada.fotoTacometroInicialUri, url: jornada.fotoCheckInUrl }],
+                    indice: 0,
+                  })
+                }
               />
             ) : null}
             {jornada.fotoRutaUri || jornada.fotoRutaUrl ? (
@@ -282,6 +296,9 @@ export default function DetalleJornadaScreen() {
                 uri={jornada.fotoRutaUri}
                 url={jornada.fotoRutaUrl}
                 estilo={estilos.foto}
+                onAbrir={() =>
+                  setVisor({ fotos: [{ uri: jornada.fotoRutaUri, url: jornada.fotoRutaUrl }], indice: 0 })
+                }
               />
             ) : null}
           </View>
@@ -305,6 +322,7 @@ export default function DetalleJornadaScreen() {
                   uri={par.uri}
                   url={par.url}
                   estilo={estilos.fotoIncidencia}
+                  onAbrir={() => setVisor({ fotos: fotosIncidenciaCheckin, indice: i })}
                 />
               ))}
             </View>
@@ -334,6 +352,12 @@ export default function DetalleJornadaScreen() {
                 uri={jornada.fotoTacometroFinalUri}
                 url={jornada.fotoCheckOutUrl}
                 estilo={estilos.foto}
+                onAbrir={() =>
+                  setVisor({
+                    fotos: [{ uri: jornada.fotoTacometroFinalUri, url: jornada.fotoCheckOutUrl }],
+                    indice: 0,
+                  })
+                }
               />
             ) : null}
             <FilaTexto
@@ -352,6 +376,7 @@ export default function DetalleJornadaScreen() {
                     uri={par.uri}
                     url={par.url}
                     estilo={estilos.fotoIncidencia}
+                    onAbrir={() => setVisor({ fotos: fotosIncidencia, indice: i })}
                   />
                 ))}
               </View>
@@ -394,6 +419,12 @@ export default function DetalleJornadaScreen() {
               }`}
         </Text>
       </ScrollView>
+      <VisorFotoAmpliada
+        visible={visor != null}
+        fotos={visor?.fotos ?? []}
+        indiceInicial={visor?.indice ?? 0}
+        onCerrar={() => setVisor(null)}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -455,16 +486,6 @@ const estilos = StyleSheet.create({
     fontWeight: "600",
     marginTop: espaciado.xs,
     flexShrink: 1,
-  },
-  enlaceMapa: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: espaciado.xs,
-  },
-  textoEnlaceMapa: {
-    ...tipografia.cuerpo,
-    color: colores.primario,
-    fontWeight: "600",
   },
   textoUbicacionFaltante: {
     ...tipografia.cuerpo,

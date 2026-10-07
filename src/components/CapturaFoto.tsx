@@ -7,6 +7,7 @@ import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios } from "@/theme/spacing";
 import { comprimirImagen } from "@/services/imageService";
+import { VisorFotoAmpliada } from "@/components/VisorFotoAmpliada";
 
 interface Props {
   etiqueta: string;
@@ -18,6 +19,7 @@ interface Props {
 export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada }: Props) {
   const { t } = useTranslation();
   const [procesando, setProcesando] = useState(false);
+  const [visorAbierto, setVisorAbierto] = useState(false);
 
   async function tomarFoto() {
     const permiso = await ImagePicker.requestCameraPermissionsAsync();
@@ -47,7 +49,7 @@ export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada }: Props) {
       <Text style={estilos.etiqueta}>{etiqueta}</Text>
       {ayuda ? <Text style={estilos.ayuda}>{ayuda}</Text> : null}
 
-      <Pressable onPress={tomarFoto} style={estilos.zonaCaptura}>
+      <Pressable onPress={uri ? () => setVisorAbierto(true) : tomarFoto} style={estilos.zonaCaptura}>
         {uri ? (
           <Image source={{ uri }} style={estilos.imagen} />
         ) : (
@@ -65,6 +67,13 @@ export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada }: Props) {
           <Text style={estilos.enlaceRepetir}>{t("capturaFoto.tomarOtra")}</Text>
         </Pressable>
       ) : null}
+
+      <VisorFotoAmpliada
+        visible={visorAbierto}
+        fotos={uri ? [{ uri }] : []}
+        indiceInicial={0}
+        onCerrar={() => setVisorAbierto(false)}
+      />
     </View>
   );
 }

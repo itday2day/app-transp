@@ -2502,6 +2502,49 @@ System (`tokens.json`) y el layout validado en el canvas "Day2Day — Primera mu
   visualmente contra el Dashboard/app reales desde este entorno (sin navegador ni dispositivo
   disponible) — pendiente de la prueba del usuario, igual que el Hallazgo #40.
 
+**Hallazgo #49 — visor de fotos ampliadas y componente único de enlace (2026-10-07)**: Pedidos 3 y
+4 de `spec_mejoras_carga_jornada_fotos_enlaces.md`. Solo `src/` (app móvil); no toca `dashboard/`,
+`supabase/` ni `server/mock/` (Pedidos 1 y 2, de `dashboard/`, quedaron aplazados).
+
+- **Visor de pantalla completa** (`VisorFotoAmpliada.tsx`, nuevo): zoom por doble toque + arrastrar
+  en vez de pinch con dos dedos — decisión tomada en la Fase 1 porque
+  `react-native-gesture-handler`/`react-native-reanimated` no estaban instalados, y sumar
+  cualquiera de las dos hubiera obligado a un build de EAS nuevo. Todo con `Modal`/`PanResponder`/
+  `Animated`, ya parte de `react-native`. X visible y back de Android (`onRequestClose` del propio
+  `Modal`) cierran sin desmontar la pantalla de atrás. `useFuenteFoto.ts` (nuevo) extrae la cadena
+  de respaldo local→remoto→"no disponible" del Hallazgo #46 para que el visor siga exactamente lo
+  que la miniatura ya mostró, sin reintentar desde cero. Conectado en `DetalleJornadaScreen.tsx`
+  (3 fotos individuales + ambas galerías de incidencia, con swipe entre fotos de una misma galería),
+  `CapturaFoto.tsx` y `GaleriaFotosIncidencia.tsx` (miniaturas de check-in/check-out antes de
+  enviar).
+- ⚠️ **Regresión real durante la implementación, encontrada por el usuario en dispositivo (iPhone,
+  dev build), no en code review**: las fotos de check-in de una jornada cerrada real no se veían
+  (las de check-out sí). Medido con instrumentación `[diag]` temporal (retirada al cerrar el
+  hallazgo): el `<Image>` cargaba bien (`onLoad` se disparaba), pero el `Pressable` nuevo que lo
+  envuelve para habilitar el toque-para-ampliar no tenía el estilo (`flex: 1`/alto fijo) que
+  `estilo` le daba al `<Image>` — ese estilo quedó aplicado a un hijo que ya no es el hijo directo
+  de la fila flex (`filaFotos`), así que el `Pressable` colapsaba a ancho ~0. El check-out
+  "funcionaba" por casualidad (esa foto vive en una columna, no en esa fila de 2, y el
+  `alignItems: "stretch"` por defecto la salvaba). Lección: cuando se envuelve un elemento ya
+  posicionado por un padre flex (`flex`, ancho/alto fijo) en un `Pressable`/`View` nuevo para
+  agregarle una interacción, ese wrapper necesita el MISMO estilo de tamaño — I/O visual silenciosa,
+  sin error de consola, solo detectable mirando el dispositivo real.
+- **Token `link` y componente único de enlace**: `colores.link = "#2F6AA3"` (contraste 5.66:1 sobre
+  `#ffffff`, distinto del `#2563eb` que ya usa el trazado de ruta del mapa del Dashboard, para no
+  confundir los dos). `TextoEnlace.tsx` (nuevo) es el único componente de enlace de la app (mismo
+  criterio que los Hallazgos #20/#21/#24: un solo patrón, nunca dos compitiendo) — área táctil
+  ≥44px, ícono "abre fuera" cuando el enlace sale de la app. Reemplaza el texto en negrita con
+  `colores.primario` (negro, pensado para botones, no para señalar "esto se puede tocar") que
+  usaban "¿Olvidaste o querés cambiar tu contraseña?" (login) y "Ver en mapa" (detalle de
+  jornada) — este último además cambia su ícono de `location-outline` a uno de "abre fuera", ya que
+  es el único enlace de la app que de verdad sale de ella (confirmado por Fase 1: `Linking.openURL`
+  aparece una sola vez en todo `src/`, en `mapasService.ts`).
+- **Verificación**: `tsc`/`lint`/`format:check` limpios. Probado en dispositivo real (iPhone, dev
+  build) por el usuario: fotos de check-in e incidencia visibles y ampliables (zoom/arrastre, swipe
+  entre fotos de una galería, X y back cierran sin regresión), miniaturas de check-in/check-out
+  ampliables antes de enviar, enlace de login y "Ver en mapa" con el color/ícono nuevos sin romper
+  su función original.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

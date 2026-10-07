@@ -16,4 +16,10 @@ export const colores = {
   borde: "#e3e2e0",
   deshabilitado: "#c9c8c5",
   offline: "#8f5a00",
+  // spec_mejoras_carga_jornada_fotos_enlaces.md (Pedido 4): antes los enlaces usaban `primario`
+  // (negro, pensado para botones/texto, no para señalar "esto se puede tocar"). Azul distinto del
+  // #2563eb que ya usa el trazado de ruta en el mapa del Dashboard, para no confundir los dos.
+  // Contraste medido: 5.66:1 sobre #ffffff y 5.28:1 sobre #f7f7f7 -- ambos por encima del 4.5:1 de
+  // WCAG AA.
+  link: "#2F6AA3",
 };

@@ -1,6 +1,10 @@
 {
   "comun": {
-    "cancelar": "Cancelar"
+    "cancelar": "Cancelar",
+    "abreFuera": "Se abre fuera de la app"
+  },
+  "visorFoto": {
+    "cerrar": "Cerrar"
   },
   "selectorIdioma": {
     "etiquetaEs": "Español",

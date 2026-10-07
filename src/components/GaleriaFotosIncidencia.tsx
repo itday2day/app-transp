@@ -7,6 +7,7 @@ import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios } from "@/theme/spacing";
 import { comprimirImagen } from "@/services/imageService";
+import { VisorFotoAmpliada } from "@/components/VisorFotoAmpliada";
 
 interface Props {
   fotos: string[];
@@ -19,6 +20,7 @@ interface Props {
 export function GaleriaFotosIncidencia({ fotos, onCambiar }: Props) {
   const { t } = useTranslation();
   const [procesando, setProcesando] = useState(false);
+  const [indiceVisor, setIndiceVisor] = useState<number | null>(null);
 
   async function agregarFoto() {
     const permiso = await ImagePicker.requestCameraPermissionsAsync();
@@ -51,7 +53,9 @@ export function GaleriaFotosIncidencia({ fotos, onCambiar }: Props) {
       <View style={estilos.grilla}>
         {fotos.map((uri, indice) => (
           <View key={uri} style={estilos.miniaturaContenedor}>
-            <Image source={{ uri }} style={estilos.miniatura} />
+            <Pressable accessibilityRole="button" onPress={() => setIndiceVisor(indice)}>
+              <Image source={{ uri }} style={estilos.miniatura} />
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t("incidencias.fotoEliminar")}
@@ -70,6 +74,13 @@ export function GaleriaFotosIncidencia({ fotos, onCambiar }: Props) {
           </Text>
         </Pressable>
       </View>
+
+      <VisorFotoAmpliada
+        visible={indiceVisor != null}
+        fotos={fotos.map((uri) => ({ uri }))}
+        indiceInicial={indiceVisor ?? 0}
+        onCerrar={() => setIndiceVisor(null)}
+      />
     </View>
   );
 }

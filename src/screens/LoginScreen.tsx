@@ -1,20 +1,12 @@
 import React, { useState } from "react";
-import {
-  View,
-  Text,
-  Image,
-  Pressable,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-} from "react-native";
+import { View, Text, Image, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
 import { CampoTexto } from "@/components/CampoTexto";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { LanguageSelector } from "@/components/LanguageSelector";
+import { TextoEnlace } from "@/components/TextoEnlace";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
@@ -113,9 +105,12 @@ export default function LoginScreen() {
             estilo={estilos.boton}
           />
 
-          <Pressable onPress={() => navigation.navigate("CambiarContrasena")}>
-            <Text style={estilos.enlace}>{t("login.ayudaContrasena")}</Text>
-          </Pressable>
+          <View style={estilos.contenedorEnlace}>
+            <TextoEnlace
+              texto={t("login.ayudaContrasena")}
+              onPress={() => navigation.navigate("CambiarContrasena")}
+            />
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -174,11 +169,7 @@ const estilos = StyleSheet.create({
     marginBottom: espaciado.md,
     textAlign: "center",
   },
-  enlace: {
-    ...tipografia.cuerpo,
-    color: colores.primario,
-    fontWeight: "600",
-    textAlign: "center",
+  contenedorEnlace: {
     marginTop: espaciado.lg,
   },
 });
