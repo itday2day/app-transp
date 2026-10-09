@@ -1,80 +1,86 @@
-import React, { useRef, type RefObject } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  ScrollView,
-  findNodeHandle,
-  UIManager,
-} from "react-native";
+import React, { forwardRef, useRef } from "react";
+import { View, Text, Pressable, StyleSheet, TextInput } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { GaleriaFotosIncidencia } from "@/components/GaleriaFotosIncidencia";
-import { IncidenciaData, TipoIncidencia } from "@/types";
+import { IncidenciaData, TipoIncidencia, TipoIncidenciaCheckin } from "@/types";
 import { ClaveTraduccion } from "@/i18n";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios } from "@/theme/spacing";
 
-const TIPOS_INCIDENCIA: TipoIncidencia[] = ["Avería vehículo", "Tráfico/Retraso", "Cliente ausente", "Otro"];
+// spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): el check-in y el check-out ofrecen
+// tipos y una pregunta distintos -- parametrizado por props en vez de duplicar el componente.
+export const TIPOS_INCIDENCIA_CHECKOUT: TipoIncidencia[] = [
+  "Avería vehículo",
+  "Tráfico/Retraso",
+  "Cliente ausente",
+  "Otro",
+];
 
-// El valor almacenado de TipoIncidencia se mantiene en español (es el dato
-// persistido en SQLite); esta tabla solo mapea cada valor a la clave de
-// traducción usada para mostrarlo en pantalla.
-export const CLAVE_TIPO_INCIDENCIA: Record<TipoIncidencia, ClaveTraduccion> = {
+export const TIPOS_INCIDENCIA_CHECKIN: TipoIncidenciaCheckin[] = [
+  "Mercancía dañada",
+  "Faltante/Sobrante",
+  "Temperatura fuera de rango",
+  "Pedido/Documentación",
+  "Avería vehículo",
+  "Otro",
+];
+
+// El valor almacenado se mantiene en español (es el dato persistido en SQLite); esta tabla solo
+// mapea cada valor a la clave de traducción usada para mostrarlo en pantalla. Dos mapas, no uno:
+// "Avería vehículo"/"Otro" llevan una etiqueta distinta según el contexto, aunque el valor
+// guardado sea el mismo (nunca dos valores para la misma idea en los reportes).
+export const CLAVE_TIPO_INCIDENCIA_CHECKOUT: Record<TipoIncidencia, ClaveTraduccion> = {
   "Avería vehículo": "incidencias.tipoAveria",
   "Tráfico/Retraso": "incidencias.tipoTrafico",
   "Cliente ausente": "incidencias.tipoClienteAusente",
   Otro: "incidencias.tipoOtro",
 };
 
+// "Tráfico/Retraso"/"Cliente ausente" ya no se ofrecen en el check-in (ver TIPOS_INCIDENCIA_CHECKIN
+// arriba) pero siguen siendo valores válidos en filas históricas -- DetalleJornadaScreen necesita
+// poder mostrarlas igual, con la misma etiqueta que ya tenían.
+export const CLAVE_TIPO_INCIDENCIA_CHECKIN: Record<TipoIncidenciaCheckin, ClaveTraduccion> = {
+  "Avería vehículo": "incidencias.checkin.tipoAveria",
+  "Tráfico/Retraso": "incidencias.tipoTrafico",
+  "Cliente ausente": "incidencias.tipoClienteAusente",
+  Otro: "incidencias.checkin.tipoOtro",
+  "Mercancía dañada": "incidencias.checkin.tipoMercanciaDanada",
+  "Faltante/Sobrante": "incidencias.checkin.tipoFaltanteSobrante",
+  "Temperatura fuera de rango": "incidencias.checkin.tipoTemperatura",
+  "Pedido/Documentación": "incidencias.checkin.tipoPedidoDocumentacion",
+};
+
 interface Props {
+  pregunta: ClaveTraduccion;
+  tipos: TipoIncidenciaCheckin[];
+  etiquetasTipo: Record<string, ClaveTraduccion>;
   valor: IncidenciaData;
   onCambiar: (valor: IncidenciaData) => void;
-  /** ScrollView de la pantalla contenedora (DetalleJornadaScreen) — se usa
-   * para traer el campo de detalle a la vista cuando se enfoca. */
-  scrollViewRef: RefObject<ScrollView | null>;
 }
 
-export function IncidenciasForm({ valor, onCambiar, scrollViewRef }: Props) {
+// El `ref` expuesto apunta al campo de detalle -- es el único dato de este componente que puede
+// quedar "faltante" al enviar (ver nota en CheckInForm.tsx/CheckOutForm.tsx: elegir un tipo nunca
+// fue obligatorio, solo el detalle cuando el tipo es "Otro", y eso ya es así desde antes de este
+// hallazgo). El formulario contenedor usa este ref para desplazarse y enfocar cuando el detalle es
+// el primer campo pendiente. El desplazamiento al enfocar por un toque normal (no por ese aviso) lo
+// resuelve CampoTexto solo, vía ProveedorEnfoqueTeclado (spec_bloque_a_pantallas_checkin_checkout.md,
+// ampliación, E2) -- este componente ya no necesita su propio mecanismo ni el ref al ScrollView.
+export const IncidenciasForm = forwardRef<TextInput, Props>(function IncidenciasForm(
+  { pregunta, tipos, etiquetasTipo, valor, onCambiar },
+  ref
+) {
   const { t } = useTranslation();
   const detalleObligatorio = valor.tipo === "Otro";
   const detalleFaltante = detalleObligatorio && valor.detalle.trim().length === 0;
   const refDetalle = useRef<TextInput>(null);
 
-  // Este campo aparece recién cuando se elige "Sí" (tuvo incidencia) y crece
-  // el formulario debajo de todo lo demás (km, combustible, foto) — es el más
-  // propenso a quedar tapado por el teclado. measureLayout mide su posición
-  // real respecto al ScrollView, sin depender de en qué nivel de anidamiento
-  // esté (a diferencia de sumar offsets de onLayout a mano).
-  function manejarFocusDetalle() {
-    const scroll = scrollViewRef.current;
-    if (!scroll) return;
-    // Ver el comentario equivalente en CheckInForm.tsx: ref.measureLayout()
-    // no reconoce el ref de CampoTexto como componente nativo.
-    // UIManager.measureLayout() con tags numéricos (findNodeHandle) evita
-    // ese problema.
-    const nodoCampo = findNodeHandle(refDetalle.current);
-    const nodoScroll = findNodeHandle(scroll);
-    if (nodoCampo == null || nodoScroll == null) return;
-
-    UIManager.measureLayout(
-      nodoCampo,
-      nodoScroll,
-      () => {},
-      (_left, top) => {
-        scroll.scrollTo({ y: Math.max(0, top - espaciado.md), animated: true });
-      }
-    );
-  }
-
   function manejarTuvoIncidencia(tuvoIncidencia: boolean) {
     onCambiar({ tuvoIncidencia, tipo: null, detalle: "", fotos: [] });
   }
 
-  function manejarTipo(tipo: TipoIncidencia) {
+  function manejarTipo(tipo: TipoIncidenciaCheckin) {
     onCambiar({ ...valor, tipo });
   }
 
@@ -88,7 +94,7 @@ export function IncidenciasForm({ valor, onCambiar, scrollViewRef }: Props) {
 
   return (
     <View style={estilos.contenedor}>
-      <Text style={estilos.etiqueta}>{t("incidencias.pregunta")}</Text>
+      <Text style={estilos.etiqueta}>{t(pregunta)}</Text>
       <View style={estilos.fila}>
         {[
           { texto: t("incidencias.no"), valor: false },
@@ -115,7 +121,7 @@ export function IncidenciasForm({ valor, onCambiar, scrollViewRef }: Props) {
         <View style={estilos.bloqueDetalle}>
           <Text style={estilos.etiqueta}>{t("incidencias.tipoEtiqueta")}</Text>
           <View style={estilos.fila}>
-            {TIPOS_INCIDENCIA.map((tipo) => {
+            {tipos.map((tipo) => {
               const seleccionado = valor.tipo === tipo;
               return (
                 <Pressable
@@ -126,7 +132,7 @@ export function IncidenciasForm({ valor, onCambiar, scrollViewRef }: Props) {
                   style={[estilos.chip, seleccionado && estilos.chipSeleccionado]}
                 >
                   <Text style={[estilos.textoChip, seleccionado && estilos.textoChipSeleccionado]}>
-                    {t(CLAVE_TIPO_INCIDENCIA[tipo])}
+                    {t(etiquetasTipo[tipo])}
                   </Text>
                 </Pressable>
               );
@@ -134,7 +140,11 @@ export function IncidenciasForm({ valor, onCambiar, scrollViewRef }: Props) {
           </View>
 
           <CampoTexto
-            ref={refDetalle}
+            ref={(nodo) => {
+              refDetalle.current = nodo;
+              if (typeof ref === "function") ref(nodo);
+              else if (ref) ref.current = nodo;
+            }}
             etiqueta={`${t("incidencias.detalleEtiqueta")}${detalleObligatorio ? "" : t("incidencias.detalleOpcional")}`}
             placeholder={t("incidencias.detallePlaceholder")}
             multiline
@@ -143,7 +153,6 @@ export function IncidenciasForm({ valor, onCambiar, scrollViewRef }: Props) {
             value={valor.detalle}
             onChangeText={manejarDetalle}
             error={detalleFaltante ? t("incidencias.detalleError") : undefined}
-            onFocus={manejarFocusDetalle}
           />
 
           <GaleriaFotosIncidencia fotos={valor.fotos} onCambiar={manejarFotos} />
@@ -151,7 +160,7 @@ export function IncidenciasForm({ valor, onCambiar, scrollViewRef }: Props) {
       ) : null}
     </View>
   );
-}
+});
 
 const estilos = StyleSheet.create({
   contenedor: {

@@ -17,27 +17,40 @@ export function useJornadasAbiertas() {
   const [jornadas, setJornadas] = useState<Jornada[]>([]);
   const [cargando, setCargando] = useState(true);
 
+  // spec_bloque_a_pantallas_checkin_checkout.md (ampliación, E1/criterios 21-23): lee SQLite
+  // PRIMERO y muestra esas tarjetas de inmediato -- `sincronizarCambiosDelServidor` (que un
+  // administrador puede haber cerrado alguna de estas jornadas desde el Dashboard sin pasar nunca
+  // por la app, Hallazgo #6) corre DESPUÉS, en segundo plano, sin tapar ni vaciar lo que ya se
+  // está mostrando. Solo si esa sincronización reporta haber cambiado algo (una jornada
+  // recuperada, cerrada remotamente, o corregida) se vuelve a leer SQLite -- si no cambió nada, no
+  // hay ningún motivo para releer ni para volver a renderizar. `cargando` arranca en `true` y pasa
+  // a `false` apenas termina la primera lectura local de la vida de este hook: nunca vuelve a
+  // `true` después, así que un refoco de pantalla no hace parpadear una lista que ya se veía.
   const recargar = useCallback(async () => {
     if (!usuario) return;
-    setCargando(true);
-    // Instrumentación temporal (Hallazgo #28): esta función espera a `sincronizarCambiosDelServidor`
-    // (dos consultas a Supabase) ANTES de mostrar lo que ya hay en SQLite -- si el dispositivo no
-    // tiene señal y esas consultas tardan en fallar (en vez de fallar rápido), la lista local
-    // queda tapada por "cargando" más tiempo del esperado. Este log mide cuánto tarda de verdad.
+
+    const locales = await obtenerJornadasAbiertas(usuario.id);
+    setJornadas(locales);
+    setCargando(false);
+
     const inicio = Date.now();
-    // Antes de leer lo que hay en SQLite, baja los cambios del servidor: un administrador puede
-    // haber cerrado alguna de estas jornadas desde el Dashboard sin pasar nunca por la app
-    // (Hallazgo #6, ver syncService.sincronizarCambiosDelServidor). Sin esto, una jornada cerrada
-    // remotamente seguiría viéndose "en curso" acá hasta que algo más la reconciliara primero.
+    let resultado: Awaited<ReturnType<typeof sincronizarCambiosDelServidor>> | null = null;
     try {
-      await sincronizarCambiosDelServidor(usuario.id);
+      resultado = await sincronizarCambiosDelServidor(usuario.id);
     } catch (err) {
       console.error("[H28-sync] useJornadasAbiertas.recargar: sincronizarCambiosDelServidor lanzó:", err);
     }
     console.log(`[H28-sync] useJornadasAbiertas.recargar: la descarga tardó ${Date.now() - inicio}ms`);
-    const abiertas = await obtenerJornadasAbiertas(usuario.id);
-    setJornadas(abiertas);
-    setCargando(false);
+
+    const cambioAlgo =
+      resultado != null &&
+      (resultado.recuperadas.length > 0 ||
+        resultado.cerradasRemoto.length > 0 ||
+        resultado.corregidas.length > 0);
+    if (cambioAlgo) {
+      const actualizadas = await obtenerJornadasAbiertas(usuario.id);
+      setJornadas(actualizadas);
+    }
   }, [usuario]);
 
   useFocusEffect(

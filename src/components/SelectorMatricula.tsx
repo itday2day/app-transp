@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { forwardRef, useEffect, useRef, useState } from "react";
 import { View, Text, TouchableOpacity, TextInput, Keyboard, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
@@ -11,9 +11,16 @@ interface Props {
   valor: string;
   onCambiar: (matricula: string) => void;
   opciones: string[];
+  error?: string;
 }
 
-export function SelectorMatricula({ valor, onCambiar, opciones }: Props) {
+// El `ref` expuesto apunta al campo manual (cuando está en ese modo) -- en modo lista no hay
+// ningún TextInput al que darle foco, así que queda en null y el llamante (scrollAlCampo) no
+// intenta enfocar nada, solo desplazarse (spec_bloque_a_pantallas_checkin_checkout.md).
+export const SelectorMatricula = forwardRef<TextInput, Props>(function SelectorMatricula(
+  { valor, onCambiar, opciones, error },
+  ref
+) {
   const { t } = useTranslation();
   const [modoManual, setModoManual] = useState(false);
   const refMatriculaManual = useRef<TextInput>(null);
@@ -38,7 +45,11 @@ export function SelectorMatricula({ valor, onCambiar, opciones }: Props) {
     return (
       <View>
         <CampoTexto
-          ref={refMatriculaManual}
+          ref={(nodo) => {
+            refMatriculaManual.current = nodo;
+            if (typeof ref === "function") ref(nodo);
+            else if (ref) ref.current = nodo;
+          }}
           etiqueta={t("selectorMatricula.etiqueta")}
           placeholder={t("selectorMatricula.placeholderManual")}
           autoCapitalize="characters"
@@ -47,6 +58,7 @@ export function SelectorMatricula({ valor, onCambiar, opciones }: Props) {
           onChangeText={manejarTextoManual}
           returnKeyType="done"
           onSubmitEditing={() => Keyboard.dismiss()}
+          error={error}
         />
         {opciones.length > 0 ? (
           <TouchableOpacity
@@ -78,9 +90,10 @@ export function SelectorMatricula({ valor, onCambiar, opciones }: Props) {
           onCambiar("");
         },
       }}
+      error={error}
     />
   );
-}
+});
 
 const estilos = StyleSheet.create({
   enlaceContenedor: {

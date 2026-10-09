@@ -1,10 +1,14 @@
 {
   "comun": {
     "cancelar": "Cancel",
-    "abreFuera": "Opens outside the app"
+    "abreFuera": "Opens outside the app",
+    "campoObligatorio": "This field is required."
   },
   "visorFoto": {
     "cerrar": "Close"
+  },
+  "avisoCampos": {
+    "titulo": "Missing information"
   },
   "selectorIdioma": {
     "etiquetaEs": "Spanish",
@@ -25,6 +29,7 @@
   },
   "navegacion": {
     "tabCheckIn": "Check-in",
+    "tabCheckOut": "Check-out",
     "tabHistorial": "History",
     "salir": "Log out",
     "tituloDetalleJornada": "Shift details",
@@ -62,10 +67,8 @@
   "checkIn": {
     "titulo": "Start shift",
     "chofer": "Driver: {{nombre}}",
-    "rutasActivas": "Active routes ({{cantidad}})",
     "subtituloFormulario": "Fill in the details before heading out.",
-    "botonNuevaRuta": "+ Start new route",
-    "botonPrimeraRuta": "+ Start route",
+    "botonIniciarRuta": "Start route",
     "errorUbicacionTitulo": "We couldn't get your location",
     "errorUbicacionMensaje": "Check-in needs to record your current location. Please try again.",
     "exitoTitulo": "Shift started",
@@ -93,9 +96,14 @@
     "incidenciasPlaceholder": "Shift notes (optional)",
     "botonEnviar": "Submit check-in"
   },
+  "checkOut": {
+    "titulo": "End shift",
+    "contador": "Open routes ({{cantidad}})",
+    "vacioTitulo": "You have no open routes",
+    "vacioTexto": "Once you start a route, it will show up here so you can close it."
+  },
   "checkOutForm": {
     "kmFinalEtiqueta": "Final mileage",
-    "kmFinalPlaceholder": "Must be at least {{km}}",
     "kmFinalError": "Final mileage can't be less than the starting mileage ({{km}} km).",
     "combustibleEtiqueta": "Fuel level",
     "fotoTacometro": "Odometer photo",
@@ -110,6 +118,7 @@
   },
   "incidencias": {
     "pregunta": "Did you have any incident during the shift?",
+    "preguntaCheckin": "Did you have any incident while loading?",
     "no": "No",
     "si": "Yes",
     "tipoEtiqueta": "Incident type",
@@ -117,6 +126,14 @@
     "tipoTrafico": "Traffic/Delay",
     "tipoClienteAusente": "Customer absent",
     "tipoOtro": "Other",
+    "checkin": {
+      "tipoMercanciaDanada": "Damaged or defective goods",
+      "tipoFaltanteSobrante": "Missing or extra goods",
+      "tipoTemperatura": "Temperature out of range",
+      "tipoPedidoDocumentacion": "Incorrect order or paperwork",
+      "tipoAveria": "Vehicle or refrigeration equipment breakdown",
+      "tipoOtro": "Other"
+    },
     "detalleEtiqueta": "Incident details",
     "detalleOpcional": " (optional)",
     "detallePlaceholder": "Describe what happened",

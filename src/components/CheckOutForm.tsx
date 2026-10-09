@@ -1,12 +1,17 @@
-import React, { forwardRef, useState, type RefObject } from "react";
-import { View, Text, StyleSheet, TextInput, Keyboard, ScrollView } from "react-native";
+import React, { forwardRef, useEffect, useRef, useState, type RefObject } from "react";
+import { View, Text, StyleSheet, TextInput, Keyboard, ScrollView, Alert } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { SelectorCombustible } from "@/components/SelectorCombustible";
 import { CapturaFoto } from "@/components/CapturaFoto";
-import { IncidenciasForm } from "@/components/IncidenciasForm";
+import {
+  IncidenciasForm,
+  TIPOS_INCIDENCIA_CHECKOUT,
+  CLAVE_TIPO_INCIDENCIA_CHECKOUT,
+} from "@/components/IncidenciasForm";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { IncidenciaData, Jornada, NivelCombustible, TipoIncidencia } from "@/types";
+import { scrollAlCampo } from "@/utils/scrollAlCampo";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
 
@@ -49,21 +54,77 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
   const [combustible, setCombustible] = useState<NivelCombustible | null>(null);
   const [fotoTacometro, setFotoTacometro] = useState<string | null>(null);
   const [incidencia, setIncidencia] = useState<IncidenciaData>(INCIDENCIA_INICIAL);
+  const [mostrarErrores, setMostrarErrores] = useState(false);
+
+  // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): mismos objetivos de scroll/foco
+  // que CheckInForm.tsx, en el orden de pantalla. `refKmFinalInterno` fusiona el ref externo (el
+  // que ya usaba DetalleJornadaScreen para su propio scroll+autofoco al revelar el formulario) con
+  // el que esta validación necesita para sí misma -- un solo TextInput, dos dueños del ref.
+  const refKmFinalInterno = useRef<TextInput>(null);
+  const refContCombustible = useRef<View>(null);
+  const refContFotoTacometro = useRef<View>(null);
+  const refDetalleIncidencia = useRef<TextInput>(null);
+  const yaEnviando = useRef(false);
 
   const kmValido = Number(kmFinal) >= jornada.kmInicial;
+  const kmFaltante = kmFinal.trim().length === 0;
   const detalleIncidenciaValido = incidencia.tipo !== "Otro" || incidencia.detalle.trim().length > 0;
-  const formularioValido =
-    kmValido && combustible !== null && fotoTacometro !== null && detalleIncidenciaValido;
+
+  useEffect(() => {
+    if (!enviando) yaEnviando.current = false;
+  }, [enviando]);
 
   function manejarEnviar() {
-    if (!formularioValido || !combustible || !fotoTacometro) return;
+    if (yaEnviando.current) return;
 
+    // Orden de pantalla: km final, combustible, foto del tacómetro, detalle de incidencia (solo
+    // si corresponde). El aviso rojo en vivo de "menor al inicial" (criterio 17) es aparte: si el
+    // campo está vacío entra en esta lista como cualquier otro obligatorio; si tiene un valor
+    // inválido, ya se está mostrando ese aviso y basta con desplazarse hasta ahí.
+    const campos = [
+      {
+        falta: kmFaltante || !kmValido,
+        etiqueta: t("checkOutForm.kmFinalEtiqueta"),
+        contRef: refKmFinalInterno,
+        focoRef: refKmFinalInterno,
+      },
+      {
+        falta: combustible === null,
+        etiqueta: t("checkOutForm.combustibleEtiqueta"),
+        contRef: refContCombustible,
+      },
+      {
+        falta: fotoTacometro === null,
+        etiqueta: t("checkOutForm.fotoTacometro"),
+        contRef: refContFotoTacometro,
+      },
+      {
+        falta: !detalleIncidenciaValido,
+        etiqueta: t("incidencias.detalleEtiqueta"),
+        contRef: refDetalleIncidencia,
+        focoRef: refDetalleIncidencia,
+      },
+    ];
+
+    const faltantes = campos.filter((c) => c.falta);
+    if (faltantes.length > 0) {
+      setMostrarErrores(true);
+      scrollAlCampo(scrollViewRef, faltantes[0].contRef, faltantes[0].focoRef);
+      Alert.alert(t("avisoCampos.titulo"), faltantes.map((c) => `• ${c.etiqueta}`).join("\n"));
+      return;
+    }
+
+    if (!combustible || !fotoTacometro) return; // nunca debería pasar: ya validado arriba
+
+    yaEnviando.current = true;
     onEnviar({
       kmFinal: Number(kmFinal),
       combustibleFinal: combustible,
       fotoTacometroFinalUri: fotoTacometro,
       tuvoIncidencia: incidencia.tuvoIncidencia,
-      tipoIncidencia: incidencia.tuvoIncidencia ? incidencia.tipo : null,
+      // IncidenciasForm acá se parametriza con TIPOS_INCIDENCIA_CHECKOUT (4 tipos, sin cambios) --
+      // el valor real nunca puede ser uno de los 4 nuevos del check-in.
+      tipoIncidencia: incidencia.tuvoIncidencia ? (incidencia.tipo as TipoIncidencia | null) : null,
       detalleIncidencia: incidencia.tuvoIncidencia ? incidencia.detalle.trim() : "",
       fotosIncidenciaUris: incidencia.tuvoIncidencia ? incidencia.fotos : [],
     });
@@ -72,9 +133,12 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
   return (
     <View>
       <CampoTexto
-        ref={ref}
+        ref={(nodo) => {
+          refKmFinalInterno.current = nodo;
+          if (typeof ref === "function") ref(nodo);
+          else if (ref) ref.current = nodo;
+        }}
         etiqueta={t("checkOutForm.kmFinalEtiqueta")}
-        placeholder={t("checkOutForm.kmFinalPlaceholder", { km: jornada.kmInicial })}
         keyboardType="numeric"
         returnKeyType="done"
         onSubmitEditing={() => Keyboard.dismiss()}
@@ -83,24 +147,39 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
         error={
           kmFinal.length > 0 && !kmValido
             ? t("checkOutForm.kmFinalError", { km: jornada.kmInicial })
-            : undefined
+            : mostrarErrores && kmFaltante
+              ? t("comun.campoObligatorio")
+              : undefined
         }
       />
 
-      <SelectorCombustible
-        etiqueta={t("checkOutForm.combustibleEtiqueta")}
-        valor={combustible}
-        onCambiar={setCombustible}
-      />
+      <View ref={refContCombustible}>
+        <SelectorCombustible
+          etiqueta={t("checkOutForm.combustibleEtiqueta")}
+          valor={combustible}
+          onCambiar={setCombustible}
+          error={mostrarErrores && combustible === null ? t("comun.campoObligatorio") : undefined}
+        />
+      </View>
 
-      <CapturaFoto
-        etiqueta={t("checkOutForm.fotoTacometro")}
-        ayuda={t("checkOutForm.fotoTacometroAyuda")}
-        uri={fotoTacometro}
-        onCapturada={setFotoTacometro}
-      />
+      <View ref={refContFotoTacometro}>
+        <CapturaFoto
+          etiqueta={t("checkOutForm.fotoTacometro")}
+          ayuda={t("checkOutForm.fotoTacometroAyuda")}
+          uri={fotoTacometro}
+          onCapturada={setFotoTacometro}
+          error={mostrarErrores && fotoTacometro === null ? t("comun.campoObligatorio") : undefined}
+        />
+      </View>
 
-      <IncidenciasForm valor={incidencia} onCambiar={setIncidencia} scrollViewRef={scrollViewRef} />
+      <IncidenciasForm
+        ref={refDetalleIncidencia}
+        pregunta="incidencias.pregunta"
+        tipos={TIPOS_INCIDENCIA_CHECKOUT}
+        etiquetasTipo={CLAVE_TIPO_INCIDENCIA_CHECKOUT}
+        valor={incidencia}
+        onCambiar={setIncidencia}
+      />
 
       <Text style={estilos.notaUbicacion}>{t("checkOutForm.notaUbicacion")}</Text>
 
@@ -108,7 +187,7 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
         titulo={t("checkOutForm.botonEnviar")}
         onPress={manejarEnviar}
         cargando={enviando}
-        deshabilitado={!formularioValido}
+        deshabilitado={enviando}
         estilo={estilos.boton}
       />
 

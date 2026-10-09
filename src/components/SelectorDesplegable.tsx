@@ -20,6 +20,7 @@ interface Props {
   deshabilitado?: boolean;
   textoDeshabilitado?: string;
   opcionEspecial?: OpcionEspecial;
+  error?: string;
 }
 
 // Dropdown genérico construido desde cero (TouchableOpacity + Modal + FlatList,
@@ -33,6 +34,7 @@ export function SelectorDesplegable({
   deshabilitado = false,
   textoDeshabilitado,
   opcionEspecial,
+  error,
 }: Props) {
   const { t } = useTranslation();
   const [abierto, setAbierto] = useState(false);
@@ -47,7 +49,11 @@ export function SelectorDesplegable({
         disabled={deshabilitado}
         onPress={() => setAbierto(true)}
         activeOpacity={0.7}
-        style={[estilos.selector, deshabilitado && estilos.selectorDeshabilitado]}
+        style={[
+          estilos.selector,
+          deshabilitado && estilos.selectorDeshabilitado,
+          Boolean(error) && estilos.selectorConError,
+        ]}
       >
         <Text
           style={
@@ -66,6 +72,7 @@ export function SelectorDesplegable({
           color={deshabilitado ? colores.deshabilitado : colores.textoSecundario}
         />
       </TouchableOpacity>
+      {error ? <Text style={estilos.textoError}>{error}</Text> : null}
 
       <Modal visible={abierto} animationType="slide" transparent onRequestClose={() => setAbierto(false)}>
         <TouchableOpacity style={estilos.fondo} activeOpacity={1} onPress={() => setAbierto(false)}>
@@ -142,6 +149,14 @@ const estilos = StyleSheet.create({
   selectorDeshabilitado: {
     backgroundColor: colores.fondo,
     borderColor: colores.borde,
+  },
+  selectorConError: {
+    borderColor: colores.peligro,
+  },
+  textoError: {
+    ...tipografia.ayuda,
+    color: colores.peligro,
+    marginTop: espaciado.xs,
   },
   textoSeleccionado: {
     ...tipografia.cuerpo,

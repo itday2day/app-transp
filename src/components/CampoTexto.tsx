@@ -1,6 +1,7 @@
-import React, { forwardRef, useState } from "react";
+import React, { forwardRef, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, TextInputProps } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios } from "@/theme/spacing";
@@ -16,18 +17,27 @@ interface Props extends TextInputProps {
 }
 
 export const CampoTexto = forwardRef<TextInput, Props>(function CampoTexto(
-  { etiqueta, error, style, secureTextEntry, alternarVisibilidad, ...resto },
+  { etiqueta, error, style, secureTextEntry, alternarVisibilidad, onFocus, ...resto },
   ref
 ) {
   const [visible, setVisible] = useState(false);
   const ocultarTexto = alternarVisibilidad ? secureTextEntry && !visible : secureTextEntry;
+  const refInterno = useRef<TextInput>(null);
+  // spec_bloque_a_pantallas_checkin_checkout.md (ampliación, E2/criterio 25): null en cualquier
+  // pantalla que no envuelva su contenido en ProveedorEnfoqueTeclado (login, cambiar contraseña,
+  // etc.) -- ahí este campo se comporta exactamente igual que siempre.
+  const enfoqueTeclado = useEnfoqueTeclado();
 
   return (
     <View style={estilos.contenedor}>
       <Text style={estilos.etiqueta}>{etiqueta}</Text>
       <View style={alternarVisibilidad ? estilos.filaInput : undefined}>
         <TextInput
-          ref={ref}
+          ref={(nodo) => {
+            refInterno.current = nodo;
+            if (typeof ref === "function") ref(nodo);
+            else if (ref) ref.current = nodo;
+          }}
           style={[
             estilos.input,
             alternarVisibilidad && estilos.inputConIcono,
@@ -36,6 +46,10 @@ export const CampoTexto = forwardRef<TextInput, Props>(function CampoTexto(
           ]}
           placeholderTextColor={colores.textoSecundario}
           secureTextEntry={ocultarTexto}
+          onFocus={(evento) => {
+            enfoqueTeclado?.manejarFoco(refInterno);
+            onFocus?.(evento);
+          }}
           {...resto}
         />
         {alternarVisibilidad && (

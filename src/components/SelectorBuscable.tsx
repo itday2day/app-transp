@@ -46,6 +46,7 @@ interface Props<T> {
    * un string simple (como la lista de empresas). */
   obtenerClave?: (item: T) => string;
   onSeleccionar: (item: T) => void;
+  error?: string;
 }
 
 export function SelectorBuscable<T>({
@@ -56,6 +57,7 @@ export function SelectorBuscable<T>({
   obtenerEtiqueta,
   obtenerClave = obtenerEtiqueta,
   onSeleccionar,
+  error,
 }: Props<T>) {
   const { t } = useTranslation();
   const [abierto, setAbierto] = useState(false);
@@ -82,13 +84,14 @@ export function SelectorBuscable<T>({
         accessibilityRole="button"
         onPress={() => setAbierto(true)}
         activeOpacity={0.7}
-        style={estilos.selector}
+        style={[estilos.selector, Boolean(error) && estilos.selectorConError]}
       >
         <Text style={valor != null ? estilos.textoSeleccionado : estilos.textoPlaceholder}>
           {valor != null ? obtenerEtiqueta(valor) : placeholder}
         </Text>
         <Ionicons name="chevron-down" size={20} color={colores.textoSecundario} />
       </TouchableOpacity>
+      {error ? <Text style={estilos.textoError}>{error}</Text> : null}
 
       <Modal visible={abierto} animationType="slide" transparent onRequestClose={cerrar}>
         <KeyboardAvoidingView
@@ -175,6 +178,14 @@ const estilos = StyleSheet.create({
   textoPlaceholder: {
     ...tipografia.cuerpo,
     color: colores.textoSecundario,
+  },
+  selectorConError: {
+    borderColor: colores.peligro,
+  },
+  textoError: {
+    ...tipografia.ayuda,
+    color: colores.peligro,
+    marginTop: espaciado.xs,
   },
   contenedorTeclado: {
     flex: 1,

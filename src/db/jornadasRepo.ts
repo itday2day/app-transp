@@ -7,6 +7,7 @@ import {
   UrlsFotosJornada,
   NivelCombustible,
   TipoIncidencia,
+  TipoIncidenciaCheckin,
   EstadoJornada,
   EstadoSincronizacion,
 } from "@/types";
@@ -31,7 +32,7 @@ interface FilaJornadaSQLite {
   lngInicial: number | null;
   fechaCheckIn: string;
   tuvoIncidenciaCheckin: number | null;
-  tipoIncidenciaCheckin: TipoIncidencia | null;
+  tipoIncidenciaCheckin: TipoIncidenciaCheckin | null;
   detalleIncidenciaCheckin: string | null;
   fotosIncidenciaCheckinUris: string | null; // JSON stringificado
   fotosIncidenciaCheckin: string | null; // ídem, URLs remotas
@@ -421,7 +422,7 @@ export interface JornadaRecuperadaRemota {
   lngInicial: number | null;
   fechaCheckIn: string;
   tuvoIncidenciaCheckin: boolean | null;
-  tipoIncidenciaCheckin: TipoIncidencia | null;
+  tipoIncidenciaCheckin: TipoIncidenciaCheckin | null;
   detalleIncidenciaCheckin: string | null;
   fotosIncidenciaCheckin: string[] | null; // URLs remotas, ya subidas
   // Cierre -- ausentes/null en una jornada que llega abierta (#27, o asignada a futuro).

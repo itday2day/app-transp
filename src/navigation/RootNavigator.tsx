@@ -1,14 +1,14 @@
 import React from "react";
-import { Pressable, Text, View, StyleSheet } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { useTranslation } from "react-i18next";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/context/AuthContext";
+import { TextoEnlace } from "@/components/TextoEnlace";
 import { ClaveTraduccion } from "@/i18n";
 import { colores } from "@/theme/colors";
-import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
 import { RootStackParamList, TabsParamList } from "./types";
 
@@ -16,6 +16,7 @@ import LoginScreen from "@/screens/LoginScreen";
 import CambiarContrasenaObligatorioScreen from "@/screens/CambiarContrasenaObligatorioScreen";
 import CambiarContrasenaScreen from "@/screens/CambiarContrasenaScreen";
 import CheckInScreen from "@/screens/CheckInScreen";
+import CheckOutScreen from "@/screens/CheckOutScreen";
 import HistorialScreen from "@/screens/HistorialScreen";
 import DetalleJornadaScreen from "@/screens/DetalleJornadaScreen";
 import NuevoCheckInScreen from "@/screens/NuevoCheckInScreen";
@@ -25,11 +26,13 @@ const Tab = createBottomTabNavigator<TabsParamList>();
 
 const ICONOS_TAB: Record<keyof TabsParamList, keyof typeof Ionicons.glyphMap> = {
   CheckIn: "log-in-outline",
+  CheckOut: "log-out-outline",
   Historial: "time-outline",
 };
 
 const CLAVE_TITULO_TAB: Record<keyof TabsParamList, ClaveTraduccion> = {
   CheckIn: "navegacion.tabCheckIn",
+  CheckOut: "navegacion.tabCheckOut",
   Historial: "navegacion.tabHistorial",
 };
 
@@ -58,14 +61,16 @@ function PrincipalTabs() {
         // cambio voluntario ahora se hace desde Login (sin sesión), única vía para esa acción.
         headerRight: () => (
           <View style={estilos.filaHeader}>
-            <Pressable onPress={cerrarSesion} style={estilos.botonSalir}>
-              <Text style={estilos.textoSalir}>{t("navegacion.salir")}</Text>
-            </Pressable>
+            {/* spec_bloque_a_pantallas_checkin_checkout.md (ampliación, E3): mismo componente y
+                color de enlace que ya usa "Ver en mapa" (Hallazgo #49) -- un solo patrón de
+                enlace en toda la app, nunca un estilo aparte para este botón. */}
+            <TextoEnlace texto={t("navegacion.salir")} onPress={cerrarSesion} />
           </View>
         ),
       })}
     >
       <Tab.Screen name="CheckIn" component={CheckInScreen} />
+      <Tab.Screen name="CheckOut" component={CheckOutScreen} />
       <Tab.Screen name="Historial" component={HistorialScreen} />
     </Tab.Navigator>
   );
@@ -122,14 +127,6 @@ const estilos = StyleSheet.create({
   filaHeader: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  botonSalir: {
-    paddingVertical: espaciado.xs,
-    marginRight: espaciado.md,
-  },
-  textoSalir: {
-    ...tipografia.cuerpo,
-    color: colores.primario,
-    fontWeight: "600",
+    marginRight: espaciado.sm,
   },
 });

@@ -1,10 +1,14 @@
 {
   "comun": {
     "cancelar": "Cancelar",
-    "abreFuera": "Se abre fuera de la app"
+    "abreFuera": "Se abre fuera de la app",
+    "campoObligatorio": "Este campo es obligatorio."
   },
   "visorFoto": {
     "cerrar": "Cerrar"
+  },
+  "avisoCampos": {
+    "titulo": "Faltan datos para continuar"
   },
   "selectorIdioma": {
     "etiquetaEs": "Español",
@@ -25,8 +29,9 @@
   },
   "navegacion": {
     "tabCheckIn": "Check-in",
+    "tabCheckOut": "Check-out",
     "tabHistorial": "Historial",
-    "salir": "Salir",
+    "salir": "Cerrar sesión",
     "tituloDetalleJornada": "Detalle de jornada",
     "tituloNuevoCheckIn": "Nueva ruta",
     "tituloCambiarContrasena": "Cambiar contraseña"
@@ -62,10 +67,8 @@
   "checkIn": {
     "titulo": "Inicio de jornada",
     "chofer": "Chofer: {{nombre}}",
-    "rutasActivas": "Rutas activas ({{cantidad}})",
     "subtituloFormulario": "Completa los datos antes de salir a ruta.",
-    "botonNuevaRuta": "+ Iniciar nueva ruta",
-    "botonPrimeraRuta": "+ Iniciar ruta",
+    "botonIniciarRuta": "Iniciar ruta",
     "errorUbicacionTitulo": "No pudimos obtener tu ubicación",
     "errorUbicacionMensaje": "El check-in necesita registrar tu ubicación actual. Intenta de nuevo.",
     "exitoTitulo": "Jornada iniciada",
@@ -93,9 +96,14 @@
     "incidenciasPlaceholder": "Novedades de la faena (opcional)",
     "botonEnviar": "Registrar check-in"
   },
+  "checkOut": {
+    "titulo": "Fin de jornada",
+    "contador": "Rutas abiertas ({{cantidad}})",
+    "vacioTitulo": "No tenés rutas abiertas",
+    "vacioTexto": "Cuando inicies una ruta, aparecerá aquí para que puedas cerrarla."
+  },
   "checkOutForm": {
     "kmFinalEtiqueta": "Kilometraje final",
-    "kmFinalPlaceholder": "Debe ser mayor o igual a {{km}}",
     "kmFinalError": "El kilometraje final no puede ser menor al inicial ({{km}} km).",
     "combustibleEtiqueta": "Nivel de combustible",
     "fotoTacometro": "Foto del tacómetro",
@@ -110,6 +118,7 @@
   },
   "incidencias": {
     "pregunta": "¿Tuviste alguna incidencia durante la jornada?",
+    "preguntaCheckin": "¿Tuviste alguna incidencia a la hora de hacer la carga?",
     "no": "No",
     "si": "Sí",
     "tipoEtiqueta": "Tipo de incidencia",
@@ -117,6 +126,14 @@
     "tipoTrafico": "Tráfico/Retraso",
     "tipoClienteAusente": "Cliente ausente",
     "tipoOtro": "Otro",
+    "checkin": {
+      "tipoMercanciaDanada": "Mercancía dañada o en mal estado",
+      "tipoFaltanteSobrante": "Faltante o sobrante de mercancía",
+      "tipoTemperatura": "Temperatura fuera de rango",
+      "tipoPedidoDocumentacion": "Pedido o documentación incorrecta",
+      "tipoAveria": "Avería del vehículo o del equipo de frío",
+      "tipoOtro": "Otro"
+    },
     "detalleEtiqueta": "Detalle de la incidencia",
     "detalleOpcional": " (opcional)",
     "detallePlaceholder": "Describe qué ocurrió",

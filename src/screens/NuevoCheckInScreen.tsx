@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, Alert, KeyboardAvoidingView, Platform } f
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
+import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
 import { useUbicacion } from "@/hooks/useUbicacion";
 import { useMatriculasFrecuentes } from "@/hooks/useMatriculasFrecuentes";
 import { CheckInForm, ValoresCheckInForm } from "@/components/CheckInForm";
@@ -52,7 +53,11 @@ export default function NuevoCheckInScreen() {
       );
 
       Alert.alert(t("checkIn.exitoTitulo"), t("checkIn.exitoMensaje"));
-      navigation.goBack();
+      // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): después de un check-in
+      // exitoso, el chofer queda en Check-out (ya ve ahí su tarjeta nueva) en vez de volver a
+      // Check-in -- `{ screen: "CheckOut" }` enfoca esa pestaña del tab navigator anidado y de
+      // paso saca a esta pantalla del stack, igual que hacía goBack() antes.
+      navigation.navigate("Principal", { screen: "CheckOut" });
     } catch (err) {
       Alert.alert(
         t("checkIn.errorRegistroTitulo"),
@@ -71,22 +76,27 @@ export default function NuevoCheckInScreen() {
         contentContainerStyle={estilos.contenido}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={estilos.subtitulo}>{t("checkIn.subtituloFormulario")}</Text>
+        {/* spec_bloque_a_pantallas_checkin_checkout.md (ampliación, E2/criterio 25): cada
+            CampoTexto de CheckInForm (km inicial, ruta manual, matrícula manual, detalle de
+            incidencia) se desplaza solo por encima del teclado al enfocarse, con su altura real. */}
+        <ProveedorEnfoqueTeclado scrollRef={refScroll}>
+          <Text style={estilos.subtitulo}>{t("checkIn.subtituloFormulario")}</Text>
 
-        <CheckInForm
-          onEnviar={manejarEnvioFormulario}
-          enviando={enviando || obteniendoUbicacion}
-          matriculasFrecuentes={matriculasFrecuentes}
-          scrollViewRef={refScroll}
-        />
+          <CheckInForm
+            onEnviar={manejarEnvioFormulario}
+            enviando={enviando || obteniendoUbicacion}
+            matriculasFrecuentes={matriculasFrecuentes}
+            scrollViewRef={refScroll}
+          />
 
-        <BotonPrimario
-          titulo={t("comun.cancelar")}
-          onPress={() => navigation.goBack()}
-          variante="secundario"
-          deshabilitado={enviando}
-          estilo={estilos.botonCancelar}
-        />
+          <BotonPrimario
+            titulo={t("comun.cancelar")}
+            onPress={() => navigation.goBack()}
+            variante="secundario"
+            deshabilitado={enviando}
+            estilo={estilos.botonCancelar}
+          />
+        </ProveedorEnfoqueTeclado>
       </ScrollView>
     </KeyboardAvoidingView>
   );

@@ -23,7 +23,8 @@ import { useNetwork } from "@/context/NetworkContext";
 import { MAX_INTENTOS } from "@/services/syncService";
 import { abrirMapa } from "@/services/mapasService";
 import { CheckOutForm, ValoresCheckOutForm } from "@/components/CheckOutForm";
-import { CLAVE_TIPO_INCIDENCIA } from "@/components/IncidenciasForm";
+import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
+import { CLAVE_TIPO_INCIDENCIA_CHECKIN, CLAVE_TIPO_INCIDENCIA_CHECKOUT } from "@/components/IncidenciasForm";
 import { BannerConexion } from "@/components/BannerConexion";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { TextoEnlace } from "@/components/TextoEnlace";
@@ -157,7 +158,11 @@ export default function DetalleJornadaScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { t } = useTranslation();
   const [jornada, setJornada] = useState<Jornada | null>(null);
-  const [mostrarFormularioCheckOut, setMostrarFormularioCheckOut] = useState(false);
+  // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): la pestaña Check-out manda
+  // `abrirCheckOut: true` al navegar acá -- el formulario de cierre queda visible desde el
+  // primer render, sin pasar por el botón intermedio. Historial sigue sin mandar este param, así
+  // que una jornada abierta vista desde ahí se comporta exactamente igual que antes.
+  const [mostrarFormularioCheckOut, setMostrarFormularioCheckOut] = useState(params.abrirCheckOut ?? false);
   const [enviando, setEnviando] = useState(false);
   const [visor, setVisor] = useState<{ fotos: FotoPar[]; indice: number } | null>(null);
   const { capturarUbicacion, obteniendo: obteniendoUbicacion } = useUbicacion();
@@ -165,6 +170,10 @@ export default function DetalleJornadaScreen() {
   const refScroll = useRef<ScrollView>(null);
   const refKmFinal = useRef<TextInput>(null);
   const ySeccionCheckOut = useRef(0);
+  // spec_bloque_a_pantallas_checkin_checkout.md (ampliación, E2/criterio 24): solo el botón
+  // "Check-out" tocado a propósito deja el foco puesto -- llegar con `abrirCheckOut` desde la
+  // pestaña Check-out hace scroll hasta la sección, pero NUNCA enfoca nada solo.
+  const enfocarAlMostrarRef = useRef(false);
 
   useEffect(() => {
     obtenerJornadaPorId(params.id).then(setJornada);
@@ -183,10 +192,16 @@ export default function DetalleJornadaScreen() {
   useEffect(() => {
     if (!mostrarFormularioCheckOut) return;
     refScroll.current?.scrollTo({ y: ySeccionCheckOut.current, animated: true });
-    // ScrollView no expone un callback de "animación de scroll terminada" sin
-    // sumar react-native-reanimated — se espera un tiempo calibrado a que
-    // termine (~300-400ms) antes de enfocar, mismo criterio que el resto del
-    // proyecto usa para esperar animaciones de apertura/cierre.
+    // Solo si el chofer tocó el botón "Check-out" a propósito -- llegar acá con `abrirCheckOut`
+    // (desde la pestaña Check-out) hace scroll igual, pero nunca enfoca nada ni abre el teclado
+    // solo (criterio 24). ScrollView no expone un callback de "animación de scroll terminada" sin
+    // sumar react-native-reanimated — se espera un tiempo calibrado a que termine (~300-400ms)
+    // antes de enfocar, mismo criterio que el resto del proyecto usa para esperar animaciones de
+    // apertura/cierre. Una vez enfocado, CampoTexto se desplaza solo por encima del teclado con su
+    // altura real (ProveedorEnfoqueTeclado, ver el JSX más abajo) -- este efecto ya no necesita
+    // calcularlo.
+    if (!enfocarAlMostrarRef.current) return;
+    enfocarAlMostrarRef.current = false;
     const temporizador = setTimeout(() => refKmFinal.current?.focus(), 400);
     return () => clearTimeout(temporizador);
   }, [mostrarFormularioCheckOut]);
@@ -248,176 +263,184 @@ export default function DetalleJornadaScreen() {
         contentContainerStyle={estilos.contenido}
         keyboardShouldPersistTaps="handled"
       >
-        {/* spec_tarjeta_jornada_empresa.md (ampliación 2026-09-30): mismo criterio que
+        {/* spec_bloque_a_pantallas_checkin_checkout.md (ampliación, E2/criterio 25): el CampoTexto
+            de km final (y el de detalle de incidencia, si corresponde) se desplaza solo por
+            encima del teclado al enfocarse, con su altura real. */}
+        <ProveedorEnfoqueTeclado scrollRef={refScroll}>
+          {/* spec_tarjeta_jornada_empresa.md (ampliación 2026-09-30): mismo criterio que
             TarjetaJornada.tsx (Hallazgo #37) — la empresa pasa a ser el dato principal, la
             matrícula baja a una línea secundaria. La fila "Empresa" de la sección de check-in más
             abajo no se toca (fuera de alcance de esta ampliación: solo la jerarquía título/
             secundaria). */}
-        <Text style={estilos.titulo}>{textoEmpresa(jornada.empresa, t("detalleJornada.sinEmpresa"))}</Text>
-        <Text style={estilos.chofer}>{jornada.choferNombre}</Text>
-        <Text style={estilos.matriculaSecundaria}>{jornada.matricula}</Text>
+          <Text style={estilos.titulo}>{textoEmpresa(jornada.empresa, t("detalleJornada.sinEmpresa"))}</Text>
+          <Text style={estilos.chofer}>{jornada.choferNombre}</Text>
+          <Text style={estilos.matriculaSecundaria}>{jornada.matricula}</Text>
 
-        <View style={estilos.seccion}>
-          <Text style={estilos.seccionTitulo}>{t("detalleJornada.seccionCheckIn")}</Text>
-          <Fila
-            etiqueta={t("detalleJornada.fechaHora")}
-            valor={new Date(jornada.fechaCheckIn).toLocaleString("es-MX")}
-          />
-          <Fila etiqueta={t("detalleJornada.empresa")} valor={jornada.empresa} />
-          <Fila etiqueta={t("detalleJornada.ruta")} valor={jornada.ruta} />
-          <Fila etiqueta={t("detalleJornada.kmInicial")} valor={`${jornada.kmInicial} km`} />
-          <Fila etiqueta={t("detalleJornada.combustible")} valor={`${jornada.combustibleInicial}%`} />
-          <FilaUbicacion
-            etiqueta={t("detalleJornada.ubicacion")}
-            lat={jornada.latInicial}
-            lng={jornada.lngInicial}
-          />
-          <View style={estilos.filaFotos}>
-            {/* spec_rutas_asignadas_admin.md: una jornada creada_por_admin puede no tener foto
+          <View style={estilos.seccion}>
+            <Text style={estilos.seccionTitulo}>{t("detalleJornada.seccionCheckIn")}</Text>
+            <Fila
+              etiqueta={t("detalleJornada.fechaHora")}
+              valor={new Date(jornada.fechaCheckIn).toLocaleString("es-MX")}
+            />
+            <Fila etiqueta={t("detalleJornada.empresa")} valor={jornada.empresa} />
+            <Fila etiqueta={t("detalleJornada.ruta")} valor={jornada.ruta} />
+            <Fila etiqueta={t("detalleJornada.kmInicial")} valor={`${jornada.kmInicial} km`} />
+            <Fila etiqueta={t("detalleJornada.combustible")} valor={`${jornada.combustibleInicial}%`} />
+            <FilaUbicacion
+              etiqueta={t("detalleJornada.ubicacion")}
+              lat={jornada.latInicial}
+              lng={jornada.lngInicial}
+            />
+            <View style={estilos.filaFotos}>
+              {/* spec_rutas_asignadas_admin.md: una jornada creada_por_admin puede no tener foto
                 real de tacómetro -- ya no es un campo garantizado, a diferencia de una jornada
                 que nació del check-in del propio chofer. */}
-            {jornada.fotoTacometroInicialUri || jornada.fotoCheckInUrl ? (
-              <FotoEvidencia
-                key={`${jornada.fotoTacometroInicialUri}|${jornada.fotoCheckInUrl}`}
-                uri={jornada.fotoTacometroInicialUri}
-                url={jornada.fotoCheckInUrl}
-                estilo={estilos.foto}
-                onAbrir={() =>
-                  setVisor({
-                    fotos: [{ uri: jornada.fotoTacometroInicialUri, url: jornada.fotoCheckInUrl }],
-                    indice: 0,
-                  })
-                }
-              />
-            ) : null}
-            {jornada.fotoRutaUri || jornada.fotoRutaUrl ? (
-              <FotoEvidencia
-                key={`${jornada.fotoRutaUri}|${jornada.fotoRutaUrl}`}
-                uri={jornada.fotoRutaUri}
-                url={jornada.fotoRutaUrl}
-                estilo={estilos.foto}
-                onAbrir={() =>
-                  setVisor({ fotos: [{ uri: jornada.fotoRutaUri, url: jornada.fotoRutaUrl }], indice: 0 })
-                }
-              />
-            ) : null}
-          </View>
-          {/* spec_incidencia_en_checkin.md: incidencia estructurada del check-in, mismo patrón que
+              {jornada.fotoTacometroInicialUri || jornada.fotoCheckInUrl ? (
+                <FotoEvidencia
+                  key={`${jornada.fotoTacometroInicialUri}|${jornada.fotoCheckInUrl}`}
+                  uri={jornada.fotoTacometroInicialUri}
+                  url={jornada.fotoCheckInUrl}
+                  estilo={estilos.foto}
+                  onAbrir={() =>
+                    setVisor({
+                      fotos: [{ uri: jornada.fotoTacometroInicialUri, url: jornada.fotoCheckInUrl }],
+                      indice: 0,
+                    })
+                  }
+                />
+              ) : null}
+              {jornada.fotoRutaUri || jornada.fotoRutaUrl ? (
+                <FotoEvidencia
+                  key={`${jornada.fotoRutaUri}|${jornada.fotoRutaUrl}`}
+                  uri={jornada.fotoRutaUri}
+                  url={jornada.fotoRutaUrl}
+                  estilo={estilos.foto}
+                  onAbrir={() =>
+                    setVisor({ fotos: [{ uri: jornada.fotoRutaUri, url: jornada.fotoRutaUrl }], indice: 0 })
+                  }
+                />
+              ) : null}
+            </View>
+            {/* spec_incidencia_en_checkin.md: incidencia estructurada del check-in, mismo patrón que
               la del check-out más abajo. `jornada.incidencias` (texto libre) es el histórico de
               jornadas creadas antes de este spec — se muestra tal cual solo cuando no hay datos
               estructurados, para no perder ningún dato viejo. */}
-          <FilaTexto
-            etiqueta={t("detalleJornada.incidencia")}
-            valor={
-              jornada.tuvoIncidenciaCheckin
-                ? `${jornada.tipoIncidenciaCheckin ? t(CLAVE_TIPO_INCIDENCIA[jornada.tipoIncidenciaCheckin]) : "-"}${jornada.detalleIncidenciaCheckin ? ` — ${jornada.detalleIncidenciaCheckin}` : ""}`
-                : jornada.incidencias || t("detalleJornada.sinIncidencias")
-            }
-          />
-          {fotosIncidenciaCheckin.length > 0 ? (
-            <View style={estilos.filaFotosIncidencia}>
-              {fotosIncidenciaCheckin.map((par, i) => (
-                <FotoEvidencia
-                  key={`${i}-${par.uri}|${par.url}`}
-                  uri={par.uri}
-                  url={par.url}
-                  estilo={estilos.fotoIncidencia}
-                  onAbrir={() => setVisor({ fotos: fotosIncidenciaCheckin, indice: i })}
-                />
-              ))}
-            </View>
-          ) : null}
-        </View>
-
-        {jornada.estado === "cerrada" ? (
-          <View style={estilos.seccion}>
-            <Text style={estilos.seccionTitulo}>{t("detalleJornada.seccionCheckOut")}</Text>
-            <Fila
-              etiqueta={t("detalleJornada.fechaHora")}
-              valor={jornada.fechaCheckOut ? new Date(jornada.fechaCheckOut).toLocaleString("es-MX") : "-"}
-            />
-            <Fila etiqueta={t("detalleJornada.kmFinal")} valor={`${jornada.kmFinal} km`} />
-            <Fila
-              etiqueta={t("detalleJornada.combustible")}
-              valor={jornada.combustibleFinal != null ? `${jornada.combustibleFinal}%` : "-"}
-            />
-            <FilaUbicacion
-              etiqueta={t("detalleJornada.ubicacion")}
-              lat={jornada.latFinal}
-              lng={jornada.lngFinal}
-            />
-            {jornada.fotoTacometroFinalUri || jornada.fotoCheckOutUrl ? (
-              <FotoEvidencia
-                key={`${jornada.fotoTacometroFinalUri}|${jornada.fotoCheckOutUrl}`}
-                uri={jornada.fotoTacometroFinalUri}
-                url={jornada.fotoCheckOutUrl}
-                estilo={estilos.foto}
-                onAbrir={() =>
-                  setVisor({
-                    fotos: [{ uri: jornada.fotoTacometroFinalUri, url: jornada.fotoCheckOutUrl }],
-                    indice: 0,
-                  })
-                }
-              />
-            ) : null}
             <FilaTexto
               etiqueta={t("detalleJornada.incidencia")}
               valor={
-                jornada.tuvoIncidencia
-                  ? `${jornada.tipoIncidencia ? t(CLAVE_TIPO_INCIDENCIA[jornada.tipoIncidencia]) : "-"}${jornada.detalleIncidencia ? ` — ${jornada.detalleIncidencia}` : ""}`
-                  : t("detalleJornada.sinIncidencias")
+                jornada.tuvoIncidenciaCheckin
+                  ? `${jornada.tipoIncidenciaCheckin ? t(CLAVE_TIPO_INCIDENCIA_CHECKIN[jornada.tipoIncidenciaCheckin]) : "-"}${jornada.detalleIncidenciaCheckin ? ` — ${jornada.detalleIncidenciaCheckin}` : ""}`
+                  : jornada.incidencias || t("detalleJornada.sinIncidencias")
               }
             />
-            {fotosIncidencia.length > 0 ? (
+            {fotosIncidenciaCheckin.length > 0 ? (
               <View style={estilos.filaFotosIncidencia}>
-                {fotosIncidencia.map((par, i) => (
+                {fotosIncidenciaCheckin.map((par, i) => (
                   <FotoEvidencia
                     key={`${i}-${par.uri}|${par.url}`}
                     uri={par.uri}
                     url={par.url}
                     estilo={estilos.fotoIncidencia}
-                    onAbrir={() => setVisor({ fotos: fotosIncidencia, indice: i })}
+                    onAbrir={() => setVisor({ fotos: fotosIncidenciaCheckin, indice: i })}
                   />
                 ))}
               </View>
             ) : null}
           </View>
-        ) : (
-          <View style={estilos.seccion} onLayout={manejarLayoutSeccionCheckOut}>
-            <Text style={estilos.seccionTitulo}>{t("detalleJornada.seccionCheckOut")}</Text>
-            <Text style={estilos.textoAbierta}>{t("detalleJornada.jornadaEnCurso")}</Text>
 
-            {mostrarFormularioCheckOut ? (
-              <CheckOutForm
-                ref={refKmFinal}
-                jornada={jornada}
-                onEnviar={manejarEnvioCheckOut}
-                onCancelar={() => setMostrarFormularioCheckOut(false)}
-                enviando={enviando || obteniendoUbicacion}
-                scrollViewRef={refScroll}
+          {jornada.estado === "cerrada" ? (
+            <View style={estilos.seccion}>
+              <Text style={estilos.seccionTitulo}>{t("detalleJornada.seccionCheckOut")}</Text>
+              <Fila
+                etiqueta={t("detalleJornada.fechaHora")}
+                valor={jornada.fechaCheckOut ? new Date(jornada.fechaCheckOut).toLocaleString("es-MX") : "-"}
               />
-            ) : (
-              <BotonPrimario
-                titulo={t("detalleJornada.botonCheckOut")}
-                onPress={() => setMostrarFormularioCheckOut(true)}
-                estilo={estilos.botonCheckOut}
+              <Fila etiqueta={t("detalleJornada.kmFinal")} valor={`${jornada.kmFinal} km`} />
+              <Fila
+                etiqueta={t("detalleJornada.combustible")}
+                valor={jornada.combustibleFinal != null ? `${jornada.combustibleFinal}%` : "-"}
               />
-            )}
-          </View>
-        )}
+              <FilaUbicacion
+                etiqueta={t("detalleJornada.ubicacion")}
+                lat={jornada.latFinal}
+                lng={jornada.lngFinal}
+              />
+              {jornada.fotoTacometroFinalUri || jornada.fotoCheckOutUrl ? (
+                <FotoEvidencia
+                  key={`${jornada.fotoTacometroFinalUri}|${jornada.fotoCheckOutUrl}`}
+                  uri={jornada.fotoTacometroFinalUri}
+                  url={jornada.fotoCheckOutUrl}
+                  estilo={estilos.foto}
+                  onAbrir={() =>
+                    setVisor({
+                      fotos: [{ uri: jornada.fotoTacometroFinalUri, url: jornada.fotoCheckOutUrl }],
+                      indice: 0,
+                    })
+                  }
+                />
+              ) : null}
+              <FilaTexto
+                etiqueta={t("detalleJornada.incidencia")}
+                valor={
+                  jornada.tuvoIncidencia
+                    ? `${jornada.tipoIncidencia ? t(CLAVE_TIPO_INCIDENCIA_CHECKOUT[jornada.tipoIncidencia]) : "-"}${jornada.detalleIncidencia ? ` — ${jornada.detalleIncidencia}` : ""}`
+                    : t("detalleJornada.sinIncidencias")
+                }
+              />
+              {fotosIncidencia.length > 0 ? (
+                <View style={estilos.filaFotosIncidencia}>
+                  {fotosIncidencia.map((par, i) => (
+                    <FotoEvidencia
+                      key={`${i}-${par.uri}|${par.url}`}
+                      uri={par.uri}
+                      url={par.url}
+                      estilo={estilos.fotoIncidencia}
+                      onAbrir={() => setVisor({ fotos: fotosIncidencia, indice: i })}
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : (
+            <View style={estilos.seccion} onLayout={manejarLayoutSeccionCheckOut}>
+              <Text style={estilos.seccionTitulo}>{t("detalleJornada.seccionCheckOut")}</Text>
+              <Text style={estilos.textoAbierta}>{t("detalleJornada.jornadaEnCurso")}</Text>
 
-        <Text style={estilos.estadoSincronizacion}>
-          {jornada.sincronizacion === "error" && jornada.intentosSincronizacion >= MAX_INTENTOS
-            ? t("detalleJornada.sincNecesitaReintento")
-            : `${t("detalleJornada.estadoEnvio")} ${
-                {
-                  pendiente: t("detalleJornada.sincPendiente"),
-                  sincronizando: t("detalleJornada.sincEnviando"),
-                  sincronizado: t("detalleJornada.sincEnviado"),
-                  error: t("detalleJornada.sincError"),
-                }[jornada.sincronizacion]
-              }`}
-        </Text>
+              {mostrarFormularioCheckOut ? (
+                <CheckOutForm
+                  ref={refKmFinal}
+                  jornada={jornada}
+                  onEnviar={manejarEnvioCheckOut}
+                  onCancelar={() => setMostrarFormularioCheckOut(false)}
+                  enviando={enviando || obteniendoUbicacion}
+                  scrollViewRef={refScroll}
+                />
+              ) : (
+                <BotonPrimario
+                  titulo={t("detalleJornada.botonCheckOut")}
+                  onPress={() => {
+                    enfocarAlMostrarRef.current = true;
+                    setMostrarFormularioCheckOut(true);
+                  }}
+                  estilo={estilos.botonCheckOut}
+                />
+              )}
+            </View>
+          )}
+
+          <Text style={estilos.estadoSincronizacion}>
+            {jornada.sincronizacion === "error" && jornada.intentosSincronizacion >= MAX_INTENTOS
+              ? t("detalleJornada.sincNecesitaReintento")
+              : `${t("detalleJornada.estadoEnvio")} ${
+                  {
+                    pendiente: t("detalleJornada.sincPendiente"),
+                    sincronizando: t("detalleJornada.sincEnviando"),
+                    sincronizado: t("detalleJornada.sincEnviado"),
+                    error: t("detalleJornada.sincError"),
+                  }[jornada.sincronizacion]
+                }`}
+          </Text>
+        </ProveedorEnfoqueTeclado>
       </ScrollView>
       <VisorFotoAmpliada
         visible={visor != null}

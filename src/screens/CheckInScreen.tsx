@@ -1,100 +1,31 @@
-import React, { useState } from "react";
-import { View, Text, FlatList, RefreshControl, ScrollView, StyleSheet } from "react-native";
+import React from "react";
+import { Text, ScrollView, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
-import { useNetwork } from "@/context/NetworkContext";
-import { useJornadasAbiertas } from "@/hooks/useJornadasAbiertas";
-import { useSeguimientoGPS } from "@/hooks/useSeguimientoGPS";
-import { useNavegarUnaVez } from "@/hooks/useNavegarUnaVez";
-import { TarjetaJornada } from "@/components/TarjetaJornada";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { TabsNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
 
-// Solo lista las rutas activas del chofer. Iniciar una ruta nueva es una
-// pantalla propia (NuevoCheckInScreen, con botón "Atrás" + "Cancelar") —
-// antes el formulario se revelaba inline acá mismo, sin ninguna forma de
-// cancelarlo salvo enviarlo.
+// spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): esta pantalla ya no lista "Rutas
+// activas" (eso se mudó a CheckOutScreen, pantalla nueva) -- queda con un único botón, "Iniciar
+// ruta", que abre el formulario (NuevoCheckInScreen, sin cambios). El botón que de verdad guarda
+// sigue llamándose "Registrar check-in" (CheckInForm.tsx), para no tener dos botones con el mismo
+// nombre.
 export default function CheckInScreen() {
   const navigation = useNavigation<TabsNavigationProp<"CheckIn">>();
-  const navegarUnaVez = useNavegarUnaVez();
   const { t } = useTranslation();
   const { usuario } = useAuth();
-  const { sincronizarAhora } = useNetwork();
-  const {
-    jornadas: viajesActivos,
-    cargando: cargandoViajes,
-    recargar: recargarViajes,
-  } = useJornadasAbiertas();
-
-  // Mientras haya al menos una ruta activa y la app esté en primer plano, se
-  // envían pings de posición al Dashboard en tiempo real (ver useSeguimientoGPS).
-  useSeguimientoGPS(viajesActivos.map((jornada) => jornada.id));
-
-  // Pull-to-refresh: mismo criterio que HistorialScreen.tsx (forzar el
-  // reintento de sincronización ignorando MAX_INTENTOS, es un pedido
-  // explícito del chofer de "probá de nuevo"), pero con un estado de
-  // `refrescando` propio en vez de reusar `cargandoViajes` del hook — a
-  // diferencia de Historial, esta pantalla hace `if (cargandoViajes) return
-  // null` más abajo, así que reusar esa misma bandera pondría la pantalla
-  // en blanco en cada pull-to-refresh en vez de mostrar el spinner nativo
-  // sobre el contenido ya visible.
-  const [refrescando, setRefrescando] = useState(false);
-
-  async function refrescar() {
-    setRefrescando(true);
-    try {
-      await sincronizarAhora(true);
-      await recargarViajes();
-    } finally {
-      setRefrescando(false);
-    }
-  }
-
-  // Alto real de la barra de tabs, con el inset de la barra de gestos de
-  // Android ya incluido (el propio BottomTabBar de @react-navigation lo suma
-  // solo — ver la nota en RootNavigator.tsx). Se usa acá en vez de un número
-  // fijo porque esta pantalla no tiene `tabBarStyle` custom, así que su
-  // altura real no está escrita en ningún lado del código: sin esto, el
-  // último elemento de la lista queda tapado por la barra de tabs.
-  const alturaTabBar = useBottomTabBarHeight();
-
-  if (cargandoViajes) return null;
 
   return (
-    <ScrollView
-      style={estilos.pantalla}
-      contentContainerStyle={[estilos.contenido, { paddingBottom: espaciado.xl + alturaTabBar }]}
-      refreshControl={<RefreshControl refreshing={refrescando} onRefresh={refrescar} />}
-    >
+    <ScrollView style={estilos.pantalla} contentContainerStyle={estilos.contenido}>
       <Text style={estilos.titulo}>{t("checkIn.titulo")}</Text>
       <Text style={estilos.chofer}>{t("checkIn.chofer", { nombre: usuario?.nombre ?? "" })}</Text>
 
-      {viajesActivos.length > 0 ? (
-        <View style={estilos.bloqueActivos}>
-          <Text style={estilos.subtitulo}>
-            {t("checkIn.rutasActivas", { cantidad: viajesActivos.length })}
-          </Text>
-          <FlatList
-            data={viajesActivos}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-            renderItem={({ item }) => (
-              <TarjetaJornada
-                jornada={item}
-                onPress={() => navegarUnaVez(() => navigation.navigate("DetalleJornada", { id: item.id }))}
-              />
-            )}
-          />
-        </View>
-      ) : null}
-
       <BotonPrimario
-        titulo={t(viajesActivos.length > 0 ? "checkIn.botonNuevaRuta" : "checkIn.botonPrimeraRuta")}
+        titulo={t("checkIn.botonIniciarRuta")}
         onPress={() => navigation.navigate("NuevoCheckIn")}
         estilo={estilos.botonNuevaRuta}
       />
@@ -119,13 +50,6 @@ const estilos = StyleSheet.create({
     color: colores.textoSecundario,
     marginTop: espaciado.xs,
     marginBottom: espaciado.lg,
-  },
-  bloqueActivos: {
-    marginBottom: espaciado.lg,
-  },
-  subtitulo: {
-    ...tipografia.subtitulo,
-    marginBottom: espaciado.sm,
   },
   botonNuevaRuta: {
     marginTop: espaciado.sm,

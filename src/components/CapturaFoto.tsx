@@ -14,9 +14,10 @@ interface Props {
   ayuda?: string;
   uri: string | null;
   onCapturada: (uriComprimida: string) => void;
+  error?: string;
 }
 
-export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada }: Props) {
+export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada, error }: Props) {
   const { t } = useTranslation();
   const [procesando, setProcesando] = useState(false);
   const [visorAbierto, setVisorAbierto] = useState(false);
@@ -49,7 +50,10 @@ export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada }: Props) {
       <Text style={estilos.etiqueta}>{etiqueta}</Text>
       {ayuda ? <Text style={estilos.ayuda}>{ayuda}</Text> : null}
 
-      <Pressable onPress={uri ? () => setVisorAbierto(true) : tomarFoto} style={estilos.zonaCaptura}>
+      <Pressable
+        onPress={uri ? () => setVisorAbierto(true) : tomarFoto}
+        style={[estilos.zonaCaptura, Boolean(error) && estilos.zonaConError]}
+      >
         {uri ? (
           <Image source={{ uri }} style={estilos.imagen} />
         ) : (
@@ -67,6 +71,7 @@ export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada }: Props) {
           <Text style={estilos.enlaceRepetir}>{t("capturaFoto.tomarOtra")}</Text>
         </Pressable>
       ) : null}
+      {error ? <Text style={estilos.textoError}>{error}</Text> : null}
 
       <VisorFotoAmpliada
         visible={visorAbierto}
@@ -97,6 +102,14 @@ const estilos = StyleSheet.create({
     borderRadius: radios.md,
     overflow: "hidden",
     backgroundColor: colores.superficie,
+  },
+  zonaConError: {
+    borderColor: colores.peligro,
+  },
+  textoError: {
+    ...tipografia.ayuda,
+    color: colores.peligro,
+    marginTop: espaciado.xs,
   },
   marcador: {
     height: 160,

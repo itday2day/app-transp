@@ -1,5 +1,14 @@
 import React, { useEffect, useRef, useState, type RefObject } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Keyboard, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  TextInput,
+  Keyboard,
+  ScrollView,
+  Alert,
+} from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { SelectorBuscable } from "@/components/SelectorBuscable";
@@ -7,11 +16,16 @@ import { SelectorDesplegable } from "@/components/SelectorDesplegable";
 import { SelectorMatricula } from "@/components/SelectorMatricula";
 import { SelectorCombustible } from "@/components/SelectorCombustible";
 import { CapturaFoto } from "@/components/CapturaFoto";
-import { IncidenciasForm } from "@/components/IncidenciasForm";
+import {
+  IncidenciasForm,
+  TIPOS_INCIDENCIA_CHECKIN,
+  CLAVE_TIPO_INCIDENCIA_CHECKIN,
+} from "@/components/IncidenciasForm";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { EMPRESAS, RUTAS_POR_EMPRESA } from "@/data/empresas";
 import { obtenerCatalogoEmpresas, obtenerCatalogoRutasPorEmpresa } from "@/db/catalogoRepo";
-import { IncidenciaData, NivelCombustible, TipoIncidencia } from "@/types";
+import { IncidenciaData, NivelCombustible, TipoIncidenciaCheckin } from "@/types";
+import { scrollAlCampo } from "@/utils/scrollAlCampo";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
@@ -25,7 +39,7 @@ export interface ValoresCheckInForm {
   fotoTacometroInicialUri: string;
   fotoRutaUri?: string;
   tuvoIncidenciaCheckin: boolean;
-  tipoIncidenciaCheckin: TipoIncidencia | null;
+  tipoIncidenciaCheckin: TipoIncidenciaCheckin | null;
   detalleIncidenciaCheckin: string;
   fotosIncidenciaCheckinUris: string[];
 }
@@ -60,6 +74,24 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
   const [incidencia, setIncidencia] = useState<IncidenciaData>(INCIDENCIA_INICIAL);
   const refRutaManual = useRef<TextInput>(null);
 
+  // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): un objetivo de scroll/foco por
+  // campo obligatorio, en el mismo orden en que aparecen en pantalla -- usado solo al tocar
+  // "Registrar check-in" con algo pendiente (criterio 8). La foto de la hoja de ruta no entra:
+  // sigue siendo opcional, como hoy.
+  const refContEmpresa = useRef<View>(null);
+  const refContRuta = useRef<View>(null);
+  const refContMatricula = useRef<View>(null);
+  const refMatriculaInput = useRef<TextInput>(null);
+  const refKmInicial = useRef<TextInput>(null);
+  const refContCombustible = useRef<View>(null);
+  const refContFotoTacometro = useRef<View>(null);
+  const refDetalleIncidencia = useRef<TextInput>(null);
+  // Mismo criterio que NuevoCheckInScreen/CheckOutForm (ver manejarEnviar más abajo): un ref
+  // síncrono, no el prop `enviando` (que depende de un re-render), es lo único que de verdad
+  // protege contra un segundo toque disparado antes de que React vuelva a pintar el botón
+  // deshabilitado.
+  const yaEnviando = useRef(false);
+
   // spec_catalogo_empresas_rutas.md (Hallazgo #48): arranca con la lista incluida en la app
   // (EMPRESAS/RUTAS_POR_EMPRESA) -- nunca un selector vacío, ni en el primer uso sin red ni
   // mientras se resuelve esta consulta a SQLite -- y la reemplaza con la caché del catálogo de
@@ -67,6 +99,10 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
   // caché todavía, esta lista incluida es el único respaldo que queda).
   const [empresasDisponibles, setEmpresasDisponibles] = useState<string[]>(EMPRESAS);
   const [rutasPorEmpresa, setRutasPorEmpresa] = useState<Record<string, string[]>>(RUTAS_POR_EMPRESA);
+  // Solo true después de un intento de envío con algo pendiente -- antes de eso, estos campos
+  // nunca mostraron un error reactivo (a diferencia del detalle de incidencia "Otro", que ya tenía
+  // su propio aviso en vivo desde antes de este hallazgo y sigue igual).
+  const [mostrarErrores, setMostrarErrores] = useState(false);
 
   useEffect(() => {
     let activo = true;
@@ -96,6 +132,12 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
     return () => clearTimeout(temporizador);
   }, [rutaManual]);
 
+  // El prop `enviando` solo baja a `false` cuando el envío (éxito o error) terminó en la pantalla
+  // contenedora -- recién ahí vuelve a estar permitido un envío nuevo.
+  useEffect(() => {
+    if (!enviando) yaEnviando.current = false;
+  }, [enviando]);
+
   function manejarCambioEmpresa(nuevaEmpresa: string) {
     setEmpresa(nuevaEmpresa);
     // Las rutas dependen de la empresa, así que una ruta ya elegida deja de
@@ -105,18 +147,57 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
   }
 
   const detalleIncidenciaValido = incidencia.tipo !== "Otro" || incidencia.detalle.trim().length > 0;
-  const formularioValido =
-    empresa !== null &&
-    matricula.trim().length > 0 &&
-    ruta.trim().length > 0 &&
-    Number(kmInicial) > 0 &&
-    combustible !== null &&
-    fotoTacometro !== null &&
-    detalleIncidenciaValido;
 
   function manejarEnviar() {
-    if (!formularioValido || !empresa || !combustible || !fotoTacometro) return;
+    if (yaEnviando.current) return;
 
+    // Orden de pantalla: empresa, ruta, matrícula, km inicial, combustible, foto del tablero,
+    // detalle de incidencia (solo si corresponde). La foto de la hoja de ruta queda afuera a
+    // propósito: sigue siendo opcional.
+    const campos = [
+      { falta: empresa === null, etiqueta: t("checkInForm.empresaEtiqueta"), contRef: refContEmpresa },
+      { falta: ruta.trim().length === 0, etiqueta: t("checkInForm.rutaEtiqueta"), contRef: refContRuta },
+      {
+        falta: matricula.trim().length === 0,
+        etiqueta: t("selectorMatricula.etiqueta"),
+        contRef: refContMatricula,
+        focoRef: refMatriculaInput,
+      },
+      {
+        falta: !(Number(kmInicial) > 0),
+        etiqueta: t("checkInForm.kmInicialEtiqueta"),
+        contRef: refKmInicial,
+        focoRef: refKmInicial,
+      },
+      {
+        falta: combustible === null,
+        etiqueta: t("checkInForm.combustibleEtiqueta"),
+        contRef: refContCombustible,
+      },
+      {
+        falta: fotoTacometro === null,
+        etiqueta: t("checkInForm.fotoTablero"),
+        contRef: refContFotoTacometro,
+      },
+      {
+        falta: !detalleIncidenciaValido,
+        etiqueta: t("incidencias.detalleEtiqueta"),
+        contRef: refDetalleIncidencia,
+        focoRef: refDetalleIncidencia,
+      },
+    ];
+
+    const faltantes = campos.filter((c) => c.falta);
+    if (faltantes.length > 0) {
+      setMostrarErrores(true);
+      scrollAlCampo(scrollViewRef, faltantes[0].contRef, faltantes[0].focoRef);
+      Alert.alert(t("avisoCampos.titulo"), faltantes.map((c) => `• ${c.etiqueta}`).join("\n"));
+      return;
+    }
+
+    if (!empresa || !combustible || !fotoTacometro) return; // nunca debería pasar: ya validado arriba
+
+    yaEnviando.current = true;
     onEnviar({
       empresa,
       // spec_normalizacion_dni_matricula_telefono.md: red de seguridad además de la que ya aplica
@@ -143,88 +224,111 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
     <View>
       {/* Sección 1: datos de operación — empresa y ruta dependen una de la otra. */}
       <View>
-        <SelectorBuscable
-          etiqueta={t("checkInForm.empresaEtiqueta")}
-          placeholder={t("checkInForm.empresaPlaceholder")}
-          valor={empresa}
-          opciones={empresasDisponibles}
-          obtenerEtiqueta={(item) => item}
-          onSeleccionar={manejarCambioEmpresa}
-        />
-
-        {rutaManual ? (
-          <View>
-            <CampoTexto
-              ref={refRutaManual}
-              etiqueta={t("checkInForm.rutaEtiqueta")}
-              placeholder={t("checkInForm.rutaPlaceholderManual")}
-              value={ruta}
-              onChangeText={setRuta}
-              autoCapitalize="characters"
-              returnKeyType="done"
-              onSubmitEditing={() => Keyboard.dismiss()}
-            />
-            {rutasDisponibles.length > 0 ? (
-              <TouchableOpacity
-                accessibilityRole="button"
-                onPress={() => {
-                  setRutaManual(false);
-                  setRuta("");
-                }}
-                style={estilos.enlaceContenedor}
-              >
-                <Text style={estilos.enlace}>{t("checkInForm.elegirDeLaLista")}</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        ) : (
-          <SelectorDesplegable
-            etiqueta={t("checkInForm.rutaEtiqueta")}
-            placeholder={t("checkInForm.rutaPlaceholderLista")}
-            textoDeshabilitado={t("checkInForm.rutaDeshabilitada")}
-            valor={ruta || null}
-            opciones={rutasDisponibles}
-            deshabilitado={empresa === null}
-            onSeleccionar={setRuta}
-            opcionEspecial={{
-              texto: t("checkInForm.agregarRutaManual"),
-              onPress: () => setRutaManual(true),
-            }}
+        <View ref={refContEmpresa}>
+          <SelectorBuscable
+            etiqueta={t("checkInForm.empresaEtiqueta")}
+            placeholder={t("checkInForm.empresaPlaceholder")}
+            valor={empresa}
+            opciones={empresasDisponibles}
+            obtenerEtiqueta={(item) => item}
+            onSeleccionar={manejarCambioEmpresa}
+            error={mostrarErrores && empresa === null ? t("comun.campoObligatorio") : undefined}
           />
-        )}
+        </View>
+
+        <View ref={refContRuta}>
+          {rutaManual ? (
+            <View>
+              <CampoTexto
+                ref={refRutaManual}
+                etiqueta={t("checkInForm.rutaEtiqueta")}
+                placeholder={t("checkInForm.rutaPlaceholderManual")}
+                value={ruta}
+                onChangeText={setRuta}
+                autoCapitalize="characters"
+                returnKeyType="done"
+                onSubmitEditing={() => Keyboard.dismiss()}
+                error={mostrarErrores && ruta.trim().length === 0 ? t("comun.campoObligatorio") : undefined}
+              />
+              {rutasDisponibles.length > 0 ? (
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setRutaManual(false);
+                    setRuta("");
+                  }}
+                  style={estilos.enlaceContenedor}
+                >
+                  <Text style={estilos.enlace}>{t("checkInForm.elegirDeLaLista")}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : (
+            <SelectorDesplegable
+              etiqueta={t("checkInForm.rutaEtiqueta")}
+              placeholder={t("checkInForm.rutaPlaceholderLista")}
+              textoDeshabilitado={t("checkInForm.rutaDeshabilitada")}
+              valor={ruta || null}
+              opciones={rutasDisponibles}
+              deshabilitado={empresa === null}
+              onSeleccionar={setRuta}
+              opcionEspecial={{
+                texto: t("checkInForm.agregarRutaManual"),
+                onPress: () => setRutaManual(true),
+              }}
+              error={mostrarErrores && ruta.trim().length === 0 ? t("comun.campoObligatorio") : undefined}
+            />
+          )}
+        </View>
       </View>
 
       <View style={estilos.divisor} />
 
       {/* Sección 2: control del vehículo. */}
       <View>
-        <SelectorMatricula valor={matricula} onCambiar={setMatricula} opciones={matriculasFrecuentes} />
+        <View ref={refContMatricula}>
+          <SelectorMatricula
+            ref={refMatriculaInput}
+            valor={matricula}
+            onCambiar={setMatricula}
+            opciones={matriculasFrecuentes}
+            error={mostrarErrores && matricula.trim().length === 0 ? t("comun.campoObligatorio") : undefined}
+          />
+        </View>
 
         <CampoTexto
+          ref={refKmInicial}
           etiqueta={t("checkInForm.kmInicialEtiqueta")}
           placeholder={t("checkInForm.kmInicialPlaceholder")}
           keyboardType="numeric"
           value={kmInicial}
           onChangeText={setKmInicial}
+          error={mostrarErrores && !(Number(kmInicial) > 0) ? t("comun.campoObligatorio") : undefined}
         />
 
-        <SelectorCombustible
-          etiqueta={t("checkInForm.combustibleEtiqueta")}
-          valor={combustible}
-          onCambiar={setCombustible}
-        />
+        <View ref={refContCombustible}>
+          <SelectorCombustible
+            etiqueta={t("checkInForm.combustibleEtiqueta")}
+            valor={combustible}
+            onCambiar={setCombustible}
+            error={mostrarErrores && combustible === null ? t("comun.campoObligatorio") : undefined}
+          />
+        </View>
       </View>
 
       <View style={estilos.divisor} />
 
       {/* Sección 3: evidencia visual. */}
       <View>
-        <CapturaFoto
-          etiqueta={t("checkInForm.fotoTablero")}
-          ayuda={t("checkInForm.fotoTableroAyuda")}
-          uri={fotoTacometro}
-          onCapturada={setFotoTacometro}
-        />
+        <View ref={refContFotoTacometro}>
+          <CapturaFoto
+            etiqueta={t("checkInForm.fotoTablero")}
+            ayuda={t("checkInForm.fotoTableroAyuda")}
+            uri={fotoTacometro}
+            onCapturada={setFotoTacometro}
+            error={mostrarErrores && fotoTacometro === null ? t("comun.campoObligatorio") : undefined}
+          />
+        </View>
 
         <CapturaFoto
           etiqueta={t("checkInForm.fotoHojaRuta")}
@@ -238,13 +342,20 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
 
       {/* Sección 4: incidencia y envío. */}
       <View>
-        <IncidenciasForm valor={incidencia} onCambiar={setIncidencia} scrollViewRef={scrollViewRef} />
+        <IncidenciasForm
+          ref={refDetalleIncidencia}
+          pregunta="incidencias.preguntaCheckin"
+          tipos={TIPOS_INCIDENCIA_CHECKIN}
+          etiquetasTipo={CLAVE_TIPO_INCIDENCIA_CHECKIN}
+          valor={incidencia}
+          onCambiar={setIncidencia}
+        />
 
         <BotonPrimario
           titulo={t("checkInForm.botonEnviar")}
           onPress={manejarEnviar}
           cargando={enviando}
-          deshabilitado={!formularioValido}
+          deshabilitado={enviando}
           estilo={estilos.boton}
         />
       </View>

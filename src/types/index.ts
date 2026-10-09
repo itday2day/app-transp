@@ -27,9 +27,25 @@ export type EstadoSincronizacion = "pendiente" | "sincronizando" | "sincronizado
 
 export type TipoIncidencia = "Avería vehículo" | "Tráfico/Retraso" | "Cliente ausente" | "Otro";
 
+/** spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): el check-in tiene sus propios tipos
+ * (pensados para la carga) desde `schema_v18_tipos_incidencia_checkin.sql` -- 8 valores en total,
+ * ampliación solo aditiva sobre el `CHECK` de la base (los 4 de `TipoIncidencia` siguen siendo
+ * válidos ahí por las filas históricas, aunque la app ya no los ofrezca en el check-in). El de
+ * check-out (`TipoIncidencia`, arriba) no cambia. */
+export type TipoIncidenciaCheckin =
+  | TipoIncidencia
+  | "Mercancía dañada"
+  | "Faltante/Sobrante"
+  | "Temperatura fuera de rango"
+  | "Pedido/Documentación";
+
+/** Estado compartido por `IncidenciasForm` en check-in y check-out -- `tipo` acepta el superset
+ * (`TipoIncidenciaCheckin`) porque el mismo componente se parametriza con una lista de tipos u
+ * otra; el valor real en tiempo de ejecución siempre queda acotado a los tipos que esa instancia
+ * ofrece de verdad. */
 export interface IncidenciaData {
   tuvoIncidencia: boolean;
-  tipo: TipoIncidencia | null;
+  tipo: TipoIncidenciaCheckin | null;
   detalle: string;
   fotos: string[]; // uris locales mientras se llena el formulario
 }
@@ -60,7 +76,7 @@ export interface Jornada {
   // Incidencia estructurada del check-in (spec_incidencia_en_checkin.md) — mismo patrón que la
   // incidencia de check-out más abajo, independiente de ella (una jornada puede tener 0, 1 o 2).
   tuvoIncidenciaCheckin?: boolean;
-  tipoIncidenciaCheckin?: TipoIncidencia;
+  tipoIncidenciaCheckin?: TipoIncidenciaCheckin;
   detalleIncidenciaCheckin?: string;
   fotosIncidenciaCheckinUris?: string[]; // local, se muestran en DetalleJornadaScreen
 
@@ -107,7 +123,7 @@ export type NuevoCheckIn = Pick<
   | "tuvoIncidenciaCheckin"
   | "detalleIncidenciaCheckin"
   | "fotosIncidenciaCheckinUris"
-> & { tipoIncidenciaCheckin: TipoIncidencia | null };
+> & { tipoIncidenciaCheckin: TipoIncidenciaCheckin | null };
 
 export type DatosCheckOut = Pick<
   Jornada,

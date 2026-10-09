@@ -13,6 +13,7 @@ interface Props {
   etiqueta: string;
   valor: NivelCombustible | null;
   onCambiar: (nivel: NivelCombustible) => void;
+  error?: string;
 }
 
 function colorNivel(valor: number): string {
@@ -21,7 +22,7 @@ function colorNivel(valor: number): string {
   return colores.exito;
 }
 
-export function SelectorCombustible({ etiqueta, valor, onCambiar }: Props) {
+export function SelectorCombustible({ etiqueta, valor, onCambiar, error }: Props) {
   const porcentaje = valor ?? 0;
 
   return (
@@ -32,6 +33,7 @@ export function SelectorCombustible({ etiqueta, valor, onCambiar }: Props) {
           {valor === null ? "—" : `${valor}%`}
         </Text>
       </View>
+      {error ? <Text style={estilos.textoError}>{error}</Text> : null}
 
       <View style={estilos.pista}>
         <View
@@ -78,6 +80,11 @@ const estilos = StyleSheet.create({
   valorTexto: {
     ...tipografia.cuerpo,
     fontWeight: "700",
+  },
+  textoError: {
+    ...tipografia.ayuda,
+    color: colores.peligro,
+    marginBottom: espaciado.sm,
   },
   pista: {
     height: 12,
