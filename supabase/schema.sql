@@ -102,8 +102,16 @@ create table public.jornadas (
   -- spec_incidencia_en_checkin.md) — mismo patrón que la incidencia de check-out más abajo,
   -- independiente de ella (una jornada puede tener 0, 1 o 2). `incidencias` (arriba) queda de
   -- solo lectura para jornadas viejas, ya no se escribe desde el check-in.
+  -- schema_v18_tipos_incidencia_checkin.sql (Hallazgo #50): el check-in ofrece sus propios 6 tipos
+  -- (pensados para la carga) -- 'Tráfico/Retraso'/'Cliente ausente' siguen siendo valores válidos
+  -- acá (filas históricas, ampliación solo aditiva) pero ya no se ofrecen en la app.
   tuvo_incidencia_checkin boolean,
-  tipo_incidencia_checkin text check (tipo_incidencia_checkin in ('Avería vehículo', 'Tráfico/Retraso', 'Cliente ausente', 'Otro')),
+  tipo_incidencia_checkin text check (
+    tipo_incidencia_checkin in (
+      'Avería vehículo', 'Tráfico/Retraso', 'Cliente ausente', 'Otro',
+      'Mercancía dañada', 'Faltante/Sobrante', 'Temperatura fuera de rango', 'Pedido/Documentación'
+    )
+  ),
   detalle_incidencia_checkin text,
   fotos_incidencia_checkin text[],
 

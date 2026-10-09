@@ -10,6 +10,18 @@ export type EstadoJornada = "abierta" | "cerrada";
 
 export type TipoIncidencia = "Avería vehículo" | "Tráfico/Retraso" | "Cliente ausente" | "Otro";
 
+/** spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): el check-in tiene sus propios tipos
+ * (pensados para la carga) desde `schema_v18_tipos_incidencia_checkin.sql` -- 8 valores en total,
+ * ampliación solo aditiva sobre el `CHECK` de la base (los 4 de `TipoIncidencia` siguen siendo
+ * válidos ahí por las filas históricas, aunque la app ya no los ofrezca). El de check-out
+ * (`TipoIncidencia`, arriba) no cambia. */
+export type TipoIncidenciaCheckin =
+  | TipoIncidencia
+  | "Mercancía dañada"
+  | "Faltante/Sobrante"
+  | "Temperatura fuera de rango"
+  | "Pedido/Documentación";
+
 /** Fila cruda de la tabla public.jornadas. */
 export interface JornadaRow {
   id: string;
@@ -30,7 +42,7 @@ export interface JornadaRow {
   // Incidencia estructurada del check-in (spec_incidencia_en_checkin.md) — mismo patrón que la
   // incidencia de check-out más abajo, independiente de ella.
   tuvo_incidencia_checkin: boolean | null;
-  tipo_incidencia_checkin: TipoIncidencia | null;
+  tipo_incidencia_checkin: TipoIncidenciaCheckin | null;
   detalle_incidencia_checkin: string | null;
   fotos_incidencia_checkin: string[] | null;
 
