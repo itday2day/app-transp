@@ -163,8 +163,13 @@ export async function POST(request: Request) {
       );
     }
     if (dniExistente) {
+      // Hallazgo #51: puede no tener numero_empleado (registrado por invitación) — nunca mostrar
+      // "n.º null" a Administración.
+      const identificador = dniExistente.numero_empleado
+        ? `n.º ${dniExistente.numero_empleado}`
+        : "sin número de empleado (registrado por invitación)";
       const respuesta: ChoferDuplicadoResponse = {
-        mensaje: `Ya existe otro chofer con este DNI: ${dniExistente.nombre} (n.º ${dniExistente.numero_empleado}, ${dniExistente.activo ? "activo" : "de baja"}).`,
+        mensaje: `Ya existe otro chofer con este DNI: ${dniExistente.nombre} (${identificador}, ${dniExistente.activo ? "activo" : "de baja"}).`,
         choferExistente: {
           id: dniExistente.id,
           numeroEmpleado: dniExistente.numero_empleado,

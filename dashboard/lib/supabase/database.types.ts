@@ -4,7 +4,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5";
+    PostgrestVersion: "14.17";
   };
   public: {
     Tables: {
@@ -45,12 +45,16 @@ export type Database = {
           created_at: string;
           debe_cambiar_contrasena: boolean;
           dni: string;
+          empresa_defecto_id: string | null;
           fecha_nacimiento: string;
           id: string;
           nombre: string;
-          numero_empleado: string;
-          pais_nacimiento: string;
-          sexo: string;
+          numero_empleado: string | null;
+          pais_nacimiento: string | null;
+          revisado_at: string | null;
+          revisado_por: string | null;
+          ruta_defecto_id: string | null;
+          sexo: string | null;
           telefono: string | null;
         };
         Insert: {
@@ -59,12 +63,16 @@ export type Database = {
           created_at?: string;
           debe_cambiar_contrasena?: boolean;
           dni: string;
+          empresa_defecto_id?: string | null;
           fecha_nacimiento: string;
           id: string;
           nombre: string;
-          numero_empleado: string;
-          pais_nacimiento: string;
-          sexo: string;
+          numero_empleado?: string | null;
+          pais_nacimiento?: string | null;
+          revisado_at?: string | null;
+          revisado_por?: string | null;
+          ruta_defecto_id?: string | null;
+          sexo?: string | null;
           telefono?: string | null;
         };
         Update: {
@@ -73,15 +81,34 @@ export type Database = {
           created_at?: string;
           debe_cambiar_contrasena?: boolean;
           dni?: string;
+          empresa_defecto_id?: string | null;
           fecha_nacimiento?: string;
           id?: string;
           nombre?: string;
-          numero_empleado?: string;
-          pais_nacimiento?: string;
-          sexo?: string;
+          numero_empleado?: string | null;
+          pais_nacimiento?: string | null;
+          revisado_at?: string | null;
+          revisado_por?: string | null;
+          ruta_defecto_id?: string | null;
+          sexo?: string | null;
           telefono?: string | null;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "choferes_empresa_defecto_id_fkey";
+            columns: ["empresa_defecto_id"];
+            isOneToOne: false;
+            referencedRelation: "empresas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "choferes_ruta_defecto_id_fkey";
+            columns: ["ruta_defecto_id"];
+            isOneToOne: false;
+            referencedRelation: "rutas";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       empresas: {
         Row: {
@@ -103,6 +130,63 @@ export type Database = {
           nombre?: string;
         };
         Relationships: [];
+      };
+      invitaciones: {
+        Row: {
+          codigo: string;
+          creada_por: string | null;
+          created_at: string;
+          empresa_id: string | null;
+          id: string;
+          revocada_at: string | null;
+          ruta_id: string | null;
+          token: string;
+          usada_at: string | null;
+          usada_por: string | null;
+          vence_at: string;
+        };
+        Insert: {
+          codigo?: string;
+          creada_por?: string | null;
+          created_at?: string;
+          empresa_id?: string | null;
+          id?: string;
+          revocada_at?: string | null;
+          ruta_id?: string | null;
+          token?: string;
+          usada_at?: string | null;
+          usada_por?: string | null;
+          vence_at?: string;
+        };
+        Update: {
+          codigo?: string;
+          creada_por?: string | null;
+          created_at?: string;
+          empresa_id?: string | null;
+          id?: string;
+          revocada_at?: string | null;
+          ruta_id?: string | null;
+          token?: string;
+          usada_at?: string | null;
+          usada_por?: string | null;
+          vence_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "invitaciones_empresa_id_fkey";
+            columns: ["empresa_id"];
+            isOneToOne: false;
+            referencedRelation: "empresas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "invitaciones_ruta_id_fkey";
+            columns: ["ruta_id"];
+            isOneToOne: false;
+            referencedRelation: "rutas";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       jornadas: {
         Row: {
@@ -622,6 +706,7 @@ export type Database = {
         | { Args: { table_name: string }; Returns: string };
       enablelongtransactions: { Args: never; Returns: string };
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean };
+      generar_codigo_invitacion: { Args: never; Returns: string };
       geometry: { Args: { "": string }; Returns: unknown };
       geometry_above: {
         Args: { geom1: unknown; geom2: unknown };
@@ -731,6 +816,15 @@ export type Database = {
           p_velocidad_kmh: number;
         };
         Returns: undefined;
+      };
+      listar_estado_choferes: {
+        Args: never;
+        Returns: {
+          email: string;
+          email_confirmed_at: string;
+          id: string;
+          revisado_at: string;
+        }[];
       };
       longtransactionsenabled: { Args: never; Returns: boolean };
       populate_geometry_columns:
@@ -1363,6 +1457,15 @@ export type Database = {
           table_name: string;
         };
         Returns: string;
+      };
+      validar_invitacion: {
+        Args: { p_valor: string };
+        Returns: {
+          empresa_nombre: string;
+          estado: string;
+          ruta_nombre: string;
+          vence_at: string;
+        }[];
       };
     };
     Enums: {
