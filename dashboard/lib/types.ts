@@ -294,20 +294,130 @@ export interface VehiculoResponse {
 export type SexoChofer = "Masculino" | "Femenino" | "Otro";
 
 /** Fila cruda de la tabla public.choferes (ver supabase/schema_v9_choferes_administrados.sql
- * para `activo`/`debe_cambiar_contrasena` — las demás columnas son del esquema inicial). */
+ * para `activo`/`debe_cambiar_contrasena` — las demás columnas son del esquema inicial).
+ * numero_empleado/pais_nacimiento/sexo son `| null` desde schema_v19_invitaciones_alta_choferes.sql
+ * (Hallazgo #51): un chofer registrado por invitación no los pide. empresa_defecto_id/
+ * ruta_defecto_id/revisado_at/revisado_por son nuevos de esa misma migración. */
 export interface ChoferRow {
   id: string;
-  numero_empleado: string;
+  numero_empleado: string | null;
   nombre: string;
   apellidos: string;
   dni: string;
   fecha_nacimiento: string;
-  pais_nacimiento: string;
-  sexo: SexoChofer;
+  pais_nacimiento: string | null;
+  sexo: SexoChofer | null;
   telefono: string | null;
   activo: boolean;
   debe_cambiar_contrasena: boolean;
   created_at: string;
+  empresa_defecto_id: string | null;
+  ruta_defecto_id: string | null;
+  /** NULL = etiqueta "Nuevo — sin revisar" en /choferes. No bloquea nada. */
+  revisado_at: string | null;
+  revisado_por: string | null;
+}
+
+/** Estado en Auth de un chofer — email/email_confirmed_at NO están en `choferes` (viven en
+ * auth.users); llegan por la RPC `listar_estado_choferes()` (solo service_role), nunca por un
+ * `select` directo a auth.users, que no es una tabla accesible desde PostgREST. */
+export interface EstadoChoferAuth {
+  id: string;
+  email: string;
+  emailConfirmedAt: string | null;
+  revisadoAt: string | null;
+}
+
+/** Respuesta de GET /api/choferes/estado (Hallazgo #51, criterio 21). */
+export interface EstadoChoferesResponse {
+  data: EstadoChoferAuth[];
+}
+
+/** Body de POST /api/choferes/revisar (criterio 21: "Marcar como revisado"). */
+export interface RevisarChoferRequest {
+  id: string;
+}
+
+export interface RevisarChoferResponse {
+  mensaje: string;
+  chofer: ChoferRow;
+}
+
+/** Body de POST /api/choferes/anular-registro (criterio 20): borra un chofer registrado por
+ * invitación pero que nunca confirmó su correo. El backend vuelve a comprobar las dos
+ * condiciones (email_confirmed_at IS NULL, sin jornadas) — esto solo lleva el id, nunca "confío
+ * en lo que ya filtró la pantalla". */
+export interface AnularRegistroRequest {
+  id: string;
+}
+
+export interface AnularRegistroResponse {
+  mensaje: string;
+}
+
+/** Estados posibles de una invitación (criterio 20) — "pendiente" es la UX de "válida y sin
+ * usar" que ve Administración; `validar_invitacion()` (que ve el chofer) usa "valida" en su
+ * lugar porque ahí "pendiente" no tendría sentido (todavía no se registró nadie). */
+export type EstadoInvitacion = "pendiente" | "usada" | "vencida" | "revocada";
+
+/** Fila cruda de la tabla public.invitaciones (schema_v19_invitaciones_alta_choferes.sql,
+ * Hallazgo #51). */
+export interface InvitacionRow {
+  id: string;
+  token: string;
+  codigo: string;
+  empresa_id: string | null;
+  ruta_id: string | null;
+  creada_por: string | null;
+  created_at: string;
+  vence_at: string;
+  revocada_at: string | null;
+  usada_at: string | null;
+  usada_por: string | null;
+}
+
+/** Invitación enriquecida para /choferes: el estado ya calculado (criterio 20) y los nombres de
+ * empresa/ruta resueltos (son FK a public.empresas/rutas, nunca el id crudo en pantalla).
+ * token/codigo se enmascaran a null cuando estado !== "pendiente" (revisión del Paso 3a): una
+ * invitación usada/vencida/revocada no necesita que su token siga viajando por la red -- ya no
+ * sirve para registrarse (validar_invitacion() la rechaza igual), así que no hay motivo para
+ * seguir exponiéndolo. */
+export interface InvitacionConEstado extends Omit<InvitacionRow, "token" | "codigo"> {
+  token: string | null;
+  codigo: string | null;
+  estado: EstadoInvitacion;
+  empresaNombre: string | null;
+  rutaNombre: string | null;
+}
+
+/** Respuesta de GET /api/invitaciones. */
+export interface InvitacionesResponse {
+  data: InvitacionConEstado[];
+}
+
+/** Body de POST /api/invitaciones ("Invitar chofer", criterio 19) — empresa/ruta opcionales,
+ * ambas por id (FK real al catálogo, a diferencia de jornadas.empresa/ruta que son texto libre). */
+export interface CrearInvitacionRequest {
+  empresaId?: string;
+  rutaId?: string;
+}
+
+/** `mensajeParaCopiar` ya trae el enlace + código + vencimiento armados (criterio 14) — el botón
+ * "Copiar" del diálogo copia este texto tal cual, sin volver a armarlo en el cliente. */
+export interface CrearInvitacionResponse {
+  mensaje: string;
+  invitacion: InvitacionConEstado;
+  mensajeParaCopiar: string;
+}
+
+/** Body de POST /api/invitaciones/revocar. */
+export interface RevocarInvitacionRequest {
+  id: string;
+}
+
+export interface RevocarInvitacionResponse {
+  mensaje: string;
+  invitacion: InvitacionConEstado;
 }
 
 /** Respuesta de GET /api/choferes. */
@@ -382,12 +492,13 @@ export interface EditarChoferResponse {
 
 /** Devuelto con 409 cuando el número de empleado (comparación exacta, sin normalizar — ver
  * spec_alta_choferes_dashboard.md, Fase 1, punto 4) o el DNI (normalizado — ver
- * spec_normalizacion_dni_matricula_telefono.md) ya existen. */
+ * spec_normalizacion_dni_matricula_telefono.md) ya existen. numeroEmpleado puede ser null desde
+ * el Hallazgo #51: el chofer existente puede haberse registrado por invitación, que no lo pide. */
 export interface ChoferDuplicadoResponse {
   mensaje: string;
   choferExistente: {
     id: string;
-    numeroEmpleado: string;
+    numeroEmpleado: string | null;
     nombre: string;
     activo: boolean;
   };

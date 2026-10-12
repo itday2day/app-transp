@@ -5,6 +5,15 @@ export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Valida la FORMA de un uuid (no que exista) -- para rechazar con 400 antes de gastar una
+ * consulta en un id que ni siquiera tiene la forma correcta, en handlers que reciben un id en
+ * el body (Hallazgo #51, revisión del Paso 3a). */
+export function esUuid(valor: unknown): valor is string {
+  return typeof valor === "string" && UUID_REGEX.test(valor);
+}
+
 // Las tres cosas se declaran explícito, no solo la zona: timeZone fija QUÉ
 // instante de reloj de pared se muestra (sin esto, cada navegador usa la
 // zona de su propio dispositivo — el mismo bug de fondo que los Hallazgos

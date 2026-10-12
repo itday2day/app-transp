@@ -13,7 +13,6 @@ import { SelectorCodigoPais } from "@/components/choferes/selector-codigo-pais";
 import {
   normalizarDni,
   normalizarParaComparar,
-  numeroEmpleadoAEmail,
   SEXOS,
   TELEFONO_VALIDO_REGEX,
 } from "@/lib/choferes";
@@ -23,17 +22,16 @@ import { formatFecha } from "@/lib/utils";
 import type {
   ChoferDuplicadoResponse,
   ChoferRow,
-  CrearChoferResponse,
   EditarChoferResponse,
   ResetearContrasenaResponse,
   SexoChofer,
 } from "@/lib/types";
 
+// Hallazgo #51, criterio 22: el alta (chofer=null) se retiró -- "Invitar chofer"
+// (invitar-chofer-dialog.tsx) la reemplaza. Este diálogo queda solo para ver/editar un chofer
+// que YA existe (por invitación o, todavía, por el alta vieja de los 5 de prueba).
 interface ChoferDialogProps {
-  /** null = alta de un chofer nuevo. Con valor = edición — el padre pasa `key={chofer.id}` (o
-   * una key fija en modo alta) para que el formulario arranque siempre con los valores
-   * correctos, mismo criterio que VehiculoDialog. */
-  chofer: ChoferRow | null;
+  chofer: ChoferRow;
   onClose: () => void;
   onGuardado: (chofer: ChoferRow) => void;
 }
@@ -58,7 +56,7 @@ function mensajeDeError(cuerpo: unknown, fallback: string): string {
  * desplegable arranca con esa opción preseleccionada — el valor exacto de la lista, no el crudo
  * guardado. Si no matchea ninguna (país mal escrito, inventado, o inexistente en la lista), no
  * preselecciona nada: el desplegable queda vacío y el formulario exige elegir uno real. */
-function paisPreseleccionado(paisGuardado: string | undefined): string {
+function paisPreseleccionado(paisGuardado: string | null | undefined): string {
   if (!paisGuardado) return "";
   const normalizado = normalizarParaComparar(paisGuardado);
   return PAISES.find((pais) => normalizarParaComparar(pais) === normalizado) ?? "";
@@ -113,29 +111,24 @@ function ContrasenaTemporal({
 }
 
 export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps) {
-  const esEdicion = chofer !== null;
-
-  const [numeroEmpleado, setNumeroEmpleado] = useState(chofer?.numero_empleado ?? "");
-  const [nombre, setNombre] = useState(chofer?.nombre ?? "");
-  const [apellidos, setApellidos] = useState(chofer?.apellidos ?? "");
-  const [dni, setDni] = useState(chofer?.dni ?? "");
-  const [fechaNacimiento, setFechaNacimiento] = useState(chofer?.fecha_nacimiento ?? "");
-  const [paisNacimiento, setPaisNacimiento] = useState(
-    paisPreseleccionado(chofer?.pais_nacimiento)
-  );
-  const [sexo, setSexo] = useState<SexoChofer | "">(chofer?.sexo ?? "");
+  const [nombre, setNombre] = useState(chofer.nombre);
+  const [apellidos, setApellidos] = useState(chofer.apellidos);
+  const [dni, setDni] = useState(chofer.dni);
+  const [fechaNacimiento, setFechaNacimiento] = useState(chofer.fecha_nacimiento);
+  const [paisNacimiento, setPaisNacimiento] = useState(paisPreseleccionado(chofer.pais_nacimiento));
+  const [sexo, setSexo] = useState<SexoChofer | "">(chofer.sexo ?? "");
   // spec_telefono_pais_selector.md: el país arranca en España (o en el que corresponda al
   // teléfono ya guardado, separado por separarTelefono() — coincidencia de prefijo más largo
   // primero) y el número es solo el resto de los dígitos, sin el código de marcación.
-  const telefonoSeparado = separarTelefono(chofer?.telefono);
+  const telefonoSeparado = separarTelefono(chofer.telefono);
   const [paisTelefono, setPaisTelefono] = useState(telefonoSeparado.pais);
   const [numeroTelefono, setNumeroTelefono] = useState(telefonoSeparado.numero);
 
-  // spec_modo_ver_editar_chofer_flota.md: alta siempre arranca en "editar" (nada que mostrar en
-  // "ver" todavía); abrir un chofer existente arranca en "ver". El componente remonta con
-  // `key={chofer.id}` desde la página (igual que ya hacía antes de esta spec), así que este
-  // estado inicial nunca "se pega" de un chofer anterior.
-  const [modo, setModo] = useState<"ver" | "editar">(esEdicion ? "ver" : "editar");
+  // spec_modo_ver_editar_chofer_flota.md: abrir un chofer arranca siempre en "ver" (ya no existe
+  // el modo alta, que arrancaba en "editar" directo -- Hallazgo #51, criterio 22). El componente
+  // remonta con `key={chofer.id}` desde la página, así que este estado inicial nunca "se pega" de
+  // un chofer anterior.
+  const [modo, setModo] = useState<"ver" | "editar">("ver");
   const [confirmandoDescarte, setConfirmandoDescarte] = useState(false);
 
   // Snapshot de los valores con los que arrancó el formulario — estable mientras el componente
@@ -143,12 +136,12 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   // sin duplicar la lógica de "¿hay cambios sin guardar?" en cada campo por separado.
   const valoresIniciales = useMemo(
     () => ({
-      nombre: chofer?.nombre ?? "",
-      apellidos: chofer?.apellidos ?? "",
-      dni: chofer?.dni ?? "",
-      fechaNacimiento: chofer?.fecha_nacimiento ?? "",
-      paisNacimiento: paisPreseleccionado(chofer?.pais_nacimiento),
-      sexo: (chofer?.sexo ?? "") as SexoChofer | "",
+      nombre: chofer.nombre,
+      apellidos: chofer.apellidos,
+      dni: chofer.dni,
+      fechaNacimiento: chofer.fecha_nacimiento,
+      paisNacimiento: paisPreseleccionado(chofer.pais_nacimiento),
+      sexo: (chofer.sexo ?? "") as SexoChofer | "",
       paisTelefono: telefonoSeparado.pais,
       numeroTelefono: telefonoSeparado.numero,
     }),
@@ -169,9 +162,8 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
 
   function manejarCancelar() {
     // El botón ya pasó a ser "Cerrar" (no "Cancelar") en el estado congelado post-guardado — no
-    // hay nada que descartar, es el mismo "Cerrar" de siempre. Igual el alta: no tiene modo "ver"
-    // a dónde volver, cancelar ahí sigue cerrando el diálogo tal cual ya hacía antes de esta spec.
-    if (guardado || !esEdicion) {
+    // hay nada que descartar, es el mismo "Cerrar" de siempre.
+    if (guardado) {
       onClose();
       return;
     }
@@ -203,7 +195,7 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   const [guardado, setGuardado] = useState(false);
   const [choferGuardado, setChoferGuardado] = useState<ChoferRow | null>(null);
   const [contrasenaTemporal, setContrasenaTemporal] = useState<string | null>(null);
-  // Solo relevante en modo alta: si POST /api/choferes devuelve 409, esto guarda el chofer
+  // Si POST /api/choferes/editar devuelve 409 (DNI de otro chofer), esto guarda el chofer
   // existente para que el mensaje sea legible (quién es, si está activo) en vez de un error de
   // base de datos genérico.
   const [duplicado, setDuplicado] = useState<ChoferDuplicadoResponse | null>(null);
@@ -212,22 +204,16 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     setError(null);
     setDuplicado(null);
 
-    if (!esEdicion) {
-      if (!numeroEmpleado.trim()) return setError("Falta el número de empleado.");
-    }
     if (!nombre.trim()) return setError("Falta el nombre.");
     if (!apellidos.trim()) return setError("Faltan los apellidos.");
     if (!dni.trim()) return setError("Falta el DNI.");
     if (!fechaNacimiento) return setError("Falta la fecha de nacimiento.");
     if (!paisNacimiento.trim()) return setError("Falta el país de nacimiento.");
     if (!sexo) return setError("Elegí el sexo.");
-    // Obligatorio solo al crear — un chofer ya cargado sin teléfono se tiene que poder seguir
-    // editando sin exigírselo retroactivo (spec_normalizacion_dni_matricula_telefono.md).
-    if (!esEdicion && !numeroTelefono.trim()) return setError("Falta el teléfono.");
-    // El FORMATO, en cambio, se exige siempre que haya algo tipeado — en alta y en edición
-    // (spec_telefono_e164_y_pais_desplegable.md, a diferencia de la obligatoriedad de arriba).
-    // Se arma acá, no en el input: el selector de país ya garantiza el "+" + código correctos,
-    // el campo numérico ya solo deja tipear dígitos — esto solo concatena los dos.
+    // El FORMATO se exige siempre que haya algo tipeado (spec_telefono_e164_y_pais_desplegable.md)
+    // -- un chofer ya cargado sin teléfono se puede seguir guardando sin teléfono, pero si hay
+    // algo tipeado tiene que ser válido. Se arma acá, no en el input: el selector de país ya
+    // garantiza el "+" + código correctos, el campo numérico ya solo deja tipear dígitos.
     const telefono = numeroTelefono.trim()
       ? `+${codigoMarcacion(paisTelefono)}${numeroTelefono.trim()}`
       : null;
@@ -237,24 +223,19 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
 
     setEnviando(true);
     try {
-      const url = esEdicion ? "/api/choferes/editar" : "/api/choferes";
-      const camposComunes = {
-        nombre: nombre.trim(),
-        apellidos: apellidos.trim(),
-        dni: normalizarDni(dni),
-        fechaNacimiento,
-        paisNacimiento: paisNacimiento.trim(),
-        sexo,
-        telefono,
-      };
-      const body = esEdicion
-        ? { id: chofer.id, ...camposComunes }
-        : { numeroEmpleado: numeroEmpleado.trim(), ...camposComunes };
-
-      const respuesta = await fetch(url, {
+      const respuesta = await fetch("/api/choferes/editar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          id: chofer.id,
+          nombre: nombre.trim(),
+          apellidos: apellidos.trim(),
+          dni: normalizarDni(dni),
+          fechaNacimiento,
+          paisNacimiento: paisNacimiento.trim(),
+          sexo,
+          telefono,
+        }),
       });
       const cuerpo: unknown = await respuesta.json().catch(() => null);
 
@@ -266,19 +247,10 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
         return;
       }
 
-      if (esEdicion) {
-        const { chofer: actualizado } = cuerpo as EditarChoferResponse;
-        setGuardado(true);
-        setChoferGuardado(actualizado);
-        onGuardado(actualizado);
-      } else {
-        const { chofer: creado, contrasenaTemporal: nuevaContrasena } =
-          cuerpo as CrearChoferResponse;
-        setGuardado(true);
-        setChoferGuardado(creado);
-        setContrasenaTemporal(nuevaContrasena);
-        onGuardado(creado);
-      }
+      const { chofer: actualizado } = cuerpo as EditarChoferResponse;
+      setGuardado(true);
+      setChoferGuardado(actualizado);
+      onGuardado(actualizado);
     } catch {
       setError("No se pudo contactar al servidor.");
     } finally {
@@ -287,7 +259,6 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   }
 
   async function alternarActivo() {
-    if (!chofer) return;
     setError(null);
     setCambiandoEstado(true);
     try {
@@ -313,7 +284,6 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   }
 
   async function resetearContrasena() {
-    if (!chofer) return;
     setError(null);
     setReseteando(true);
     try {
@@ -340,17 +310,21 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   const deshabilitarCampos = guardado;
   const estadoActual = choferGuardado?.activo ?? chofer?.activo ?? true;
 
-  const titulo = !esEdicion ? "Agregar chofer" : modo === "ver" ? "Ver chofer" : "Editar chofer";
+  const titulo = modo === "ver" ? "Ver chofer" : "Editar chofer";
 
-  if (chofer && modo === "ver") {
+  if (modo === "ver") {
     const campos: CampoVista[] = [
-      { etiqueta: "Número de empleado", valor: chofer.numero_empleado, mono: true },
+      // Hallazgo #51: un chofer registrado por invitación no tiene numero_empleado -- se omite
+      // la fila entera en vez de mostrar "—" (es un dato que ya no aplica, no uno vacío).
+      ...(chofer.numero_empleado
+        ? [{ etiqueta: "Número de empleado", valor: chofer.numero_empleado, mono: true }]
+        : []),
       { etiqueta: "Nombre", valor: chofer.nombre },
       { etiqueta: "Apellidos", valor: chofer.apellidos },
       { etiqueta: "DNI", valor: chofer.dni, mono: true },
       { etiqueta: "Fecha de nacimiento", valor: formatFecha(chofer.fecha_nacimiento), mono: true },
-      { etiqueta: "País de nacimiento", valor: chofer.pais_nacimiento },
-      { etiqueta: "Sexo", valor: chofer.sexo },
+      { etiqueta: "País de nacimiento", valor: chofer.pais_nacimiento ?? "—" },
+      { etiqueta: "Sexo", valor: chofer.sexo ?? "—" },
       { etiqueta: "Teléfono", valor: chofer.telefono ?? "—", mono: true },
     ];
 
@@ -375,10 +349,13 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
               estado (setContrasenaTemporal) pero este return de "Ver" nunca la dibujaba — la
               contraseña del chofer se cambiaba igual (la API no tiene culpa) y el secreto se
               perdía sin que nadie lo viera. Mismo componente y mismo numeroEmpleadoLogin que usa
-              el modo "Editar" (línea ~552), no una tarjeta nueva. */}
+              el modo "Editar". numero_empleado solo puede faltar (Hallazgo #51) para un chofer
+              registrado por invitación, que entra con correo+contraseña, no con este mecanismo
+              -- "Resetear contraseña" ya está oculto para esos (ver el `chofer.numero_empleado &&`
+              de abajo), así que llegar hasta acá con numero_empleado null no debería pasar. */}
           {contrasenaTemporal && (
             <ContrasenaTemporal
-              numeroEmpleadoLogin={choferGuardado?.numero_empleado ?? chofer.numero_empleado}
+              numeroEmpleadoLogin={choferGuardado?.numero_empleado ?? chofer.numero_empleado ?? ""}
               contrasena={contrasenaTemporal}
             />
           )}
@@ -403,15 +380,21 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
                   <RotateCcw className="h-4 w-4" />
                   {estadoActual ? "Dar de baja" : "Reactivar"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={resetearContrasena}
-                  loading={reseteando}
-                >
-                  <KeyRound className="h-4 w-4" />
-                  Resetear contraseña
-                </Button>
+                {/* Hallazgo #51, criterio 16: el restablecimiento por contraseña temporal se
+                    conserva SOLO para los choferes de la alta vieja (numero_empleado, correo
+                    sintético) -- uno registrado por invitación entra con correo real +
+                    contraseña propia, "resetear" acá no tendría ningún efecto útil. */}
+                {chofer.numero_empleado && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetearContrasena}
+                    loading={reseteando}
+                  >
+                    <KeyRound className="h-4 w-4" />
+                    Resetear contraseña
+                  </Button>
+                )}
               </div>
 
               <div className="flex justify-end gap-2">
@@ -433,28 +416,16 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   return (
     <Dialog open onClose={onClose} title={titulo} className="max-w-lg">
       <div className="flex flex-col gap-4">
-        <div>
-          <Label htmlFor="chf-numero">Número de empleado</Label>
-          <Input
-            id="chf-numero"
-            value={numeroEmpleado}
-            onChange={(e) => setNumeroEmpleado(e.target.value)}
-            disabled={esEdicion || deshabilitarCampos}
-            placeholder="Ej. 04"
-          />
-          {/* ⚠️ La pieza más importante de esta spec: mostrar el identificador EXACTO con el que
-              el chofer va a entrar, antes del paso irreversible — así un cero a la izquierda
-              (el chofer 04) se ve en pantalla en vez de descubrirse cuando alguien no puede
-              entrar (mismo criterio que el contador del Hallazgo #21). */}
-          {!esEdicion && numeroEmpleado.trim() && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              El chofer va a entrar con el número:{" "}
-              <span className="font-mono font-medium text-foreground">{numeroEmpleado.trim()}</span>
-              {" · "}usuario interno:{" "}
-              <span className="font-mono">{numeroEmpleadoAEmail(numeroEmpleado.trim())}</span>
-            </p>
-          )}
-        </div>
+        {/* numero_empleado no se edita nunca (cambiar numeroEmpleado cambiaría el correo
+            sintético con el que el chofer ya inició sesión antes) -- solo se muestra como
+            referencia de solo lectura, y solo si existe (Hallazgo #51: uno registrado por
+            invitación no tiene). */}
+        {chofer.numero_empleado && (
+          <div>
+            <Label htmlFor="chf-numero">Número de empleado</Label>
+            <Input id="chf-numero" value={chofer.numero_empleado} disabled />
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -536,7 +507,7 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
         </div>
 
         <div>
-          <Label htmlFor="chf-telefono-numero">Teléfono{esEdicion ? " (opcional)" : ""}</Label>
+          <Label htmlFor="chf-telefono-numero">Teléfono (opcional)</Label>
           {/* spec_telefono_pais_selector.md: el "+" + código de marcación ya no se tipean — los
               da el selector de país, elegido por nombre (filtrable), mostrado como ISO alpha-2 +
               código. El campo numérico solo acepta dígitos; se concatenan los dos recién al
@@ -570,16 +541,14 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
 
         {contrasenaTemporal && (
           <ContrasenaTemporal
-            numeroEmpleadoLogin={
-              choferGuardado?.numero_empleado ?? chofer?.numero_empleado ?? numeroEmpleado
-            }
+            numeroEmpleadoLogin={choferGuardado?.numero_empleado ?? chofer.numero_empleado ?? ""}
             contrasena={contrasenaTemporal}
           />
         )}
 
         {guardado && !contrasenaTemporal && (
           <p className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">
-            {esEdicion ? "Chofer actualizado." : "Chofer creado."}
+            Chofer actualizado.
           </p>
         )}
 
@@ -598,7 +567,7 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex gap-2">
-              {esEdicion && !contrasenaTemporal && (
+              {!contrasenaTemporal && (
                 <>
                   <Button
                     type="button"
@@ -609,15 +578,17 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
                     <RotateCcw className="h-4 w-4" />
                     {estadoActual ? "Dar de baja" : "Reactivar"}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={resetearContrasena}
-                    loading={reseteando}
-                  >
-                    <KeyRound className="h-4 w-4" />
-                    Resetear contraseña
-                  </Button>
+                  {chofer.numero_empleado && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={resetearContrasena}
+                      loading={reseteando}
+                    >
+                      <KeyRound className="h-4 w-4" />
+                      Resetear contraseña
+                    </Button>
+                  )}
                 </>
               )}
             </div>
@@ -629,7 +600,7 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
               {!guardado && (
                 <Button type="button" onClick={onSubmit} loading={enviando}>
                   <Save className="h-4 w-4" />
-                  {esEdicion ? "Guardar" : "Crear chofer"}
+                  Guardar
                 </Button>
               )}
             </div>

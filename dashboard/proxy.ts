@@ -28,7 +28,16 @@ export const config = {
   // lados). Exclusión por extensión, no por nombre de archivo: así cubre
   // cualquier asset que se agregue después a /public sin tener que volver a
   // tocar este matcher.
+  // /invitacion/{token} (Hallazgo #51, criterio 14): pública y estática a propósito -- el chofer
+  // la abre desde un enlace sin ninguna sesión de administrador. No llama a service_role ni
+  // revela si el token existe (ver app/invitacion/[token]/page.tsx); exigirle la cookie de admin
+  // acá simplemente la dejaría inalcanzable para quien tiene que verla. `invitacion/[^/]+$`, con
+  // el `$` al final: sin él, la alternativa adentro de un lookahead solo necesita matchear como
+  // PREFIJO, no como el resto completo de la URL -- "/invitacion/abc/lo-que-sea" también hubiera
+  // quedado público, no solo "/invitacion/{token}". Con el `$`, solo matchea si "invitacion/" +
+  // un único segmento sin más barras es TODO lo que queda del path -- ni un `/invitacion` suelto
+  // (sin token) ni nada con un segmento de más.
   matcher: [
-    "/((?!login|api/auth|_next/static|_next/image|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|woff2?|ttf|otf)$).*)",
+    "/((?!login|invitacion/[^/]+$|api/auth|_next/static|_next/image|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|woff2?|ttf|otf)$).*)",
   ],
 };

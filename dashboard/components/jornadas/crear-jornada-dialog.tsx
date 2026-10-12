@@ -8,7 +8,6 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { ChoferDialog } from "@/components/choferes/chofer-dialog";
 import { VehiculoDialog } from "@/components/flota/vehiculo-dialog";
 import { useChoferes } from "@/lib/hooks/use-choferes";
 import { useEmpresas } from "@/lib/hooks/use-empresas";
@@ -70,10 +69,12 @@ interface CrearJornadaDialogProps {
  * (queda abierta) o aviso tardío de una entrega ya hecha (se completa también el cierre y nace
  * cerrada). Nunca pide foto de tacómetro ni GPS reales -- Administración no los tiene.
  *
- * Los atajos de alta de chofer/vehículo reusan ChoferDialog/VehiculoDialog TAL CUAL (Fase 1 punto
- * 4: ya están armados con la forma exacta que hace falta, {onClose, onGuardado}) -- nada
- * duplicado ni reducido, el mismo flujo completo con usuario y contraseña temporal que ya usa
- * /choferes.
+ * El atajo de alta de vehículo reusa VehiculoDialog TAL CUAL (Fase 1 punto 4). El de chofer se
+ * retiró (Hallazgo #51, criterio 22): el alta con contraseña temporal ya no existe, y no se puede
+ * crear una jornada a nombre de un chofer que todavía no se registró (invitar y esperar a que
+ * acepte son dos pasos separados, no instantáneos como era el alta vieja) -- ver "Impacto en
+ * otras specs" de spec_bloque_b_invitacion_registro_login_correo.md. Para cargar una jornada de
+ * un chofer nuevo hay que invitarlo desde /choferes primero y esperar a que se registre.
  */
 export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProps) {
   const queryClient = useQueryClient();
@@ -133,7 +134,6 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
   const [tipoIncidencia, setTipoIncidencia] = useState<TipoIncidencia | "">("");
   const [detalleIncidencia, setDetalleIncidencia] = useState("");
 
-  const [altaChoferAbierta, setAltaChoferAbierta] = useState(false);
   const [altaVehiculoAbierta, setAltaVehiculoAbierta] = useState(false);
 
   const [enviando, setEnviando] = useState(false);
@@ -217,24 +217,18 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
 
           <div>
             <Label htmlFor="crear-chofer">Chofer</Label>
-            <div className="flex gap-2">
-              <Select
-                id="crear-chofer"
-                className="flex-1"
-                value={choferId}
-                onChange={(e) => setChoferId(e.target.value)}
-              >
-                <option value="">Elegir chofer…</option>
-                {choferesActivos.map((c: ChoferRow) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nombre} {c.apellidos} ({c.numero_empleado})
-                  </option>
-                ))}
-              </Select>
-              <Button type="button" variant="outline" onClick={() => setAltaChoferAbierta(true)}>
-                + Nuevo
-              </Button>
-            </div>
+            <Select
+              id="crear-chofer"
+              value={choferId}
+              onChange={(e) => setChoferId(e.target.value)}
+            >
+              <option value="">Elegir chofer…</option>
+              {choferesActivos.map((c: ChoferRow) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre} {c.apellidos} {c.numero_empleado ? `(${c.numero_empleado})` : ""}
+                </option>
+              ))}
+            </Select>
           </div>
 
           <div>
@@ -457,18 +451,6 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
           </div>
         </div>
       </Dialog>
-
-      {altaChoferAbierta && (
-        <ChoferDialog
-          chofer={null}
-          onClose={() => setAltaChoferAbierta(false)}
-          onGuardado={(chofer) => {
-            setAltaChoferAbierta(false);
-            queryClient.invalidateQueries({ queryKey: ["choferes"] });
-            setChoferId(chofer.id);
-          }}
-        />
-      )}
 
       {altaVehiculoAbierta && (
         <VehiculoDialog
