@@ -86,12 +86,18 @@ export function FiltrosJornadasForm({ filtros, onChange }: FiltrosJornadasFormPr
             los hijos de grid tienen min-width:auto por defecto — sin esto,
             el input no se achica dentro de su celda y se monta sobre lo que
             tenga al lado (así se veía "Hasta" solapado con "Limpiar").
-            En un iPhone real (430px) las dos columnas se veían montadas; se
-            sospecha que Safari dibuja <input type="date"> más ancho que
-            Chromium (no medido: WebKit no disponible). Por eso apilado por
-            debajo de `sm`, con etiquetas visibles. Desde `sm`: lado a lado,
-            como antes (candidato Hallazgo #54, 2026-10-13). */}
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            En un iPhone real (430px) las dos columnas se veían montadas en
+            vertical, y en horizontal (≥640px, un iPhone 14 Pro Max apaisado
+            mide ~932px) cada input se dibujaba de ~550px pese a `w-full` —
+            Safari no respeta `width:100%` en este control nativo (no medido
+            con WebKit, no disponible acá; Chromium nunca lo reprodujo). Por
+            eso: apilado por debajo de `sm`, con ancho explícito `w-48` (no
+            `w-full`, que Safari ignora) y etiquetas visibles; de `sm` a
+            antes de `lg`, lado a lado con wrap (si no caben, el segundo
+            pasa abajo, nunca se monta); desde `lg`, igual que antes del
+            Hallazgo #54 (grid de 2 columnas, w-full) (candidato Hallazgo
+            #54, 2026-10-13). */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-4 lg:grid lg:grid-cols-2 lg:gap-3">
           <div className="min-w-0">
             <Label htmlFor="f-desde">Desde</Label>
             <Input
@@ -99,7 +105,7 @@ export function FiltrosJornadasForm({ filtros, onChange }: FiltrosJornadasFormPr
               type="date"
               value={filtros.desde}
               onChange={(e) => actualizar("desde", e.target.value)}
-              className="w-full"
+              className="w-48 lg:w-full"
             />
           </div>
           <div className="min-w-0">
@@ -109,7 +115,7 @@ export function FiltrosJornadasForm({ filtros, onChange }: FiltrosJornadasFormPr
               type="date"
               value={filtros.hasta}
               onChange={(e) => actualizar("hasta", e.target.value)}
-              className="w-full"
+              className="w-48 lg:w-full"
             />
           </div>
         </div>
