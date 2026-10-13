@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
+import { compararChoferesPorNombre } from "@/lib/choferes";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { ChoferRow, ChoferesResponse } from "@/lib/types";
 
 // GET /api/choferes — todos los choferes, sin filtros ni paginación (una flota de choferes son
 // decenas de filas, no miles como jornadas — mismo criterio que /api/vehiculos). Incluye los de
 // baja: la pantalla los muestra, no los oculta.
+//
+// Orden por apellidos y nombre (Hallazgo #51, paso 3b, criterio 6) con un Collator declarado EN
+// EL CÓDIGO, no un `.order()` de Postgres -- numero_empleado ya no sirve de clave de orden
+// (puede ser null) y depender del collation de la base para acentos/ñ es justo el tipo de cosa
+// que cambia sin avisar entre entornos.
 export async function GET() {
   const supabase = crearClienteSupabaseAdmin();
 
-  const { data, error } = await supabase
-    .from("choferes")
-    .select("*")
-    .order("numero_empleado", { ascending: true })
-    .returns<ChoferRow[]>();
+  const { data, error } = await supabase.from("choferes").select("*").returns<ChoferRow[]>();
 
   if (error) {
     return NextResponse.json(
@@ -21,7 +23,7 @@ export async function GET() {
     );
   }
 
-  const respuesta: ChoferesResponse = { data: data ?? [] };
+  const respuesta: ChoferesResponse = { data: (data ?? []).sort(compararChoferesPorNombre) };
   return NextResponse.json(respuesta);
 }
 

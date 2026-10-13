@@ -1,11 +1,21 @@
 import { NextResponse } from "next/server";
+import { nombreApellidosChofer } from "@/lib/choferes";
 import { aplicarFiltrosJornadas, MAX_JORNADAS_POR_REPORTE } from "@/lib/jornadas-filtro";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { EstadoJornada, ExportarReporteResponse, JornadaRow } from "@/lib/types";
 
-// jornadas no guarda numero_empleado (solo chofer_id, uuid de Supabase Auth) —
-// se trae vía el embed de PostgREST sobre la FK jornadas.chofer_id -> choferes.id.
-type JornadaRowConChofer = JornadaRow & { choferes: { numero_empleado: string } | null };
+// jornadas no guarda numero_empleado/apellidos/dni (solo chofer_id, uuid de Supabase Auth) —
+// se traen vía el embed de PostgREST sobre la FK jornadas.chofer_id -> choferes.id. Omit +
+// redefinición (no intersección con JornadaRow.choferes, que ya existe para el criterio 7 con
+// otra forma) para no terminar exigiendo las dos formas a la vez.
+type JornadaRowConChofer = Omit<JornadaRow, "choferes"> & {
+  choferes: {
+    numero_empleado: string | null;
+    nombre: string;
+    apellidos: string;
+    dni: string;
+  } | null;
+};
 
 interface CuerpoPeticion {
   correo?: unknown;
@@ -21,8 +31,15 @@ interface CuerpoPeticion {
 // usa la app móvil (ver src/types/index.ts -> JornadaReporte).
 interface JornadaReporte {
   choferId: string;
-  choferNumeroEmpleado: string;
-  choferNombre: string;
+  /** `null` si no existe (Hallazgo #51, paso 3b, criterio 12) -- ya no cae a chofer_id (ese
+   * fallback desaparece: reportes.js (criterio 14) deja la celda vacía en vez de mostrar un
+   * UUID). */
+  choferNumeroEmpleado: string | null;
+  /** "Apellidos, Nombre" en vivo desde `choferes`, SIN DNI (C2 ajustada el 2026-10-13: el DNI
+   * va en su propia columna -- choferDni -- no repetido acá; criterio 12). NO
+   * jornada.chofer_nombre, que solo tiene el nombre. */
+  choferNombreApellidos: string;
+  choferDni: string | null;
   empresa: string;
   fechaCheckIn: string;
   fechaCheckOut: string | null;
@@ -58,8 +75,11 @@ interface JornadaReporte {
 function filaAJornadaReporte(fila: JornadaRowConChofer): JornadaReporte {
   return {
     choferId: fila.chofer_id,
-    choferNumeroEmpleado: fila.choferes?.numero_empleado ?? fila.chofer_id,
-    choferNombre: fila.chofer_nombre,
+    choferNumeroEmpleado: fila.choferes?.numero_empleado ?? null,
+    choferNombreApellidos: fila.choferes
+      ? nombreApellidosChofer(fila.choferes)
+      : fila.chofer_nombre,
+    choferDni: fila.choferes?.dni ?? null,
     empresa: fila.empresa,
     fechaCheckIn: fila.fecha_check_in,
     fechaCheckOut: fila.fecha_check_out,
@@ -150,16 +170,34 @@ export async function POST(request: Request) {
   // { count: "exact" } además de los datos: no es solo para mostrar un
   // número — es lo que permite detectar más abajo si la respuesta vino
   // truncada (ver el chequeo count > filas.length).
-  const query = aplicarFiltrosJornadas(
-    supabase.from("jornadas").select("*, choferes(numero_empleado)", { count: "exact" }),
-    {
-      empresa: empresaFiltro,
-      chofer: choferFiltro,
-      estado: estadoFiltro,
-      desde: rangoInicioFiltro,
-      hasta: rangoFinFiltro,
-    }
-  )
+  //
+  // ⚠️ try/catch obligatorio: este reporte sustenta pagos -- si el filtro "chofer" falla al
+  // resolver ids contra `choferes` (resolverChoferIdsPorTexto, lib/jornadas-filtro.ts), hay que
+  // cortar ACÁ, antes de armar ningún Excel. Nunca generar un reporte con un filtro que aplicó
+  // solo a medias: eso es un archivo incompleto que parece completo.
+  let queryFiltrada;
+  try {
+    ({ query: queryFiltrada } = await aplicarFiltrosJornadas(
+      supabase,
+      supabase
+        .from("jornadas")
+        .select("*, choferes(numero_empleado, nombre, apellidos, dni)", { count: "exact" }),
+      {
+        empresa: empresaFiltro,
+        chofer: choferFiltro,
+        estado: estadoFiltro,
+        desde: rangoInicioFiltro,
+        hasta: rangoFinFiltro,
+      }
+    ));
+  } catch (err) {
+    const detalle = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { mensaje: "No se pudieron aplicar los filtros del reporte.", detalle },
+      { status: 500 }
+    );
+  }
+  const query = queryFiltrada
     .order("fecha_check_in", { ascending: false })
     .limit(MAX_JORNADAS_POR_REPORTE);
 

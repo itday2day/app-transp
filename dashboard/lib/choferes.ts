@@ -32,6 +32,67 @@ export function generarContrasenaTemporal(): string {
 
 export const SEXOS: SexoChofer[] = ["Masculino", "Femenino", "Otro"];
 
+// Hallazgo #51, paso 3b (criterios 23/24 de spec_bloque_b_invitacion_registro_login_correo.md):
+// identificador único del chofer en todo el Dashboard y el Excel, en vivo desde `choferes`
+// (nunca desde `jornadas.chofer_nombre`, que solo guarda el nombre -- ver A1 de
+// spec_bloque_b_paso_3b_identificador_chofer.md). apellidos/dni son NOT NULL en el esquema hoy,
+// así que la reserva de abajo es defensiva, no un caso esperado.
+export function nombreApellidosChofer({
+  nombre,
+  apellidos,
+}: {
+  nombre: string;
+  apellidos: string | null | undefined;
+}): string {
+  const n = nombre.trim();
+  const a = apellidos?.trim();
+  return a ? `${a}, ${n}` : n;
+}
+
+/** "Apellidos, Nombre · DNI" -- el identificador completo (mapa usa solo nombreApellidosChofer,
+ * sin DNI, D2 de la spec del paso 3b). */
+export function identificadorChofer({
+  nombre,
+  apellidos,
+  dni,
+}: {
+  nombre: string;
+  apellidos: string | null | undefined;
+  dni: string | null | undefined;
+}): string {
+  const base = nombreApellidosChofer({ nombre, apellidos });
+  const d = dni?.trim();
+  return d ? `${base} · ${d}` : base;
+}
+
+/** Identificador completo para una fila de `jornadas` con el embed `choferes(nombre, apellidos,
+ * dni)` ya traído (criterio 7 del paso 3b) -- si el embed viniera `null` (no debería, la FK es
+ * NOT NULL) o no se pidió, cae a `jornada.chofer_nombre` (el snapshot histórico), nunca a un
+ * texto vacío. */
+export function identificadorChoferDeJornada(jornada: {
+  chofer_nombre: string;
+  choferes?: { nombre: string; apellidos: string; dni: string } | null;
+}): string {
+  return jornada.choferes ? identificadorChofer(jornada.choferes) : jornada.chofer_nombre;
+}
+
+// Collator declarado en el código (criterio 6 del paso 3b): no depender del collation de la
+// base de datos para que "ñ"/acentos ordenen como en español sin importar dónde corra la
+// consulta.
+const COLLATOR_ES = new Intl.Collator("es-ES");
+
+/** Por apellidos y, si coinciden, por nombre -- mismo orden para el selector de "+ Cargar
+ * jornada" (criterio 3) y para GET /api/choferes (criterio 6). */
+export function compararChoferesPorNombre<T extends { nombre: string; apellidos: string | null }>(
+  a: T,
+  b: T
+): number {
+  const apellidosA = a.apellidos?.trim() ?? "";
+  const apellidosB = b.apellidos?.trim() ?? "";
+  const porApellidos = COLLATOR_ES.compare(apellidosA, apellidosB);
+  return porApellidos !== 0 ? porApellidos : COLLATOR_ES.compare(a.nombre, b.nombre);
+}
+
 // spec_normalizacion_dni_matricula_telefono.md: 9 caracteres fijos (cubre DNI y NIE español).
 // El registro propio desde la app móvil está deshabilitado (el DNI solo se carga desde acá, el
 // Dashboard) y contra la base real no hay ningún chofer con documento de otro formato salvo 2

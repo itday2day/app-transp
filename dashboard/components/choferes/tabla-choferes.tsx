@@ -3,6 +3,7 @@
 import { useState, type MouseEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { nombreApellidosChofer } from "@/lib/choferes";
 import { cn } from "@/lib/utils";
 import type { ChoferRow, EstadoChoferAuth } from "@/lib/types";
 
@@ -197,9 +198,7 @@ function TarjetaChofer({
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-medium">
-            {chofer.nombre} {chofer.apellidos}
-          </p>
+          <p className="font-medium">{nombreApellidosChofer(chofer)}</p>
           <p className="font-mono text-xs text-muted-foreground">
             {chofer.numero_empleado ? `N.º ${chofer.numero_empleado}` : "Registrado por invitación"}
           </p>
@@ -260,9 +259,7 @@ export function TablaChoferes({
                 )}
               >
                 <td className="px-3 py-2 font-mono font-medium">{chofer.numero_empleado ?? "—"}</td>
-                <td className="px-3 py-2">
-                  {chofer.nombre} {chofer.apellidos}
-                </td>
+                <td className="px-3 py-2">{nombreApellidosChofer(chofer)}</td>
                 <td className="px-3 py-2 font-mono">{chofer.dni}</td>
                 <td className="px-3 py-2">{chofer.pais_nacimiento ?? "—"}</td>
                 <td className="px-3 py-2 font-mono">{chofer.telefono ?? "—"}</td>

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { VehiculoDialog } from "@/components/flota/vehiculo-dialog";
+import { compararChoferesPorNombre, identificadorChofer } from "@/lib/choferes";
 import { useChoferes } from "@/lib/hooks/use-choferes";
 import { useEmpresas } from "@/lib/hooks/use-empresas";
 import { useRutas } from "@/lib/hooks/use-rutas";
@@ -83,7 +84,7 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
   const { data: empresasResp } = useEmpresas();
   const { data: rutasResp } = useRutas();
   const choferesActivos = useMemo(
-    () => (choferesResp?.data ?? []).filter((c) => c.activo),
+    () => (choferesResp?.data ?? []).filter((c) => c.activo).sort(compararChoferesPorNombre),
     [choferesResp]
   );
   const vehiculosActivos = useMemo(
@@ -225,7 +226,7 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
               <option value="">Elegir chofer…</option>
               {choferesActivos.map((c: ChoferRow) => (
                 <option key={c.id} value={c.id}>
-                  {c.nombre} {c.apellidos} {c.numero_empleado ? `(${c.numero_empleado})` : ""}
+                  {identificadorChofer(c)}
                 </option>
               ))}
             </Select>

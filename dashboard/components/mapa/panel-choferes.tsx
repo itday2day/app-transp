@@ -68,11 +68,13 @@ export function PanelChoferes({
                     activo && "bg-accent"
                   )}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="min-w-0 break-words font-medium">
                       {posicion.choferNombre ?? "Chofer sin identificar"}
                     </span>
-                    <Badge variant={VARIANTE_BADGE[estado]}>{ETIQUETA_POR_ESTADO[estado]}</Badge>
+                    <Badge variant={VARIANTE_BADGE[estado]} className="shrink-0">
+                      {ETIQUETA_POR_ESTADO[estado]}
+                    </Badge>
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     {posicion.matricula && <span className="font-mono">{posicion.matricula}</span>}

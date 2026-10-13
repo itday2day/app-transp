@@ -40,13 +40,29 @@ export async function GET(request: Request) {
 
   const supabase = crearClienteSupabaseAdmin();
 
-  let query = aplicarFiltrosJornadas(supabase.from("jornadas").select("*", { count: "exact" }), {
-    empresa,
-    chofer,
-    estado: estado ?? undefined,
-    desde,
-    hasta,
-  }).order("fecha_check_in", { ascending: false });
+  // choferes(nombre, apellidos, dni): embed IZQUIERDO (sin !inner) -- una jornada nunca puede
+  // desaparecer del listado por este join (Hallazgo #51, paso 3b, criterio 7/2). La FK
+  // jornadas.chofer_id -> choferes(id) es NOT NULL, así que en la práctica el embed siempre
+  // resuelve; igual se trata como opcional en el tipo y en el componente, nunca se asume.
+  //
+  // ⚠️ try/catch obligatorio: si el filtro "chofer" falla al resolver ids contra `choferes`
+  // (resolverChoferIdsPorTexto, lib/jornadas-filtro.ts), aplicarFiltrosJornadas() propaga el
+  // error -- nunca se sigue con la consulta de jornadas usando un filtro parcial en silencio.
+  let queryFiltrada;
+  try {
+    ({ query: queryFiltrada } = await aplicarFiltrosJornadas(
+      supabase,
+      supabase.from("jornadas").select("*, choferes(nombre, apellidos, dni)", { count: "exact" }),
+      { empresa, chofer, estado: estado ?? undefined, desde, hasta }
+    ));
+  } catch (err) {
+    const detalle = err instanceof Error ? err.message : String(err);
+    return NextResponse.json(
+      { mensaje: "No se pudieron aplicar los filtros de la búsqueda.", detalle },
+      { status: 500 }
+    );
+  }
+  let query = queryFiltrada.order("fecha_check_in", { ascending: false });
 
   const desdeIndice = (page - 1) * pageSize;
   const hastaIndice = desdeIndice + pageSize - 1;

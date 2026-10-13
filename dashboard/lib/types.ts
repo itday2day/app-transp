@@ -27,6 +27,11 @@ export interface JornadaRow {
   id: string;
   chofer_id: string;
   chofer_nombre: string;
+  /** Embed izquierdo de PostgREST (Hallazgo #51, paso 3b, criterio 7) -- nunca se escribe nada
+   * nuevo en `jornadas`: esto solo se LEE para mostrar el identificador completo en vivo. `null`
+   * solo si el embed no vino (no debería, la FK es NOT NULL); ausente del todo si el handler
+   * no lo pidió (no todos los consumidores de JornadaRow lo necesitan). */
+  choferes?: { nombre: string; apellidos: string; dni: string } | null;
   empresa: string;
   matricula: string;
   ruta: string;

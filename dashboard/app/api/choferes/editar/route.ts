@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   DNI_VALIDO_REGEX,
   edadMinimaCumplida,
+  identificadorChofer,
   normalizarDni,
   SEXOS,
   TELEFONO_VALIDO_REGEX,
@@ -151,7 +152,7 @@ export async function POST(request: Request) {
   if (actualizacion.dni) {
     const { data: dniExistente, error: errorLecturaDni } = await supabase
       .from("choferes")
-      .select("id, numero_empleado, nombre, activo")
+      .select("id, numero_empleado, nombre, apellidos, dni, activo")
       .eq("dni", actualizacion.dni)
       .neq("id", id)
       .maybeSingle();
@@ -163,13 +164,10 @@ export async function POST(request: Request) {
       );
     }
     if (dniExistente) {
-      // Hallazgo #51: puede no tener numero_empleado (registrado por invitación) — nunca mostrar
-      // "n.º null" a Administración.
-      const identificador = dniExistente.numero_empleado
-        ? `n.º ${dniExistente.numero_empleado}`
-        : "sin número de empleado (registrado por invitación)";
+      // Hallazgo #51, paso 3b: identifica al otro chofer por identificadorChofer(), no por
+      // numero_empleado (que puede no existir para un chofer registrado por invitación).
       const respuesta: ChoferDuplicadoResponse = {
-        mensaje: `Ya existe otro chofer con este DNI: ${dniExistente.nombre} (${identificador}, ${dniExistente.activo ? "activo" : "de baja"}).`,
+        mensaje: `Ya existe otro chofer con este DNI: ${identificadorChofer(dniExistente)} (${dniExistente.activo ? "activo" : "de baja"}).`,
         choferExistente: {
           id: dniExistente.id,
           numeroEmpleado: dniExistente.numero_empleado,

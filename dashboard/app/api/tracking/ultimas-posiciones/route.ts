@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { nombreApellidosChofer } from "@/lib/choferes";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { PosicionChofer, UltimaPosicionRow } from "@/lib/types";
 
@@ -10,10 +11,16 @@ import type { PosicionChofer, UltimaPosicionRow } from "@/lib/types";
 // refetchInterval ~8s) desde el cliente — ver decisión de arquitectura en el
 // README: no se usa Supabase Realtime aquí.
 //
-// La vista `ultimas_posiciones` no trae si la jornada tuvo incidencia ni el
-// nombre/matrícula legibles, así que se resuelve en una segunda consulta a
+// La vista `ultimas_posiciones` no trae si la jornada tuvo incidencia ni la
+// matrícula legible, así que se resuelve en una segunda consulta a
 // `jornadas` por los jornada_ids involucrados y se fusiona en memoria — más
 // simple que un join en SQL para un volumen de flota pequeño/mediano.
+//
+// El NOMBRE del chofer (Hallazgo #51, paso 3b, criterio 9) ya NO sale de
+// `jornadas.chofer_nombre` (el snapshot congelado, solo nombre sin apellidos) sino de una
+// tercera consulta EN VIVO a `choferes` por `chofer_id` -- la vista `ultimas_posiciones` no se
+// toca (ni su SQL ni sus permisos), esto es una consulta nueva en el handler, nada más. El mapa
+// muestra "Apellidos, Nombre" SIN DNI (decisión D2 de spec_bloque_b_paso_3b_identificador_chofer.md).
 export async function GET() {
   const supabase = crearClienteSupabaseAdmin();
 
@@ -38,7 +45,6 @@ export async function GET() {
   const infoJornadaPorId = new Map<
     string,
     {
-      chofer_nombre: string;
       empresa: string;
       matricula: string;
       tuvo_incidencia: boolean | null;
@@ -49,7 +55,7 @@ export async function GET() {
   if (todosLosJornadaIds.length > 0) {
     const { data: jornadas, error: errorJornadas } = await supabase
       .from("jornadas")
-      .select("id, chofer_nombre, empresa, matricula, tuvo_incidencia, estado")
+      .select("id, empresa, matricula, tuvo_incidencia, estado")
       .in("id", todosLosJornadaIds);
 
     if (errorJornadas) {
@@ -64,6 +70,32 @@ export async function GET() {
 
     for (const jornada of jornadas ?? []) {
       infoJornadaPorId.set(jornada.id, jornada);
+    }
+  }
+
+  // Nombre EN VIVO (Hallazgo #51, paso 3b, criterio 9): una consulta aparte a `choferes` por los
+  // chofer_id de esta misma respuesta -- nunca por jornada_ids, un chofer tiene un solo nombre
+  // sin importar cuántas jornadas tenga abiertas en paralelo.
+  const choferIds = Array.from(new Set(filas.map((p) => p.chofer_id)));
+  const nombrePorChoferId = new Map<string, string>();
+  if (choferIds.length > 0) {
+    const { data: choferesData, error: errorChoferes } = await supabase
+      .from("choferes")
+      .select("id, nombre, apellidos")
+      .in("id", choferIds);
+
+    if (errorChoferes) {
+      return NextResponse.json(
+        {
+          mensaje: "No se pudieron resolver los datos de los choferes.",
+          detalle: errorChoferes.message,
+        },
+        { status: 500 }
+      );
+    }
+
+    for (const chofer of choferesData ?? []) {
+      nombrePorChoferId.set(chofer.id, nombreApellidosChofer(chofer));
     }
   }
 
@@ -85,7 +117,7 @@ export async function GET() {
       lng: posicion.lng,
       velocidadKmh: posicion.velocidad_kmh,
       timestamp: posicion.timestamp,
-      choferNombre: jornadaParaMostrar?.chofer_nombre ?? null,
+      choferNombre: nombrePorChoferId.get(posicion.chofer_id) ?? null,
       empresa: jornadaParaMostrar?.empresa ?? null,
       matricula: jornadaParaMostrar?.matricula ?? null,
       tieneIncidencia: jornadasRelacionadas.some((j) => j.tuvo_incidencia === true),
