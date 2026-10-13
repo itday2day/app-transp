@@ -81,28 +81,32 @@ export function FiltrosJornadasForm({ filtros, onChange }: FiltrosJornadasFormPr
       </div>
 
       <div className="lg:col-span-2">
-        <Label>Rango de fechas</Label>
         {/* min-w-0: un <input type="date"> nativo tiene un ancho mínimo
             intrínseco (el que necesita para el formato de fecha completo) y
             los hijos de grid tienen min-width:auto por defecto — sin esto,
             el input no se achica dentro de su celda y se monta sobre lo que
-            tenga al lado (así se veía "Hasta" solapado con "Limpiar"). */}
-        <div className="grid grid-cols-2 gap-3">
+            tenga al lado (así se veía "Hasta" solapado con "Limpiar").
+            En un iPhone real (430px) las dos columnas se veían montadas; se
+            sospecha que Safari dibuja <input type="date"> más ancho que
+            Chromium (no medido: WebKit no disponible). Por eso apilado por
+            debajo de `sm`, con etiquetas visibles. Desde `sm`: lado a lado,
+            como antes (candidato Hallazgo #54, 2026-10-13). */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="min-w-0">
+            <Label htmlFor="f-desde">Desde</Label>
             <Input
               id="f-desde"
               type="date"
-              aria-label="Desde"
               value={filtros.desde}
               onChange={(e) => actualizar("desde", e.target.value)}
               className="w-full"
             />
           </div>
           <div className="min-w-0">
+            <Label htmlFor="f-hasta">Hasta</Label>
             <Input
               id="f-hasta"
               type="date"
-              aria-label="Hasta"
               value={filtros.hasta}
               onChange={(e) => actualizar("hasta", e.target.value)}
               className="w-full"
