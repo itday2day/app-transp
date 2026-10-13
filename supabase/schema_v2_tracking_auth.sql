@@ -51,6 +51,16 @@ create policy "chofer sube evidencias en su propia carpeta"
 -- chofer, con lat/lng planos en vez del tipo geography (más simple de
 -- consumir desde el cliente). Reemplaza al endpoint del mock
 -- /tracking/ultimas-posiciones.
+--
+-- ⚠️ Hallazgo #52 (schema_v20_seguridad_vistas_tracking.sql): esta vista corre con
+-- security_invoker = true y sin grants a anon/authenticated. `create or replace view`
+-- REEMPLAZA las opciones de la vista (reloptions) pero NO toca el ACL -- medido el 2026-10-13,
+-- dentro de BEGIN…ROLLBACK, con una vista de prueba: has_table_privilege de anon/authenticated
+-- para SELECT/INSERT/UPDATE/DELETE quedó en false antes Y después de un `create or replace view`
+-- sin opciones; lo único que cambió fue reloptions, de {security_invoker=true} a null. Es decir,
+-- volver a correr este archivo tal cual NO reabre el acceso de anon/authenticated (el revoke de
+-- schema_v20 sigue vigente) -- solo pierde la segunda capa (security_invoker), que vuelve a
+-- quedar en pie si se corre schema_v20 justo después.
 create or replace view public.ultimas_posiciones as
 select distinct on (chofer_id)
   chofer_id,
