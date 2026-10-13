@@ -1,6 +1,6 @@
 # Contexto del proyecto — app-transp
 
-_Última actualización: 2026-09-16._
+_Última actualización: 2026-10-13._
 
 Documento de referencia técnica para cualquier IA (o persona) que retome trabajo en este
 repositorio. Refleja el **estado real del código**, no el plan original — donde la implementación
@@ -2545,6 +2545,55 @@ System (`tokens.json`) y el layout validado en el canvas "Day2Day — Primera mu
   ampliables antes de enviar, enlace de login y "Ver en mapa" con el color/ícono nuevos sin romper
   su función original.
 
+✅ **Hallazgo #52 — las vistas de tracking solo las lee `service_role` (2026-10-13,
+`spec_seguridad_vistas_tracking.md`, cerrado, commit `94c2d48`)**: `public.ultimas_posiciones` y
+`public.ubicaciones_tracking_planas` eran `SECURITY DEFINER` y se saltaban el RLS de
+`ubicaciones_tracking` — con la `anon key` (la que viaja en la app y en el Dashboard) cualquiera
+podía leer la posición de todos los choferes, y cualquier chofer autenticado podía leer la de los
+demás, aunque la tabla base estuviera bien protegida. Cerrado en `schema_v20...sql` (espejado en
+`schema.sql`), dos capas: `revoke all ... from anon, authenticated` (la garantía principal — la
+petición REST falla antes de llegar a los datos) + `security_invoker = true` en las dos vistas (si
+algún día alguien vuelve a conceder acceso por descuido, la vista respeta el RLS de quien la llama
+en vez de saltárselo). `service_role` conserva exactamente lo que ya tenía. El Dashboard sigue
+consultando las dos vistas solo del lado servidor (`dashboard/app/api/tracking/...`), nunca desde
+el navegador — confirmado que el mapa en vivo y el trazado de ruta siguen funcionando igual tras la
+migración.
+
+⚠️ **Hallazgo #51, paso 3b — identificador real del chofer en el Dashboard y el Excel (2026-10-13,
+`spec_bloque_b_paso_3b_identificador_chofer.md` +
+`spec_ajuste_dni_columna_aparte_jornadas.md`, Hallazgo #51 sigue en curso, commits `78a4dee` y
+`9e87c44`)**: hasta acá, el nombre que mostraban `/jornadas`, el detalle de jornada y el Excel
+venía de `jornadas.chofer_nombre`, una
+copia histórica que solo guardaba el **nombre de pila** (nunca apellidos ni DNI). Ahora sale de un
+**join en vivo** con `choferes` (`nombre`, `apellidos`, `dni`), formateado «Apellidos, Nombre»
+(`nombreApellidosChofer()`/`nombreApellidosChoferDeJornada()`, `dashboard/lib/choferes.ts`) — con
+fallback al snapshot histórico solo si el embed no vino. El DNI va en **columna propia**, nunca
+pegado al nombre: columna «DNI» en la tabla de `/jornadas` (y en `/choferes`), línea «DNI: …» en la
+tarjeta móvil, dato propio en el detalle de jornada; el mapa (marcador/popup) solo muestra
+«Apellidos, Nombre», sin DNI. El Excel (`server/mock/reportes.js`) quedó de 34 columnas: col. 1
+«Chofer (Apellidos, Nombre)» (sin DNI), col. 2 «DNI» (texto), cols. 3 a 33 sin cambios, col. 34 «N°
+Empleado» (texto, vacío si el chofer no tiene `numero_empleado` — ya no cae al UUID de
+`chofer_id`). El selector de chofer de «+ Cargar jornada» (antes un `<select>` nativo) tiene ahora
+buscador (`dashboard/components/ui/selector-buscable.tsx`, sobre `cmdk`, mismo cimiento que ya
+usaba el combobox de Empresa/Ruta) — filtra por nombre, apellidos o DNI sin acentos; el lado del DNI
+solo se activa si la consulta trae al menos un dígito, para que una letra suelta no "cuele" por la
+letra de control o el prefijo NIE de otro chofer.
+
+✅ **Hallazgo #54 — campos de fecha de `/jornadas` ilegibles en Safari de iPhone (2026-10-13,
+`spec_filtros_fecha_movil.md`, cerrado, commits `47aa5d2` y `c6cc091`)**: en un iPhone real, el
+rango «Desde»/«Hasta» de los filtros se veía montado (en vertical y en apaisado) y sin etiqueta
+visible — Chromium nunca reprodujo el síntoma (WebKit no está instalado en este entorno), así que
+el diagnóstico se apoyó en las capturas del usuario en un iPhone real (iPhone 14 Pro Max), no solo
+en código. Causa probable (deducida de esas capturas, no medida con WebKit): Safari no respeta
+`width:100%` en `<input type="date">` (se dibujaba de ~550px en vez de encogerse a su columna).
+Arreglo: ancho **explícito** (`w-48`, 192px) en vez de `w-full` por debajo de `lg`; por debajo de
+`sm` los dos campos van apilados, de 192px cada uno y alineados a la izquierda; de `sm` a `lg` van
+lado a lado con 16px de separación y `flex-wrap` (si no caben, el segundo pasa abajo, nunca se
+monta); desde `lg` vuelve exactamente el layout de antes (grid de 2 columnas, `w-full` — confirmado
+número por número que nada cambió ahí). Toda pantalla nueva con un campo de fecha en un ancho
+estrecho se prueba en un iPhone real, en vertical y en horizontal — Chromium no es suficiente para
+este control.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
@@ -2569,6 +2618,14 @@ System (`tokens.json`) y el layout validado en el canvas "Day2Day — Primera mu
 
 ## 6. Deuda técnica y pendientes conocidos
 
+- **Candidato Hallazgo #53 — cascada de borrado al borrar un chofer (sin spec propia todavía)**:
+  encontrado el 2026-10-12 al medir el paso 3a del Hallazgo #51 (ver
+  `spec_seguridad_vistas_tracking.md`, "Fuera de alcance"). `jornadas.chofer_id` y
+  `ubicaciones_tracking.chofer_id` son `ON DELETE CASCADE` — borrar un usuario de Auth se lleva
+  todas sus jornadas y su historial de tracking. La dirección probable es `RESTRICT` (no permitir
+  borrar un chofer con jornadas), pero tiene efectos sobre «Anular registro» y sobre cualquier
+  borrado futuro, y merece su propio análisis — queda
+  pendiente de spec.
 - ✅ **Resuelto (2026-09-23): `Input`/`Select` (`components/ui/`) ya cumplen el piso de 44px de
   alto en mobile.** (encontrado 2026-09-22 revisando `spec_flota_vehiculos.md`, que daba esto por
   resuelto). El Hallazgo #11 había corregido la FUENTE de los dos (`text-sm` → `text-base
