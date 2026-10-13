@@ -65,15 +65,22 @@ export function identificadorChofer({
   return d ? `${base} · ${d}` : base;
 }
 
-/** Identificador completo para una fila de `jornadas` con el embed `choferes(nombre, apellidos,
- * dni)` ya traído (criterio 7 del paso 3b) -- si el embed viniera `null` (no debería, la FK es
- * NOT NULL) o no se pidió, cae a `jornada.chofer_nombre` (el snapshot histórico), nunca a un
- * texto vacío. */
-export function identificadorChoferDeJornada(jornada: {
+/** "Apellidos, Nombre" para una fila de `jornadas` con el embed `choferes(nombre, apellidos,
+ * dni)` ya traído (criterio 7 del paso 3b; ajuste del 2026-10-13, Parte A: el DNI se muestra
+ * aparte, ya no pegado a este texto) -- si el embed viniera `null` (no debería, la FK es NOT
+ * NULL) o no se pidió, cae a `jornada.chofer_nombre` (el snapshot histórico), nunca a un texto
+ * vacío. Reutiliza nombreApellidosChofer(), no copia su lógica. */
+export function nombreApellidosChoferDeJornada(jornada: {
   chofer_nombre: string;
   choferes?: { nombre: string; apellidos: string; dni: string } | null;
 }): string {
-  return jornada.choferes ? identificadorChofer(jornada.choferes) : jornada.chofer_nombre;
+  return jornada.choferes ? nombreApellidosChofer(jornada.choferes) : jornada.chofer_nombre;
+}
+
+/** El DNI de una fila de `jornadas` con el embed ya traído, o `null` si el embed no vino (no
+ * debería) -- nunca jornada.chofer_nombre, que no lleva DNI. */
+export function dniChoferDeJornada(jornada: { choferes?: { dni: string } | null }): string | null {
+  return jornada.choferes?.dni ?? null;
 }
 
 // Collator declarado en el código (criterio 6 del paso 3b): no depender del collation de la
@@ -91,6 +98,43 @@ export function compararChoferesPorNombre<T extends { nombre: string; apellidos:
   const apellidosB = b.apellidos?.trim() ?? "";
   const porApellidos = COLLATOR_ES.compare(apellidosA, apellidosB);
   return porApellidos !== 0 ? porApellidos : COLLATOR_ES.compare(a.nombre, b.nombre);
+}
+
+// Se declara, no se hereda (ajuste del 2026-10-13, Parte B, criterio 7): minúsculas + NFD sin
+// diacríticos para nombre/apellidos ("inigo" encuentra "Íñigo"), nunca `toLocaleLowerCase()` a
+// secas -- ese método SÍ cambia con el locale del navegador (acentos aparte), que es justo lo
+// que esta función no quiere heredar. El DNI usa normalizarDni() en los dos lados (texto y
+// candidato), no esta función -- un DNI real no tiene letras acentuadas que normalizar así.
+function normalizarParaBuscarChofer(texto: string): string {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+/** Choferes cuyo nombre, apellidos o DNI contienen `texto` (Parte B, criterio 7) -- función
+ * pura, conserva el orden de entrada (el llamador ya ordenó con compararChoferesPorNombre antes
+ * de filtrar). Texto vacío -> todos, sin filtrar nada.
+ *
+ * El lado del DNI solo se activa si `consulta` trae al menos un dígito: una letra suelta ("a",
+ * "z") NUNCA debe convertirse en una búsqueda de DNI -- de lo contrario coincide con la letra de
+ * control o el prefijo NIE (X/Y/Z) de cualquier chofer, aunque el usuario solo quería buscar por
+ * nombre/apellidos (retoque del 2026-10-13). */
+export function filtrarChoferes<
+  T extends { nombre: string; apellidos: string | null; dni: string | null },
+>(choferes: T[], texto: string): T[] {
+  const consulta = texto.trim();
+  if (!consulta) return choferes;
+
+  const consultaTexto = normalizarParaBuscarChofer(consulta);
+  const consultaDni = /\d/.test(consulta) ? normalizarDni(consulta) : "";
+
+  return choferes.filter((c) => {
+    const porNombre = normalizarParaBuscarChofer(c.nombre).includes(consultaTexto);
+    const porApellidos = normalizarParaBuscarChofer(c.apellidos ?? "").includes(consultaTexto);
+    const porDni = consultaDni ? normalizarDni(c.dni ?? "").includes(consultaDni) : false;
+    return porNombre || porApellidos || porDni;
+  });
 }
 
 // spec_normalizacion_dni_matricula_telefono.md: 9 caracteres fijos (cubre DNI y NIE español).

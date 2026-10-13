@@ -3,7 +3,7 @@
 import { AlertTriangle, ClipboardList, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
-import { identificadorChoferDeJornada } from "@/lib/choferes";
+import { dniChoferDeJornada, nombreApellidosChoferDeJornada } from "@/lib/choferes";
 import { cn, formatFechaHora } from "@/lib/utils";
 import type { JornadaRow } from "@/lib/types";
 
@@ -15,6 +15,7 @@ interface TablaJornadasProps {
 
 const COLUMNAS = [
   "Chofer",
+  "DNI",
   "Empresa",
   "Matrícula",
   "Ruta",
@@ -73,7 +74,12 @@ function TarjetaJornada({
     >
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-medium break-words">{identificadorChoferDeJornada(jornada)}</p>
+          <p className="font-medium break-words">{nombreApellidosChoferDeJornada(jornada)}</p>
+          {/* Línea propia, secundaria y monoespaciada (ajuste del 2026-10-13, Parte A) -- el DNI
+              deja de estar pegado al nombre. */}
+          <p className="font-mono text-xs text-muted-foreground">
+            DNI: {dniChoferDeJornada(jornada) ?? "—"}
+          </p>
           <p className="text-xs text-muted-foreground">
             {jornada.empresa} · <span className="font-mono">{jornada.matricula}</span>
           </p>
@@ -155,7 +161,10 @@ export function TablaJornadas({ jornadas, cargando, onSeleccionar }: TablaJornad
                   cargando && "opacity-60"
                 )}
               >
-                <td className="px-3 py-2 font-medium">{identificadorChoferDeJornada(jornada)}</td>
+                <td className="px-3 py-2 font-medium">{nombreApellidosChoferDeJornada(jornada)}</td>
+                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                  {dniChoferDeJornada(jornada) ?? "—"}
+                </td>
                 <td className="px-3 py-2">{jornada.empresa}</td>
                 <td className="px-3 py-2 font-mono">{jornada.matricula}</td>
                 <td className="px-3 py-2">{jornada.ruta}</td>

@@ -8,8 +8,9 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { SelectorBuscable } from "@/components/ui/selector-buscable";
 import { VehiculoDialog } from "@/components/flota/vehiculo-dialog";
-import { compararChoferesPorNombre, identificadorChofer } from "@/lib/choferes";
+import { compararChoferesPorNombre, filtrarChoferes, nombreApellidosChofer } from "@/lib/choferes";
 import { useChoferes } from "@/lib/hooks/use-choferes";
 import { useEmpresas } from "@/lib/hooks/use-empresas";
 import { useRutas } from "@/lib/hooks/use-rutas";
@@ -217,19 +218,19 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
           )}
 
           <div>
-            <Label htmlFor="crear-chofer">Chofer</Label>
-            <Select
-              id="crear-chofer"
-              value={choferId}
-              onChange={(e) => setChoferId(e.target.value)}
-            >
-              <option value="">Elegir chofer…</option>
-              {choferesActivos.map((c: ChoferRow) => (
-                <option key={c.id} value={c.id}>
-                  {identificadorChofer(c)}
-                </option>
-              ))}
-            </Select>
+            <Label htmlFor="crear-chofer-trigger">Chofer</Label>
+            <SelectorBuscable
+              idPrefix="crear-chofer"
+              items={choferesActivos}
+              valorId={choferId || null}
+              getId={(c: ChoferRow) => c.id}
+              getPrimario={(c: ChoferRow) => nombreApellidosChofer(c)}
+              getSecundario={(c: ChoferRow) => c.dni}
+              filtrar={filtrarChoferes}
+              onSeleccionar={(c: ChoferRow) => setChoferId(c.id)}
+              placeholder="Elegir chofer…"
+              textoSinOpciones="No hay choferes activos."
+            />
           </div>
 
           <div>

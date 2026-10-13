@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { RutaJornadaDialog } from "@/components/mapa/ruta-jornada-dialog";
-import { identificadorChoferDeJornada } from "@/lib/choferes";
+import { dniChoferDeJornada, nombreApellidosChoferDeJornada } from "@/lib/choferes";
 import { useDireccion } from "@/lib/hooks/use-direccion";
 import { formatFechaHora } from "@/lib/utils";
 import type { JornadaRow } from "@/lib/types";
@@ -212,7 +212,8 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
           )}
 
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <Dato label="Chofer" valor={identificadorChoferDeJornada(jornada)} />
+            <Dato label="Chofer" valor={nombreApellidosChoferDeJornada(jornada)} />
+            <Dato label="DNI" valor={dniChoferDeJornada(jornada)} />
             <Dato label="Empresa" valor={jornada.empresa} />
             <Dato label="Matrícula" valor={jornada.matricula} />
             <Dato label="Ruta" valor={jornada.ruta} />
@@ -342,7 +343,7 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
 
           <RutaJornadaDialog
             jornadaId={verRutaAbierto ? jornada.id : null}
-            titulo={`Ruta de la jornada — ${identificadorChoferDeJornada(jornada)} (${jornada.matricula})`}
+            titulo={`Ruta de la jornada — ${nombreApellidosChoferDeJornada(jornada)} (${jornada.matricula})`}
             onClose={() => setVerRutaAbierto(false)}
           />
 
