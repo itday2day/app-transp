@@ -3,13 +3,16 @@
 import { useState } from "react";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { paraInvitacion } from "@/lib/invitaciones";
 import { formatFechaHora } from "@/lib/utils";
-import type { EstadoInvitacion, InvitacionConEstado } from "@/lib/types";
+import type { EstadoInvitacion, InvitacionConEstadoListado } from "@/lib/types";
 
 interface ListaInvitacionesProps {
-  invitaciones: InvitacionConEstado[];
+  // GET /api/invitaciones (criterio 34, ajuste del Hallazgo #51, 2026-10-14) ya no manda
+  // dni/telefono/email/fecha_nacimiento -- InvitacionConEstadoListado, no InvitacionConEstado.
+  invitaciones: InvitacionConEstadoListado[];
   cargando: boolean;
-  onRevocada: (invitacion: InvitacionConEstado) => void;
+  onRevocada: (invitacion: InvitacionConEstadoListado) => void;
 }
 
 const VARIANTE_POR_ESTADO: Record<EstadoInvitacion, BadgeProps["variant"]> = {
@@ -34,8 +37,8 @@ function BotonRevocar({
   invitacion,
   onRevocada,
 }: {
-  invitacion: InvitacionConEstado;
-  onRevocada: (invitacion: InvitacionConEstado) => void;
+  invitacion: InvitacionConEstadoListado;
+  onRevocada: (invitacion: InvitacionConEstadoListado) => void;
 }) {
   const [confirmando, setConfirmando] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -59,7 +62,10 @@ function BotonRevocar({
         );
         return;
       }
-      onRevocada((cuerpo as { invitacion: InvitacionConEstado }).invitacion);
+      // Ya no es una mentira de tipo (ronda anterior): la respuesta real de
+      // POST /api/invitaciones/revocar ahora pide columnas explícitas, igual que esta lista, así
+      // que InvitacionConEstadoListado es lo que de verdad llega acá.
+      onRevocada((cuerpo as { invitacion: InvitacionConEstadoListado }).invitacion);
     } catch {
       setError("No se pudo contactar al servidor.");
     } finally {
@@ -107,6 +113,10 @@ export function ListaInvitaciones({ invitaciones, cargando, onRevocada }: ListaI
         <thead className="bg-muted text-xs uppercase text-muted-foreground">
           <tr>
             <th className="px-3 py-2 font-medium">Estado</th>
+            {/* Decisión 2 de la Actualización 5 (2026-10-14): solo "Apellidos, Nombre" o
+                "Invitación abierta" -- nunca el DNI, el teléfono ni el correo, que no se vuelven
+                a mostrar en ningún lado después de crear la invitación (sin vista de detalle). */}
+            <th className="px-3 py-2 font-medium">Para</th>
             <th className="px-3 py-2 font-medium">Empresa · Ruta</th>
             <th className="px-3 py-2 font-medium">Generada por</th>
             <th className="px-3 py-2 font-medium">Vence</th>
@@ -118,6 +128,9 @@ export function ListaInvitaciones({ invitaciones, cargando, onRevocada }: ListaI
             <tr key={invitacion.id}>
               <td className="px-3 py-2">
                 <EstadoBadge estado={invitacion.estado} />
+              </td>
+              <td className="px-3 py-2">
+                {paraInvitacion(invitacion.nombre, invitacion.apellidos)}
               </td>
               <td className="px-3 py-2">
                 {invitacion.empresaNombre ?? "—"}

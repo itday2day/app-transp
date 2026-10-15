@@ -1,7 +1,15 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
-import { armarMensajeParaCopiar, enriquecerInvitaciones } from "@/lib/invitaciones";
+import { normalizarDni } from "@/lib/choferes";
+import {
+  armarMensajeParaCopiar,
+  COLUMNAS_LISTADO_INVITACIONES,
+  enriquecerInvitaciones,
+  enriquecerInvitacionesListado,
+  limpiarDatosVencidos,
+  validarDatosInvitacion,
+} from "@/lib/invitaciones";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import { formatFechaHora } from "@/lib/utils";
 import type {
@@ -9,9 +17,30 @@ import type {
   CrearInvitacionResponse,
   EmpresaRow,
   InvitacionesResponse,
+  InvitacionListadoRow,
   InvitacionRow,
   RutaRow,
 } from "@/lib/types";
+
+// Sin `pg_cron`, la limpieza de datos personales de las vencidas hace más de 7 días (Fase 1,
+// punto 3) corre como efecto lateral de cada GET/POST -- nunca bloquea la petición principal: un
+// fallo acá se registra y se sigue, no se propaga como error de la petición que lo disparó. Solo
+// se registra el NÚMERO de filas (criterio 29) -- nunca los datos que tenían.
+async function limpiarVencidasSinBloquear(
+  supabase: ReturnType<typeof crearClienteSupabaseAdmin>
+): Promise<void> {
+  try {
+    const filas = await limpiarDatosVencidos(supabase);
+    if (filas > 0) {
+      console.log(`[invitaciones] limpieza de vencidas (+7 días): ${filas} fila(s) anuladas.`);
+    }
+  } catch (error) {
+    console.error(
+      "[invitaciones] la limpieza de vencidas falló, no bloquea la petición:",
+      error instanceof Error ? error.message : error
+    );
+  }
+}
 
 // GET /api/invitaciones — lista completa, sin paginar (criterio 20: mismo criterio de volumen
 // que /api/choferes, no son miles de filas). Resuelve empresa_id/ruta_id a nombres acá, no en el
@@ -26,13 +55,15 @@ export async function GET() {
 
   const supabase = crearClienteSupabaseAdmin();
 
+  await limpiarVencidasSinBloquear(supabase);
+
   const [{ data: invitaciones, error: errorInvitaciones }, { data: empresas }, { data: rutas }] =
     await Promise.all([
       supabase
         .from("invitaciones")
-        .select("*")
+        .select(COLUMNAS_LISTADO_INVITACIONES)
         .order("created_at", { ascending: false })
-        .returns<InvitacionRow[]>(),
+        .returns<InvitacionListadoRow[]>(),
       supabase.from("empresas").select("id, nombre, activo, created_at").returns<EmpresaRow[]>(),
       supabase
         .from("rutas")
@@ -48,7 +79,7 @@ export async function GET() {
   }
 
   const respuesta: InvitacionesResponse = {
-    data: enriquecerInvitaciones(invitaciones ?? [], empresas ?? [], rutas ?? []),
+    data: enriquecerInvitacionesListado(invitaciones ?? [], empresas ?? [], rutas ?? []),
   };
   return NextResponse.json(respuesta);
 }
@@ -86,7 +117,74 @@ export async function POST(request: Request) {
     );
   }
 
+  // Datos personales OPCIONALES (criterio 31, ajuste del Hallazgo #51) -- cada campo que vino se
+  // valida con la MISMA regla que usará el trigger al consumir la invitación (lib/invitaciones.ts,
+  // validarDatosInvitacion): el encargado ve el error antes de generar nada, no recién cuando el
+  // chofer intente registrarse.
+  const dniNormalizado =
+    typeof body.dni === "string" && body.dni.trim() ? normalizarDni(body.dni) : null;
+  const nombre = typeof body.nombre === "string" && body.nombre.trim() ? body.nombre.trim() : null;
+  const apellidos =
+    typeof body.apellidos === "string" && body.apellidos.trim() ? body.apellidos.trim() : null;
+  const telefono =
+    typeof body.telefono === "string" && body.telefono.trim() ? body.telefono.trim() : null;
+  const email =
+    typeof body.email === "string" && body.email.trim() ? body.email.trim().toLowerCase() : null;
+  const fechaNacimiento =
+    typeof body.fechaNacimiento === "string" && body.fechaNacimiento.trim()
+      ? body.fechaNacimiento.trim()
+      : null;
+
+  const errorDatos = validarDatosInvitacion({
+    dni: body.dni,
+    telefono: body.telefono,
+    email: body.email,
+    fechaNacimiento: body.fechaNacimiento,
+  });
+  if (errorDatos) {
+    return NextResponse.json({ mensaje: errorDatos }, { status: 400 });
+  }
+
   const supabase = crearClienteSupabaseAdmin();
+
+  await limpiarVencidasSinBloquear(supabase);
+
+  // DNI duplicado al invitar (criterio 32) -- comodidad del Dashboard, la garantía real sigue
+  // siendo el UNIQUE de choferes.dni y el CHECK/trigger de la base. Primero contra choferes ya
+  // dados de alta, después contra otra invitación todavía pendiente con el mismo DNI (mismo
+  // criterio de "pendiente" que calcularEstadoInvitacion: sin usar, sin revocar, sin vencer).
+  if (dniNormalizado) {
+    const { data: choferExistente } = await supabase
+      .from("choferes")
+      .select("id")
+      .eq("dni", dniNormalizado)
+      .maybeSingle();
+    if (choferExistente) {
+      return NextResponse.json({ mensaje: "Ya hay un chofer con ese DNI." }, { status: 409 });
+    }
+
+    // .limit(1) en vez de .maybeSingle(): si llegara a haber más de una fila (no debería, pero
+    // .maybeSingle() lanza error si encuentra más de una, y este chequeo es una comodidad del
+    // Dashboard, no la garantía real -- esa sigue siendo la base), toma la primera sin romper.
+    const { data: invitacionesPendientes } = await supabase
+      .from("invitaciones")
+      .select("id")
+      .eq("dni", dniNormalizado)
+      .is("usada_at", null)
+      .is("revocada_at", null)
+      .gt("vence_at", new Date().toISOString())
+      .limit(1);
+    const invitacionPendiente = invitacionesPendientes?.[0];
+    if (invitacionPendiente) {
+      return NextResponse.json(
+        {
+          mensaje: "Ya hay una invitación pendiente para ese DNI.",
+          invitacionPendienteId: invitacionPendiente.id,
+        },
+        { status: 409 }
+      );
+    }
+  }
 
   // Se valida que empresa/ruta existan de verdad en el catálogo, estén activas, y que la ruta
   // pertenezca a la empresa elegida -- un id inventado, inactivo, o de otra empresa no debe
@@ -127,7 +225,17 @@ export async function POST(request: Request) {
 
   const { data, error } = await supabase
     .from("invitaciones")
-    .insert({ empresa_id: empresaId, ruta_id: rutaId, creada_por: creadaPor })
+    .insert({
+      empresa_id: empresaId,
+      ruta_id: rutaId,
+      creada_por: creadaPor,
+      dni: dniNormalizado,
+      nombre,
+      apellidos,
+      telefono,
+      email,
+      fecha_nacimiento: fechaNacimiento,
+    })
     .select()
     .single<InvitacionRow>();
 
@@ -153,7 +261,8 @@ export async function POST(request: Request) {
     mensajeParaCopiar: armarMensajeParaCopiar(
       data.token,
       data.codigo,
-      formatFechaHora(data.vence_at)
+      formatFechaHora(data.vence_at),
+      data.nombre
     ),
   };
   return NextResponse.json(respuesta);

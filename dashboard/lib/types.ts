@@ -366,7 +366,9 @@ export interface AnularRegistroResponse {
 export type EstadoInvitacion = "pendiente" | "usada" | "vencida" | "revocada";
 
 /** Fila cruda de la tabla public.invitaciones (schema_v19_invitaciones_alta_choferes.sql,
- * Hallazgo #51). */
+ * Hallazgo #51). Las 6 columnas de datos personales (schema_v21_alta_asistida_dni_atado.sql,
+ * ajuste del Hallazgo #51, 2026-10-14) son todas opcionales -- NULL en una invitación "abierta",
+ * y se anulan al consumirse, al revocarse y en las vencidas (criterio 29). */
 export interface InvitacionRow {
   id: string;
   token: string;
@@ -379,7 +381,22 @@ export interface InvitacionRow {
   revocada_at: string | null;
   usada_at: string | null;
   usada_por: string | null;
+  dni: string | null;
+  nombre: string | null;
+  apellidos: string | null;
+  telefono: string | null;
+  email: string | null;
+  fecha_nacimiento: string | null;
 }
+
+/** Fila que de verdad pide `GET /api/invitaciones` (criterio 34, ajuste del Hallazgo #51,
+ * 2026-10-14): la LISTA nunca pide dni/telefono/email/fecha_nacimiento -- ni siquiera llegan al
+ * servidor del Dashboard, mucho menos al navegador. Solo `nombre`/`apellidos` (para "Para:
+ * Apellidos, Nombre"), que no son el dato sensible que el criterio protege. */
+export type InvitacionListadoRow = Omit<
+  InvitacionRow,
+  "dni" | "telefono" | "email" | "fecha_nacimiento"
+>;
 
 /** Invitación enriquecida para /choferes: el estado ya calculado (criterio 20) y los nombres de
  * empresa/ruta resueltos (son FK a public.empresas/rutas, nunca el id crudo en pantalla).
@@ -395,16 +412,36 @@ export interface InvitacionConEstado extends Omit<InvitacionRow, "token" | "codi
   rutaNombre: string | null;
 }
 
+/** Misma idea que InvitacionConEstado, pero para la LISTA (criterio 34, ajuste del Hallazgo #51,
+ * 2026-10-14): a propósito no extiende InvitacionRow completo, sino InvitacionListadoRow -- sin
+ * dni/telefono/email/fecha_nacimiento. No es que esas 4 claves viajen en `null`: el tipo mismo no
+ * las tiene, así que no pueden filtrarse por descuido en ningún cambio futuro de este archivo. */
+export interface InvitacionConEstadoListado extends Omit<InvitacionListadoRow, "token" | "codigo"> {
+  token: string | null;
+  codigo: string | null;
+  estado: EstadoInvitacion;
+  empresaNombre: string | null;
+  rutaNombre: string | null;
+}
+
 /** Respuesta de GET /api/invitaciones. */
 export interface InvitacionesResponse {
-  data: InvitacionConEstado[];
+  data: InvitacionConEstadoListado[];
 }
 
 /** Body de POST /api/invitaciones ("Invitar chofer", criterio 19) — empresa/ruta opcionales,
- * ambas por id (FK real al catálogo, a diferencia de jornadas.empresa/ruta que son texto libre). */
+ * ambas por id (FK real al catálogo, a diferencia de jornadas.empresa/ruta que son texto libre).
+ * Los 6 campos personales (ajuste del Hallazgo #51, 2026-10-14, criterio 31) también son
+ * opcionales, uno por uno -- una invitación "con datos" puede traer solo alguno. */
 export interface CrearInvitacionRequest {
   empresaId?: string;
   rutaId?: string;
+  dni?: string;
+  nombre?: string;
+  apellidos?: string;
+  telefono?: string;
+  email?: string;
+  fechaNacimiento?: string;
 }
 
 /** `mensajeParaCopiar` ya trae el enlace + código + vencimiento armados (criterio 14) — el botón
@@ -420,9 +457,13 @@ export interface RevocarInvitacionRequest {
   id: string;
 }
 
+// InvitacionConEstadoListado, no InvitacionConEstado (criterio 34, ajuste del Hallazgo #51,
+// 2026-10-14): revocar() anula los 6 datos personales en el mismo UPDATE, pero la respuesta ahora
+// pide columnas explícitas (igual que GET /api/invitaciones), no un "*" -- las 4 claves ni
+// aparecen en el JSON, en vez de aparecer en null.
 export interface RevocarInvitacionResponse {
   mensaje: string;
-  invitacion: InvitacionConEstado;
+  invitacion: InvitacionConEstadoListado;
 }
 
 /** Respuesta de GET /api/choferes. */

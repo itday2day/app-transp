@@ -133,39 +133,57 @@ export type Database = {
       };
       invitaciones: {
         Row: {
+          apellidos: string | null;
           codigo: string;
           creada_por: string | null;
           created_at: string;
+          dni: string | null;
+          email: string | null;
           empresa_id: string | null;
+          fecha_nacimiento: string | null;
           id: string;
+          nombre: string | null;
           revocada_at: string | null;
           ruta_id: string | null;
+          telefono: string | null;
           token: string;
           usada_at: string | null;
           usada_por: string | null;
           vence_at: string;
         };
         Insert: {
+          apellidos?: string | null;
           codigo?: string;
           creada_por?: string | null;
           created_at?: string;
+          dni?: string | null;
+          email?: string | null;
           empresa_id?: string | null;
+          fecha_nacimiento?: string | null;
           id?: string;
+          nombre?: string | null;
           revocada_at?: string | null;
           ruta_id?: string | null;
+          telefono?: string | null;
           token?: string;
           usada_at?: string | null;
           usada_por?: string | null;
           vence_at?: string;
         };
         Update: {
+          apellidos?: string | null;
           codigo?: string;
           creada_por?: string | null;
           created_at?: string;
+          dni?: string | null;
+          email?: string | null;
           empresa_id?: string | null;
+          fecha_nacimiento?: string | null;
           id?: string;
+          nombre?: string | null;
           revocada_at?: string | null;
           ruta_id?: string | null;
+          telefono?: string | null;
           token?: string;
           usada_at?: string | null;
           usada_por?: string | null;
@@ -827,6 +845,17 @@ export type Database = {
         }[];
       };
       longtransactionsenabled: { Args: never; Returns: boolean };
+      obtener_datos_invitacion: {
+        Args: { p_token: string };
+        Returns: {
+          apellidos: string;
+          dni: string;
+          email: string;
+          fecha_nacimiento: string;
+          nombre: string;
+          telefono: string;
+        }[];
+      };
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }
         | { Args: { use_typmod?: boolean }; Returns: string };

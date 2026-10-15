@@ -411,10 +411,14 @@ alter table public.choferes
 -- ============================================================
 -- ⚠️ Esta sección incluye el trigger crear_chofer_desde_invitacion() y su comentario de cierre
 -- de policies (Migración 2, más abajo): esos dos cambios están PENDIENTES DE APLICAR y NO
--- corresponden al estado actual de producción hasta que corra la Migración 2. Lo único aplicado
--- en producción hoy es la Migración 1 (schema_v19_invitaciones_alta_choferes.sql): la tabla
+-- corresponden al estado actual de producción hasta que corra la Migración 2. Lo aplicado en
+-- producción hoy es la Migración 1 (schema_v19_invitaciones_alta_choferes.sql: la tabla
 -- invitaciones, las columnas nuevas de choferes, y validar_invitacion()/generar_codigo_invitacion()/
--- listar_estado_choferes() -- SIN el trigger sobre auth.users ni el cierre de policies.
+-- listar_estado_choferes()) MÁS schema_v21_alta_asistida_dni_atado.sql (ajuste del Hallazgo #51,
+-- 2026-10-14: las 6 columnas de datos personales de invitaciones, su CHECK de normalización, la
+-- función obtener_datos_invitacion(), y el cuerpo ya actualizado -- con DNI atado y borrado al
+-- consumir -- de crear_chofer_desde_invitacion()) -- SIN el trigger sobre auth.users ni el cierre
+-- de policies, eso sigue siendo exclusivo de la Migración 2.
 --
 -- Alta de choferes por invitación en vez del alta con contraseña temporal del Dashboard: el
 -- chofer se registra solo (signUp público de Supabase) con una invitación generada desde
@@ -476,7 +480,24 @@ create table public.invitaciones (
   -- ON DELETE SET NULL, no una FK sin acción: "Anular registro sin confirmar" borra el usuario
   -- de Auth, y esa fila de invitaciones no tiene por qué desaparecer ni bloquear el borrado --
   -- queda como "usada" igual (usada_at se conserva), solo se pierde la referencia a quién la usó.
-  usada_por uuid references auth.users(id) on delete set null
+  usada_por uuid references auth.users(id) on delete set null,
+  -- Datos personales prellenados (ajuste del Hallazgo #51, schema_v21_alta_asistida_dni_atado.sql,
+  -- 2026-10-14): todas opcionales -- una invitación "abierta" (como en el Bloque B original) las
+  -- deja en NULL, el chofer completa todo él mismo. Se anulan al consumirse, al revocarse y en las
+  -- vencidas (ver crear_chofer_desde_invitacion() más abajo y el Dashboard) -- nunca quedan
+  -- colgadas una vez que ya no hacen falta.
+  dni text,
+  nombre text,
+  apellidos text,
+  telefono text,
+  email text,
+  fecha_nacimiento date,
+  -- El trigger compara v_dni <> v_invitacion.dni con comparación EXACTA, sin volver a normalizar
+  -- del lado de la invitación -- sin este CHECK, un dni guardado en minúsculas o con espacios
+  -- dejaría al chofer sin poder registrarse nunca. Mismo criterio que choferes.dni (CHECK de 9
+  -- caracteres, schema_v16_check_dni_9_caracteres.sql).
+  constraint invitaciones_dni_normalizado_check
+    check (dni is null or (dni = upper(regexp_replace(dni, '[\s-]', '', 'g')) and length(dni) = 9))
 );
 
 alter table public.invitaciones enable row level security;
@@ -542,6 +563,51 @@ begin
 end;
 $$;
 
+-- Datos personales prellenados, SOLO por el token de 32 hex (ajuste del Hallazgo #51,
+-- schema_v21_alta_asistida_dni_atado.sql, 2026-10-14) -- a diferencia de validar_invitacion(),
+-- que acepta token O código sin distinguir, esta función exige el formato EXACTO del token: un
+-- código de 8 caracteres, un token mal formado, inexistente, vencido, usado o revocado cae en el
+-- mismo "nada" (cero filas) -- nunca se distingue por la forma de la respuesta si la invitación
+-- existe. No devuelve token, código, id ni creada_por.
+create or replace function public.obtener_datos_invitacion(p_token text)
+returns table (
+  dni text,
+  nombre text,
+  apellidos text,
+  telefono text,
+  email text,
+  fecha_nacimiento date
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_token text := lower(regexp_replace(coalesce(p_token, ''), '[\s-]', '', 'g'));
+  v_fila public.invitaciones%rowtype;
+begin
+  if v_token !~ '^[0-9a-f]{32}$' then
+    return;
+  end if;
+
+  select i.* into v_fila
+  from public.invitaciones i
+  where lower(i.token) = v_token
+    and i.usada_at is null
+    and i.revocada_at is null
+    and i.vence_at > now()
+  limit 1;
+
+  if v_fila.id is null then
+    return;
+  end if;
+
+  return query
+    select v_fila.dni, v_fila.nombre, v_fila.apellidos, v_fila.telefono, v_fila.email,
+           v_fila.fecha_nacimiento;
+end;
+$$;
+
 -- Función del trigger de alta -- SIN instalar todavía (Migración 2, junto con el cierre de
 -- policies de choferes y la reapertura de signUp). Consume la invitación con un UPDATE de un
 -- solo paso: no hay "leer y después escribir" en ningún punto -- la fila gana o no gana la
@@ -585,6 +651,17 @@ begin
 
   if v_invitacion.id is null then
     raise exception 'invitacion_invalida' using errcode = 'P0001';
+  end if;
+
+  -- DNI atado (ajuste del Hallazgo #51, schema_v21_alta_asistida_dni_atado.sql, 2026-10-14): si
+  -- la invitación trae su propio DNI, el registro tiene que usar EXACTAMENTE ese DNI -- no
+  -- alcanza con que el DNI enviado sea válido o nuevo, tiene que ser el mismo que el encargado ya
+  -- cargó al invitar. Va INMEDIATAMENTE después de confirmar la invitación (primero la
+  -- invitación, después el resto) y ANTES del chequeo de formato/duplicado de más abajo, porque
+  -- es una validación DE LA INVITACIÓN, no del dato en sí. Si la invitación no trae dni (abierta,
+  -- como en el Bloque B original), esta condición nunca se cumple y nada cambia.
+  if v_invitacion.dni is not null and v_dni <> v_invitacion.dni then
+    raise exception 'dni_no_coincide' using errcode = 'P0001';
   end if;
 
   if length(v_dni) <> 9 then
@@ -647,6 +724,14 @@ begin
     end if;
   end;
 
+  -- Borrado de datos personales al consumirse (ajuste del Hallazgo #51,
+  -- schema_v21_alta_asistida_dni_atado.sql, 2026-10-14): ya viven en choferes (recién insertados
+  -- arriba) -- no hace falta conservarlos en la invitación. Misma transacción que el INSERT.
+  update public.invitaciones
+  set dni = null, nombre = null, apellidos = null, telefono = null, email = null,
+      fecha_nacimiento = null
+  where id = v_invitacion.id;
+
   return new;
 end;
 $$;
@@ -672,17 +757,23 @@ begin
 end;
 $$;
 
--- Grants consolidados: primero se revoca TODO (incluido "public") de las cuatro, incluyendo
+-- Grants consolidados: primero se revoca TODO (incluido "public") de las cinco, incluyendo
 -- anon/authenticated explícitos, y después se concede exactamente lo que cada una necesita.
 revoke execute on function public.generar_codigo_invitacion()    from public, anon, authenticated;
 revoke execute on function public.crear_chofer_desde_invitacion() from public, anon, authenticated;
 revoke execute on function public.listar_estado_choferes()        from public, anon, authenticated;
 revoke execute on function public.validar_invitacion(text)        from public, anon, authenticated;
+revoke execute on function public.obtener_datos_invitacion(text)  from public, anon, authenticated;
 
 -- validar_invitacion: la pantalla de registro la llama SIN sesión (vía enlace/código, antes de
 -- signUp) Y el login también la puede necesitar para un chofer que ya tiene sesión pero pega un
 -- código de invitación nueva.
 grant execute on function public.validar_invitacion(text) to anon, authenticated;
+
+-- obtener_datos_invitacion: la app la llama SIN sesión, con el token del enlace, para prellenar
+-- el formulario de registro (ajuste del Hallazgo #51, 2026-10-14) -- mismo motivo que
+-- validar_invitacion, antes de signUp.
+grant execute on function public.obtener_datos_invitacion(text) to anon, authenticated;
 
 -- listar_estado_choferes: solo el Dashboard (service_role).
 grant execute on function public.listar_estado_choferes() to service_role;
