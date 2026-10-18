@@ -5,7 +5,7 @@
     "campoObligatorio": "Este campo es obligatorio.",
     "sinConexion": "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
     "errorGenerico": "Algo salió mal. Inténtalo de nuevo; si sigue, contacta con Administración.",
-    "esperarCodigo": "Espera un momento antes de pedir otro código."
+    "esperarCodigo": "Espera {{segundos}} s antes de pedir otro código."
   },
   "visorFoto": {
     "cerrar": "Cerrar"
@@ -38,7 +38,13 @@
     "apellidosVacio": "Escribe tus apellidos.",
     "fechaInvalida": "Revisa la fecha de nacimiento.",
     "edadMinima": "Tienes que ser mayor de 18 años para registrarte.",
-    "telefonoInvalido": "El teléfono debe incluir el código de país (por ejemplo, +34600000000)."
+    "telefonoInvalido": "El teléfono debe incluir el código de país (por ejemplo, +34600000000).",
+    "correoYaRegistrado": "Ya tienes una cuenta con este correo. Inicia sesión o recupera tu contraseña.",
+    "genericoConPista": "No pudimos crear la cuenta. Revisa que el DNI sea el que te dio Administración y que no tengas ya una cuenta con otro correo. Si el problema sigue, contacta con Administración.",
+    "invitacionNoExiste": "No encontramos ese código de invitación. Revísalo o pide uno nuevo a Administración.",
+    "invitacionRevocada": "Esa invitación fue cancelada. Pide una nueva a Administración.",
+    "invitacionVencida": "Esa invitación venció. Pide una nueva a Administración.",
+    "invitacionUsada": "Esa invitación ya se usó. Si empezaste tu registro y no lo terminaste, inicia sesión con tu correo y tu contraseña para confirmar el código."
   },
   "codigo": {
     "codigoIncorrectoOVencido": "El código es incorrecto o venció. Pide uno nuevo."

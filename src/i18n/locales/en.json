@@ -5,7 +5,7 @@
     "campoObligatorio": "This field is required.",
     "sinConexion": "No connection. Check your internet and try again.",
     "errorGenerico": "Something went wrong. Try again; if it keeps happening, contact Administration.",
-    "esperarCodigo": "Wait a moment before requesting another code."
+    "esperarCodigo": "Wait {{segundos}} s before requesting another code."
   },
   "visorFoto": {
     "cerrar": "Close"
@@ -38,7 +38,13 @@
     "apellidosVacio": "Enter your last name.",
     "fechaInvalida": "Check your date of birth.",
     "edadMinima": "You must be over 18 to register.",
-    "telefonoInvalido": "The phone number must include the country code (for example, +34600000000)."
+    "telefonoInvalido": "The phone number must include the country code (for example, +34600000000).",
+    "correoYaRegistrado": "You already have an account with this email. Log in or recover your password.",
+    "genericoConPista": "We couldn't create the account. Check that the ID number is the one Administration gave you and that you don't already have an account with another email. If the problem continues, contact Administration.",
+    "invitacionNoExiste": "We couldn't find that invitation code. Check it or ask Administration for a new one.",
+    "invitacionRevocada": "That invitation was cancelled. Ask Administration for a new one.",
+    "invitacionVencida": "That invitation expired. Ask Administration for a new one.",
+    "invitacionUsada": "That invitation was already used. If you started your registration and didn't finish it, log in with your email and password to confirm the code."
   },
   "codigo": {
     "codigoIncorrectoOVencido": "The code is incorrect or expired. Request a new one."
