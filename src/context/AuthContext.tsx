@@ -5,6 +5,7 @@ import { Usuario } from "@/types";
 import { iniciarSesion as iniciarSesionApi, cerrarSesion as cerrarSesionApi } from "@/services/authService";
 import { construirUsuarioDesdeChofer } from "@/services/authCore";
 import { restaurarSesion } from "./restaurarSesion";
+import { manejarEventoAuth } from "./manejarEventoAuth";
 
 const CLAVE_USUARIO = "app_transp_usuario";
 
@@ -36,6 +37,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const establecerSesion = useCallback(async (nuevoUsuario: Usuario) => {
     await guardarValor(CLAVE_USUARIO, JSON.stringify(nuevoUsuario));
     setUsuario(nuevoUsuario);
+  }, []);
+
+  // Hueco cerrado tras el punto 4.3: si el refresh falla de forma NO retryable mientras la app
+  // sigue abierta (ej. un refresh token revocado/rotado, no un corte de red/infraestructura),
+  // auth-js lo emite como "SIGNED_OUT" -- medido (ver manejarEventoAuth.ts): SOLO en ese caso,
+  // nunca con un 503 ni con un fetch que rechaza (esos, confirmado, no emiten nada salvo el
+  // "INITIAL_SESSION" de la suscripción misma). Sin esto, el Usuario en memoria/SecureStore
+  // quedaba congelado indefinidamente aunque supabase-js ya supiera que la sesión murió.
+  //
+  // Se suscribe ANTES del efecto de abajo (que puede llamar su propio signOut({scope:"local"}) en
+  // "caducada") para que esa emisión también pase por este mismo manejador -- ver manejarEventoAuth.ts,
+  // que ya es idempotente frente a eso (usuario ya null -> no-op, nunca doble borrado).
+  useEffect(() => {
+    const { data: suscripcion } = supabase.auth.onAuthStateChange((event) => {
+      // Diferido con setTimeout(…, 0): este callback corre DENTRO de la notificación interna de
+      // auth-js (_notifyAllSubscribers) -- hacer cualquier trabajo (no solo llamar a supabase-js
+      // de nuevo) directo acá es el riesgo de bloqueo documentado para onAuthStateChange. Nada de
+      // lo de abajo hace await de ningún método de `supabase` -- manejarEventoAuth() ni siquiera
+      // conoce el cliente -- pero el setTimeout sigue siendo la práctica defensiva recomendada
+      // para TODO el cuerpo de este callback, no solo para llamadas a supabase-js.
+      setTimeout(() => {
+        setUsuario((actual) => {
+          const decision = manejarEventoAuth(event, actual);
+          if (decision.accion === "ignorar") return actual;
+          void borrarValor(CLAVE_USUARIO);
+          return null;
+        });
+      }, 0);
+    });
+    return () => suscripcion.subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
