@@ -33,27 +33,38 @@ import {
 export type ClienteAuthCore = SupabaseClient;
 
 // ============================================================
-// identificadorACorreo
+// Normalización de correo e identificadorACorreo
 // ============================================================
 
-// numeroEmpleadoAEmail() está COPIADA (no compartida) en authService.ts y en
-// dashboard/lib/choferes.ts -- mismo motivo que esos archivos documentan (Supabase Auth exige un
-// dominio de MX real). No se importa desde authService.ts porque ESE archivo sí depende de
-// @/lib/supabase -- este no puede depender de nada que a su vez dependa de eso, o quedaría atado a
-// expo-secure-store para compilar con tsc puro. Si se toca la fórmula, tocar los TRES lugares en
-// el mismo commit.
-function numeroEmpleadoAEmail(numeroEmpleado: string): string {
+/** Punto 3.3: TODA llamada de este archivo que manda un correo a Supabase (signUp, verifyOtp,
+ * resend, resetPasswordForEmail) lo normaliza con ESTA función -- recortado y en minúsculas --
+ * DENTRO del núcleo, no como responsabilidad de la pantalla que llama. Antes de esta corrección,
+ * registrarChofer/pedirRecuperacion/reenviarCodigo/verificarCodigo mandaban `correo` tal cual lo
+ * daba el llamador (solo identificadorACorreo(), usado por iniciarSesionCore(), normalizaba) --
+ * un correo con mayúsculas o espacios colados (copiado/pegado desde el correo de invitación, por
+ * ejemplo) podía registrar una cuenta con un correo distinto al que el chofer usa después para
+ * iniciar sesión (identificadorACorreo() SÍ lo normaliza en el login, generando el mismo
+ * problema al revés: nunca matchear). */
+function normalizarCorreo(correo: string): string {
+  return correo.trim().toLowerCase();
+}
+
+/** COPIADA (no compartida) en dashboard/lib/choferes.ts -- mismo motivo que ese archivo documenta
+ * (Supabase Auth exige un dominio de MX real). Exportada para que authService.ts la importe de
+ * ACÁ en vez de tener su propia copia (punto 3.4) -- ya solo existen DOS copias en todo el
+ * proyecto: esta y la del Dashboard. TODO(barrido): cuando chofer 01 tenga un correo real, esta
+ * función y el camino sintético de identificadorACorreo() de abajo se borran junto con la copia
+ * del Dashboard, "Orden de implementación" punto 3 de la spec. */
+export function numeroEmpleadoAEmail(numeroEmpleado: string): string {
   return `apptransp.chofer.${numeroEmpleado}.f83a1c@gmail.com`;
 }
 
 /** D2=a (spec, "Resolución de la Fase 1c" punto 6 / criterio 11): UN solo punto de entrada para
  * decidir si lo que escribió el chofer en el login es ya un correo real o un número de empleado
- * sintético (hoy solo chofer 01 -- TODO(barrido): cuando chofer 01 tenga un correo real, esta
- * función deja de tener casos sintéticos y se borra junto con numeroEmpleadoAEmail() de los tres
- * lugares, "Orden de implementación" punto 3 de la spec). */
+ * sintético (hoy solo chofer 01 -- TODO(barrido): ver el de numeroEmpleadoAEmail() arriba). */
 export function identificadorACorreo(identificador: string): string {
   const limpio = identificador.trim();
-  if (limpio.includes("@")) return limpio.toLowerCase();
+  if (limpio.includes("@")) return normalizarCorreo(limpio);
   return numeroEmpleadoAEmail(limpio);
 }
 
@@ -283,7 +294,7 @@ export async function registrarChofer(
   cliente: ClienteAuthCore
 ): Promise<ResultadoRegistro> {
   const { data, error } = await cliente.auth.signUp({
-    email: datos.correo,
+    email: normalizarCorreo(datos.correo),
     password: datos.contrasena,
     options: {
       data: {
@@ -340,7 +351,11 @@ export async function verificarCodigo(
   tipo: "signup" | "recovery",
   cliente: ClienteAuthCore
 ): Promise<ResultadoVerificarCodigo> {
-  const { data, error } = await cliente.auth.verifyOtp({ email: correo, token: codigo, type: tipo });
+  const { data, error } = await cliente.auth.verifyOtp({
+    email: normalizarCorreo(correo),
+    token: codigo,
+    type: tipo,
+  });
 
   if (error) {
     const mapeado = mapearErrorCodigo(error as ErrorSupabase);
@@ -375,7 +390,7 @@ export async function reenviarCodigo(
   correo: string,
   cliente: ClienteAuthCore
 ): Promise<ResultadoEnvioCodigo> {
-  const { error } = await cliente.auth.resend({ type: "signup", email: correo });
+  const { error } = await cliente.auth.resend({ type: "signup", email: normalizarCorreo(correo) });
   if (!error) return { clave: "ok" };
   const mapeado = mapearErrorCodigo(error as ErrorSupabase);
   if (mapeado.clave === "esperar") return { clave: "esperar", segundos: mapeado.segundos };
@@ -389,7 +404,7 @@ export async function pedirRecuperacion(
   correo: string,
   cliente: ClienteAuthCore
 ): Promise<ResultadoEnvioCodigo> {
-  const { error } = await cliente.auth.resetPasswordForEmail(correo);
+  const { error } = await cliente.auth.resetPasswordForEmail(normalizarCorreo(correo));
   if (!error) return { clave: "ok" };
   const mapeado = mapearErrorCodigo(error as ErrorSupabase);
   if (mapeado.clave === "esperar") return { clave: "esperar", segundos: mapeado.segundos };

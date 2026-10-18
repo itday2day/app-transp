@@ -1,23 +1,13 @@
 import { ErrorApi } from "./api";
 import { supabase } from "@/lib/supabase";
 import { Usuario } from "@/types";
-import { iniciarSesionCore } from "./authCore";
+import { iniciarSesionCore, numeroEmpleadoAEmail } from "./authCore";
 
-// Supabase Auth exige correo con dominio de MX real (dominios inventados como
-// "*.internal" o un ".com" sin registrar son rechazados por su validación),
-// así que se usa gmail.com con un sufijo fijo de alta entropía — el chofer
-// sigue identificándose por numeroEmpleado en toda la UI, esto solo se usa
-// para hablar con Auth, y como "Confirm email" está desactivado nunca se le
-// envía nada a esa dirección.
-//
-// ⚠️ COPIADA (no compartida) en dashboard/lib/choferes.ts Y en authCore.ts (paso 2b), con el mismo
-// comentario de costo en los tres lados — el Dashboard ahora crea choferes
-// (spec_alta_choferes_dashboard.md) y tiene que generar EXACTAMENTE esta misma cadena. Sigue acá
-// (no solo en authCore.ts) porque cambiarContrasenaVoluntaria() de más abajo todavía la necesita
-// directo, sin pasar por el núcleo. Si se toca acá, tocar los TRES lugares en el mismo commit.
-function numeroEmpleadoAEmail(numeroEmpleado: string): string {
-  return `apptransp.chofer.${numeroEmpleado}.f83a1c@gmail.com`;
-}
+// Punto 3.4: numeroEmpleadoAEmail() YA NO tiene su propia copia acá -- se importa de authCore.ts
+// (arriba), que es quien la exporta ahora. Queda UNA sola copia en toda la app (más la del
+// Dashboard, dashboard/lib/choferes.ts -- dos en total, no tres): el comentario de costo
+// completo (por qué gmail.com con ese sufijo, Supabase Auth exigiendo un dominio de MX real,
+// "Confirm email" desactivado) vive en authCore.ts, donde está la función de verdad.
 
 // Envoltorio sobre authCore.ts/iniciarSesionCore() (paso 2b) con el singleton `supabase` real --
 // mismo contrato que usan hoy las pantallas (LoginScreen.tsx, CambiarContrasenaScreen.tsx): recibe
