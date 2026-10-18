@@ -532,3 +532,49 @@ export async function cambiarContrasena(
   const mapeado = mapearErrorCambiarContrasena(error as ErrorSupabase);
   return { ok: false, clave: mapeado.clave };
 }
+
+// ============================================================
+// Cierre de la recuperación (paso 2c-0, P3a)
+// ============================================================
+
+export type ResultadoTerminarRecuperacion =
+  | { ok: true; usuario: Usuario }
+  | { ok: false; clave: "sinConexion" | "generico" | "contrasenaDebil" | "contrasenaIgual" };
+
+/**
+ * Envuelve cambiarContrasena() + construirUsuarioDesdeChofer() -- la pantalla NuevaContrasena
+ * (2c-2) llama a ESTA función, no a las dos por separado, para que el único punto que decide "la
+ * recuperación terminó, ya hay Usuario" quede en un solo lugar, igual que iniciarSesionCore() y
+ * verificarCodigo('signup') ya hacen lo mismo para sus propios caminos de entrada.
+ *
+ * Si cambiarContrasena() falla, se corta ACÁ -- NUNCA llega a construirUsuarioDesdeChofer() (no
+ * tendría sentido reconstruir un Usuario para una recuperación que no terminó).
+ *
+ * Si cambiarContrasena() tiene éxito, la lectura de choferes NUNCA hace fallar la función -- mismo
+ * criterio que el resto de este archivo (iniciarSesionCore/verificarCodigo): un
+ * `ok:false` de construirUsuarioDesdeChofer() se resuelve con `usuarioMinimo`, no con un error.
+ * Terminar una recuperación ya es, por definición, una cuenta válida; perder el preselect de
+ * empresa/ruta por un fallo de lectura transitorio no es motivo para negarle la entrada al chofer
+ * que recién recuperó su cuenta.
+ *
+ * El `id` para construirUsuarioDesdeChofer() se lee de `cliente.auth.getSession()` DESPUÉS del
+ * updateUser() -- la sesión de recovery que verifyOtp() dejó abierta (medido en la Fase 1b) sigue
+ * siendo la misma sesión, updateUser() no la reemplaza. Si por algún motivo no hubiera sesión en
+ * ese punto (caso no esperado en la práctica: updateUser() ya exigió una sesión activa para
+ * funcionar), se devuelve `{ok:false, clave:"generico"}` -- no hay ningún id con el que construir
+ * nada.
+ */
+export async function terminarRecuperacion(
+  nueva: string,
+  cliente: ClienteAuthCore
+): Promise<ResultadoTerminarRecuperacion> {
+  const resultadoCambio = await cambiarContrasena(nueva, cliente);
+  if (!resultadoCambio.ok) return resultadoCambio;
+
+  const { data } = await cliente.auth.getSession();
+  const id = data.session?.user.id;
+  if (!id) return { ok: false, clave: "generico" };
+
+  const construido = await construirUsuarioDesdeChofer(id, cliente);
+  return { ok: true, usuario: construido.ok ? construido.usuario : construido.usuarioMinimo };
+}
