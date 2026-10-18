@@ -1,6 +1,6 @@
 // spec_app_registro_paso5.md, «Resultados de la Fase 1b», sección 3 (capa 1): replica, SOLO del
 // lado del cliente, las reglas que supabase/schema.sql hace cumplir en
-// crear_chofer_desde_invitacion() (el trigger on_auth_un_created que corre en el signUp) -- nunca
+// crear_chofer_desde_invitacion() (el trigger on_auth_user_created que corre en el signUp) -- nunca
 // las inventa. Da un mensaje útil ANTES del signUp porque, si el trigger rechaza, el signUp real
 // siempre devuelve el mismo 500 genérico sin motivo (medido en la Fase 1b: supabase-js no
 // entrega el código del error). El trigger sigue siendo la única garantía real -- esto es ayuda
@@ -61,22 +61,62 @@ export function normalizarDni(dni: string): string {
 
 const TELEFONO_VALIDO_REGEX = /^\+[1-9]\d{7,14}$/;
 
-// Mismo truco que dashboard/lib/utils.ts:85-87 (fechaEnEspana/todayIsoDate): el locale "sv-SE" de
-// Intl formatea directo en "AAAA-MM-DD", y "timeZone" fija Europe/Madrid sin depender de la zona
-// horaria del dispositivo.
+// Mismo truco que dashboard/lib/utils.ts:85-87 (fechaEnEspana/todayIsoDate) -- "timeZone" fija
+// Europe/Madrid sin depender de la zona horaria del dispositivo, usando "formatToParts" (no
+// "format" con el locale "sv-SE": nada garantiza que ese locale exista en el ICU reducido de un
+// motor móvil, aunque sí exista "timeZone" -- "formatToParts" con "en-US" y campos explícitos
+// arma el AAAA-MM-DD a mano, sin depender del ORDEN ni del SEPARADOR que imprima un locale).
+// ⚠️ No medido todavía en el dispositivo real (sin pantallas que lo ejerzan): grep de
+// "Intl.DateTimeFormat"/"toLocaleString(...timeZone" en src/ (2026-10-18) no encontró ningún otro
+// uso ya probado en Hermes -- esta es la primera vez que el proyecto depende de Intl con
+// "timeZone" en la app móvil (el único precedente, dashboard/lib/utils.ts, corre en el servidor/
+// navegador, no en Hermes). Se verifica en el iPhone en la Fase 3 (Verificación) de
+// spec_app_registro_paso5.md, cuando haya una pantalla que la ejerza.
 function fechaHoyEnMadrid(): string {
-  return new Intl.DateTimeFormat("sv-SE", { timeZone: ZONA_MADRID }).format(new Date());
+  try {
+    const partes = new Intl.DateTimeFormat("en-US", {
+      timeZone: ZONA_MADRID,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const anio = partes.find((p) => p.type === "year")?.value;
+    const mes = partes.find((p) => p.type === "month")?.value;
+    const dia = partes.find((p) => p.type === "day")?.value;
+    if (!anio || !mes || !dia) throw new Error("formatToParts no devolvió año/mes/día");
+    return `${anio}-${mes}-${dia}`;
+  } catch {
+    // Respaldo si Intl con "timeZone" no existe o lanza en el motor del dispositivo (Hermes
+    // viejo, sin ICU completo): NUNCA se usa la zona horaria LOCAL del teléfono en silencio (que
+    // podría ser cualquiera) -- se usa la fecha en UTC, documentada como respaldo, nunca como el
+    // cálculo normal. El trigger es la garantía final de todos modos: si este respaldo da un día
+    // de más o de menos cerca de medianoche en España, el peor caso es un falso "cumple 18" que
+    // el trigger rechaza igual (edad_minima), o un falso "no cumple" que el chofer reintenta al
+    // día siguiente -- nunca deja pasar a un menor de edad real. Prueba que lo cubre: A12 (o la
+    // que se agregue) en el iPhone real, un día cercano a medianoche en España, comparando contra
+    // la fecha real.
+    const ahora = new Date();
+    const anio = ahora.getUTCFullYear();
+    const mes = String(ahora.getUTCMonth() + 1).padStart(2, "0");
+    const dia = String(ahora.getUTCDate()).padStart(2, "0");
+    return `${anio}-${mes}-${dia}`;
+  }
 }
 
-// Resta años en el componente "año" de la fecha, igual que el INTERVAL de Postgres -- usa
-// Date.UTC (no zona local) para que el cálculo sea el mismo sin importar el dispositivo.
+function esBisiesto(anio: number): boolean {
+  return (anio % 4 === 0 && anio % 100 !== 0) || anio % 400 === 0;
+}
+
+// Resta años en el componente "año" de la fecha, igual que el INTERVAL de Postgres -- a mano,
+// SIN Date.UTC: `date '2028-02-29' - interval '18 years'` en Postgres da '2010-02-28' (recorta al
+// 28 de febrero si el año resultante no es bisiesto), pero `new Date(Date.UTC(2010, 1, 29))`
+// "rueda" solo al 1 de marzo -- hay que replicar el recorte de Postgres a mano, no se puede
+// confiar en que Date.UTC lo haga.
 function restarAnios(fechaIso: string, anios: number): string {
   const [anio, mes, dia] = fechaIso.split("-").map(Number);
-  const fecha = new Date(Date.UTC(anio - anios, mes - 1, dia));
-  const anioResultado = fecha.getUTCFullYear();
-  const mesResultado = String(fecha.getUTCMonth() + 1).padStart(2, "0");
-  const diaResultado = String(fecha.getUTCDate()).padStart(2, "0");
-  return `${anioResultado}-${mesResultado}-${diaResultado}`;
+  const anioResultado = anio - anios;
+  const diaResultado = mes === 2 && dia === 29 && !esBisiesto(anioResultado) ? 28 : dia;
+  return `${anioResultado}-${String(mes).padStart(2, "0")}-${String(diaResultado).padStart(2, "0")}`;
 }
 
 // Reconstruye la fecha con Date.UTC y compara los componentes contra lo pedido -- si no coinciden
@@ -87,7 +127,13 @@ function esFechaDeCalendarioReal(fechaIso: string): boolean {
   return fecha.getUTCFullYear() === anio && fecha.getUTCMonth() === mes - 1 && fecha.getUTCDate() === dia;
 }
 
-export function validarDatosRegistro(datos: DatosRegistro): ErroresRegistro {
+// "hoyIso" es opcional (por defecto, fechaHoyEnMadrid()) -- SOLO para que la tabla de casos
+// pueda inyectar un "hoy" fijo y probar los bordes de 18 años (29 de febrero, etc.) sin depender
+// de en qué fecha real se corra la prueba. La app nunca lo pasa.
+export function validarDatosRegistro(
+  datos: DatosRegistro,
+  hoyIso: string = fechaHoyEnMadrid()
+): ErroresRegistro {
   const errores: ErroresRegistro = {};
 
   if (normalizarDni(datos.dni).length !== 9) {
@@ -107,7 +153,7 @@ export function validarDatosRegistro(datos: DatosRegistro): ErroresRegistro {
   if (!formatoValido || !esFechaDeCalendarioReal(fechaTexto) || fechaTexto < FECHA_MINIMA_ISO) {
     errores.fechaNacimiento = "fechaInvalida";
   } else {
-    const limiteEdadMinima = restarAnios(fechaHoyEnMadrid(), EDAD_MINIMA);
+    const limiteEdadMinima = restarAnios(hoyIso, EDAD_MINIMA);
     if (fechaTexto > limiteEdadMinima) {
       errores.fechaNacimiento = "edadMinima";
     }
