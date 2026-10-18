@@ -80,26 +80,45 @@ export function identificadorACorreo(identificador: string): string {
  * -- `empresa_defecto_id`/`ruta_defecto_id` quedan en el select, igual que en m4, aunque esta
  * función solo usa los nombres embebidos, no los ids.
  *
- * ⚠️ `FilaChoferConDefectos` (abajo) tipa `empresas`/`rutas` como OBJETO (`{nombre: string} |
- * null`), NO como arreglo -- NO se volvió a medir contra una fila real de choferes en esta ronda
- * (RLS exige `auth.uid() = id`, y esta ronda tiene prohibido hacer login real para probarlo). La
- * razón para tipificarlo como objeto es la regla de PostgREST para un embed many-to-one (la FK
- * vive en la tabla que se consulta -- choferes -- apuntando a la tabla embebida -- empresas/rutas
- * -- así que cada chofer tiene A LO SUMO una fila del otro lado: PostgREST devuelve objeto o
- * `null`, nunca arreglo, para esa dirección de FK) más el precedente YA EN PRODUCCIÓN de
- * `syncService.ts` (`FilaRutaCatalogo`, el mismo tipo de embed -- `rutas.empresa_id ->
- * empresas.id` -- ya tipado como objeto y funcionando). Si una prueba futura con sesión real
- * muestra arreglo en vez de objeto, corregir ACÁ y en syncService.ts a la vez. */
+ * Corrección C3: `FilaChoferConDefectos` (abajo) tipa `empresas`/`rutas` como OBJETO **o
+ * ARREGLO** -- por la misma regla de PostgREST (many-to-one, ver el razonamiento que seguía acá
+ * antes de esta corrección) debería venir SIEMPRE como objeto/null, pero no se volvió a medir
+ * contra una fila real de choferes (RLS exige `auth.uid() = id`, prohibido en esta ronda), así que
+ * `normalizarEmbedUno()` (abajo) acepta las dos formas en vez de asumir una sola -- si llega
+ * arreglo, avisa con `console.warn` (solo en desarrollo) para que se note en la prueba real del
+ * iPhone, pero no rompe. */
 const SELECT_CHOFER_CON_DEFECTOS =
   "nombre, debe_cambiar_contrasena, empresa_defecto_id, ruta_defecto_id, empresas(nombre), rutas(nombre)";
+
+type EmbedUnoOArreglo<T> = T | T[] | null;
 
 interface FilaChoferConDefectos {
   nombre: string;
   debe_cambiar_contrasena: boolean;
   empresa_defecto_id: string | null;
   ruta_defecto_id: string | null;
-  empresas: { nombre: string } | null;
-  rutas: { nombre: string } | null;
+  empresas: EmbedUnoOArreglo<{ nombre: string }>;
+  rutas: EmbedUnoOArreglo<{ nombre: string }>;
+}
+
+/** Normaliza un embed de PostgREST que debería ser many-to-one (un objeto o `null`) pero que
+ * `postgrest-js` puede entregar envuelto en un arreglo según la versión/config (no medido contra
+ * una fila real en esta ronda, ver el comentario de arriba) -- `Array.isArray(x) ? (x[0] ?? null)
+ * : x` cubre las dos formas con la misma función. `globalThis.__DEV__` (no `__DEV__` suelto) para
+ * que este archivo siga compilando con `tsc` puro fuera de React Native (las pruebas de este
+ * mismo paso) sin un `declare var __DEV__` ambiental -- en Node, `__DEV__` no existe, así que el
+ * aviso simplemente no se imprime nunca ahí (correcto: esto solo importa en el dispositivo real).
+ */
+function normalizarEmbedUno<T>(valor: EmbedUnoOArreglo<T>, nombreCampo: string): T | null {
+  if (Array.isArray(valor)) {
+    if ((globalThis as { __DEV__?: boolean }).__DEV__) {
+      console.warn(
+        `construirUsuarioDesdeChofer: el embed "${nombreCampo}" llegó como arreglo, no como objeto -- revisar la versión de postgrest-js.`
+      );
+    }
+    return valor[0] ?? null;
+  }
+  return valor;
 }
 
 export type ResultadoConstruirUsuario =
@@ -160,13 +179,15 @@ export async function construirUsuarioDesdeChofer(
   }
 
   const fila = data as unknown as FilaChoferConDefectos;
+  const empresa = normalizarEmbedUno(fila.empresas, "empresas");
+  const ruta = normalizarEmbedUno(fila.rutas, "rutas");
   return {
     ok: true,
     usuario: {
       id: idAuth,
       nombre: fila.nombre,
-      empresaDefecto: fila.empresas?.nombre ?? null,
-      rutaDefecto: fila.rutas?.nombre ?? null,
+      empresaDefecto: empresa?.nombre ?? null,
+      rutaDefecto: ruta?.nombre ?? null,
       debeCambiarContrasena: fila.debe_cambiar_contrasena,
     },
   };
