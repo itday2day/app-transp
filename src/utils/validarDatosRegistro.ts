@@ -1,0 +1,121 @@
+// spec_app_registro_paso5.md, «Resultados de la Fase 1b», sección 3 (capa 1): replica, SOLO del
+// lado del cliente, las reglas que supabase/schema.sql hace cumplir en
+// crear_chofer_desde_invitacion() (el trigger on_auth_un_created que corre en el signUp) -- nunca
+// las inventa. Da un mensaje útil ANTES del signUp porque, si el trigger rechaza, el signUp real
+// siempre devuelve el mismo 500 genérico sin motivo (medido en la Fase 1b: supabase-js no
+// entrega el código del error). El trigger sigue siendo la única garantía real -- esto es ayuda
+// de UX, no una validación de seguridad; si esta función y el trigger alguna vez divergen, manda
+// el trigger.
+//
+// Reglas copiadas LITERAL de supabase/schema.sql (función crear_chofer_desde_invitacion,
+// medidas el 2026-10-18):
+//   - DNI: se normaliza igual que dashboard/lib/choferes.ts:149-151 normalizarDni() (mayúsculas,
+//     se quita todo lo que no sea A-Z/0-9) y debe quedar en exactamente 9 caracteres
+//     (`length(v_dni) <> 9`, schema.sql:667 -- mismo criterio que el CHECK de la columna
+//     choferes.dni, schema.sql:66). El trigger normaliza más flojo (solo espacios y guiones,
+//     schema.sql:625); normalizar más fuerte del lado del cliente nunca deja pasar un DNI que el
+//     trigger hubiera rechazado.
+//   - nombre/apellidos: no vacíos tras recortar espacios (`v_nombre = '' or v_apellidos = ''`,
+//     schema.sql:677). Acá se devuelven como dos claves separadas (no una sola "datos
+//     incompletos") para que el formulario marque el campo exacto.
+//   - fecha de nacimiento: el texto tiene que matchear `^\d{4}-\d{2}-\d{2}$` (schema.sql:681),
+//     tiene que ser una fecha de calendario real (el cast de Postgres a `date` rechaza un
+//     "2026-02-30"; acá se verifica reconstruyendo la fecha), y no puede ser anterior a
+//     1900-01-01 (schema.sql:691).
+//   - edad mínima: 18 años cumplidos, calculados contra el día de HOY en Europe/Madrid, nunca en
+//     la zona horaria del dispositivo (schema.sql:698: `(now() at time zone 'Europe/Madrid')
+//     ::date - interval '18 years'`). El trigger solo rechaza si la fecha de nacimiento es
+//     POSTERIOR a ese límite: cumplir 18 exactamente hoy ya es válido.
+//   - teléfono: debe matchear `^\+[1-9]\d{7,14}$` (schema.sql:702) -- el mismo regex E.164 que ya
+//     usa el Dashboard (TELEFONO_VALIDO_REGEX, dashboard/lib/choferes.ts:155). No hace falta
+//     libphonenumber-js para esto: la regla del trigger es un regex de formato, no una
+//     validación de número real -- la decisión 3 de la Fase 1c solo aprobó la librería para el
+//     selector de país de CampoTelefono, un componente distinto.
+//
+// El orden de las comprobaciones de abajo no importa (a diferencia del trigger, que corre en
+// secuencia y para en la primera que falla): se devuelven TODOS los campos con problema a la
+// vez, para que el formulario los marque juntos en un solo intento.
+
+const ZONA_MADRID = "Europe/Madrid";
+const EDAD_MINIMA = 18;
+const FECHA_MINIMA_ISO = "1900-01-01";
+
+export type ClaveErrorRegistro =
+  "dniInvalido" | "nombreVacio" | "apellidosVacio" | "fechaInvalida" | "edadMinima" | "telefonoInvalido";
+
+export interface DatosRegistro {
+  dni: string;
+  nombre: string;
+  apellidos: string;
+  fechaNacimiento: string; // "AAAA-MM-DD"
+  telefono: string;
+}
+
+export type ErroresRegistro = Partial<Record<keyof DatosRegistro, ClaveErrorRegistro>>;
+
+/** Mismo criterio que dashboard/lib/choferes.ts:149-151 -- mayúsculas y se quita todo lo que no
+ * sea A-Z/0-9. */
+export function normalizarDni(dni: string): string {
+  return dni.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+const TELEFONO_VALIDO_REGEX = /^\+[1-9]\d{7,14}$/;
+
+// Mismo truco que dashboard/lib/utils.ts:85-87 (fechaEnEspana/todayIsoDate): el locale "sv-SE" de
+// Intl formatea directo en "AAAA-MM-DD", y "timeZone" fija Europe/Madrid sin depender de la zona
+// horaria del dispositivo.
+function fechaHoyEnMadrid(): string {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: ZONA_MADRID }).format(new Date());
+}
+
+// Resta años en el componente "año" de la fecha, igual que el INTERVAL de Postgres -- usa
+// Date.UTC (no zona local) para que el cálculo sea el mismo sin importar el dispositivo.
+function restarAnios(fechaIso: string, anios: number): string {
+  const [anio, mes, dia] = fechaIso.split("-").map(Number);
+  const fecha = new Date(Date.UTC(anio - anios, mes - 1, dia));
+  const anioResultado = fecha.getUTCFullYear();
+  const mesResultado = String(fecha.getUTCMonth() + 1).padStart(2, "0");
+  const diaResultado = String(fecha.getUTCDate()).padStart(2, "0");
+  return `${anioResultado}-${mesResultado}-${diaResultado}`;
+}
+
+// Reconstruye la fecha con Date.UTC y compara los componentes contra lo pedido -- si no coinciden
+// (ej. "2026-02-30", que Date.UTC "rueda" a marzo), no es una fecha de calendario real.
+function esFechaDeCalendarioReal(fechaIso: string): boolean {
+  const [anio, mes, dia] = fechaIso.split("-").map(Number);
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+  return fecha.getUTCFullYear() === anio && fecha.getUTCMonth() === mes - 1 && fecha.getUTCDate() === dia;
+}
+
+export function validarDatosRegistro(datos: DatosRegistro): ErroresRegistro {
+  const errores: ErroresRegistro = {};
+
+  if (normalizarDni(datos.dni).length !== 9) {
+    errores.dni = "dniInvalido";
+  }
+
+  if (datos.nombre.trim() === "") {
+    errores.nombre = "nombreVacio";
+  }
+
+  if (datos.apellidos.trim() === "") {
+    errores.apellidos = "apellidosVacio";
+  }
+
+  const fechaTexto = datos.fechaNacimiento.trim();
+  const formatoValido = /^\d{4}-\d{2}-\d{2}$/.test(fechaTexto);
+  if (!formatoValido || !esFechaDeCalendarioReal(fechaTexto) || fechaTexto < FECHA_MINIMA_ISO) {
+    errores.fechaNacimiento = "fechaInvalida";
+  } else {
+    const limiteEdadMinima = restarAnios(fechaHoyEnMadrid(), EDAD_MINIMA);
+    if (fechaTexto > limiteEdadMinima) {
+      errores.fechaNacimiento = "edadMinima";
+    }
+  }
+
+  if (!TELEFONO_VALIDO_REGEX.test(datos.telefono.trim())) {
+    errores.telefono = "telefonoInvalido";
+  }
+
+  return errores;
+}
