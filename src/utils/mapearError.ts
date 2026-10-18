@@ -25,10 +25,22 @@
 //   - "codigoIncorrectoOVencido": `verifyOtp`, `status` 403 y `code` `otp_expired` -- el mismo
 //     error para código incorrecto, vencido o ya sustituido por un reenvío (medido en la Fase
 //     1b: supabase-js no los distingue).
+//   - "contrasenaDebil": `signUp`, `status` 422 y `code` `weak_password` -- agregada en el paso
+//     2b (authCore.ts). ⚠️ No medido contra producción todavía (el registro real siempre usó
+//     contraseñas que ya cumplían el mínimo del panel): código real de GoTrue, a confirmar en el
+//     iPhone cuando haya una pantalla que pueda disparar este caso de verdad.
 //
 // Las claves de `validar_invitacion` (`no_existe`, `revocada`, `vencida`, `usada`) no están acá:
 // esa función no devuelve un error de supabase-js con status/code, devuelve directo el `estado`
 // de la fila -- el llamador usa ese valor como clave.
+//
+// `mapearErrorCambiarContrasena` (agregada en el paso 2b, para `updateUser()` en el flujo de
+// recuperación de authCore.ts) es una CUARTA función, separada de las tres de arriba porque
+// decide sobre un error de `updateUser()`, no de `signUp`/`signInWithPassword`/`verifyOtp`:
+//   - "contrasenaDebil": `code` `weak_password`.
+//   - "contrasenaIgual": `code` `same_password` (la contraseña nueva es igual a la actual).
+//   ⚠️ Ninguna de las dos medida contra producción todavía -- mismo motivo que "contrasenaDebil"
+//   arriba, códigos reales de GoTrue, a confirmar en el iPhone cuando haya pantalla (paso 2c).
 
 export interface ErrorSupabase {
   status?: number;
@@ -37,12 +49,20 @@ export interface ErrorSupabase {
 }
 
 export type ClaveMapaRegistro =
-  "sinConexion" | "esperar" | "generico" | "correoYaRegistrado" | "pantallaCodigo" | "revisarInvitacion";
+  | "sinConexion"
+  | "esperar"
+  | "generico"
+  | "correoYaRegistrado"
+  | "pantallaCodigo"
+  | "revisarInvitacion"
+  | "contrasenaDebil";
 
 export type ClaveMapaLogin =
   "sinConexion" | "generico" | "credencialesIncorrectas" | "correoSinConfirmar" | "cuentaDadaDeBaja";
 
 export type ClaveMapaCodigo = "sinConexion" | "esperar" | "generico" | "codigoIncorrectoOVencido";
+
+export type ClaveMapaCambiarContrasena = "sinConexion" | "generico" | "contrasenaDebil" | "contrasenaIgual";
 
 // Unión discriminada por la propia clave: "esperar" es la única que trae segundos. TypeScript
 // angosta el tipo solo comprobando `resultado.clave === "esperar"`, sin necesitar un campo
@@ -83,6 +103,7 @@ export function mapearErrorRegistro(resultado: {
 
   if (esSinConexion(error)) return { clave: "sinConexion" };
   if (error.status === 429) return { clave: "esperar", segundos: extraerSegundosDeEspera(error.message) };
+  if (error.status === 422 && error.code === "weak_password") return { clave: "contrasenaDebil" };
   if (error.status === 500) return { clave: "revisarInvitacion" };
   return { clave: "generico" };
 }
@@ -104,5 +125,16 @@ export function mapearErrorCodigo(error: ErrorSupabase): ResultadoMapeo<ClaveMap
   if (error.status === 403 && error.code === "otp_expired") {
     return { clave: "codigoIncorrectoOVencido" };
   }
+  return { clave: "generico" };
+}
+
+/** `updateUser({ password })` -- distinto de los tres de arriba (no es signUp/
+ * signInWithPassword/verifyOtp). Solo se llama con error. */
+export function mapearErrorCambiarContrasena(
+  error: ErrorSupabase
+): ResultadoMapeo<ClaveMapaCambiarContrasena> {
+  if (esSinConexion(error)) return { clave: "sinConexion" };
+  if (error.code === "weak_password") return { clave: "contrasenaDebil" };
+  if (error.code === "same_password") return { clave: "contrasenaIgual" };
   return { clave: "generico" };
 }

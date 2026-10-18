@@ -11,11 +11,10 @@
 // que recortarla acá antes de contar rechazaría contraseñas que el servidor aceptaría.
 //
 // El código de error real del servidor para contraseña rechazada es "weak_password" (clave
-// `contrasenaDebil`) -- NO existe todavía en mapearError.ts ni en ningún otro lugar de src/
-// (confirmado por grep al escribir este archivo); queda fuera de este commit, pendiente de
-// agregar cuando haga falta mapear un signUp/updateUser real que lo devuelva. Mientras tanto, el
-// servidor sigue siendo la garantía real, igual que el trigger lo es para validarDatosRegistro():
-// si esta función y el servidor alguna vez discrepan, manda el servidor.
+// `contrasenaDebil`, mapearError.ts: mapearErrorRegistro() para signUp, mapearErrorCambiarContrasena()
+// para updateUser() -- agregadas en el paso 2b). El servidor sigue siendo la garantía real, igual
+// que el trigger lo es para validarDatosRegistro(): si esta función y el servidor alguna vez
+// discrepan, manda el servidor.
 
 const LARGO_MINIMO_CONTRASENA = 6;
 

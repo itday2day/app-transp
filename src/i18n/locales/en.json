@@ -6,7 +6,9 @@
     "sinConexion": "No connection. Check your internet and try again.",
     "errorGenerico": "Something went wrong. Try again; if it keeps happening, contact Administration.",
     "esperarCodigo": "Wait {{segundos}} s before requesting another code.",
-    "contrasenaCorta": "The password must be at least 6 characters long."
+    "contrasenaCorta": "The password must be at least 6 characters long.",
+    "contrasenaDebil": "Choose a stronger password.",
+    "contrasenaIgual": "Choose a password different from your current one."
   },
   "visorFoto": {
     "cerrar": "Close"

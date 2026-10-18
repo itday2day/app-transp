@@ -6,7 +6,9 @@
     "sinConexion": "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
     "errorGenerico": "Algo salió mal. Inténtalo de nuevo; si sigue, contacta con Administración.",
     "esperarCodigo": "Espera {{segundos}} s antes de pedir otro código.",
-    "contrasenaCorta": "La contraseña debe tener al menos 6 caracteres."
+    "contrasenaCorta": "La contraseña debe tener al menos 6 caracteres.",
+    "contrasenaDebil": "Elige una contraseña más segura.",
+    "contrasenaIgual": "Elige una contraseña distinta a la actual."
   },
   "visorFoto": {
     "cerrar": "Cerrar"
