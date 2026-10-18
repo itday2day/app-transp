@@ -1,6 +1,7 @@
 import { ErrorApi } from "./api";
 import { supabase } from "@/lib/supabase";
 import { Usuario } from "@/types";
+import { iniciarSesionCore } from "./authCore";
 
 // Supabase Auth exige correo con dominio de MX real (dominios inventados como
 // "*.internal" o un ".com" sin registrar son rechazados por su validación),
@@ -9,60 +10,40 @@ import { Usuario } from "@/types";
 // para hablar con Auth, y como "Confirm email" está desactivado nunca se le
 // envía nada a esa dirección.
 //
-// ⚠️ COPIADA (no compartida) en dashboard/lib/choferes.ts, con el mismo comentario de costo del
-// otro lado — el Dashboard ahora crea choferes (spec_alta_choferes_dashboard.md) y tiene que
-// generar EXACTAMENTE esta misma cadena. Si se toca acá, tocar también allá en el mismo commit.
+// ⚠️ COPIADA (no compartida) en dashboard/lib/choferes.ts Y en authCore.ts (paso 2b), con el mismo
+// comentario de costo en los tres lados — el Dashboard ahora crea choferes
+// (spec_alta_choferes_dashboard.md) y tiene que generar EXACTAMENTE esta misma cadena. Sigue acá
+// (no solo en authCore.ts) porque cambiarContrasenaVoluntaria() de más abajo todavía la necesita
+// directo, sin pasar por el núcleo. Si se toca acá, tocar los TRES lugares en el mismo commit.
 function numeroEmpleadoAEmail(numeroEmpleado: string): string {
   return `apptransp.chofer.${numeroEmpleado}.f83a1c@gmail.com`;
 }
 
-// La contraseña viaja una sola vez, por HTTPS, directo a Supabase Auth
-// (GoTrue) — nunca se guarda ni se compara en texto plano en ningún punto.
-export async function iniciarSesion(numeroEmpleado: string, contrasena: string): Promise<Usuario> {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: numeroEmpleadoAEmail(numeroEmpleado),
-    password: contrasena,
-  });
-
-  if (error || !data.user) {
+// Envoltorio sobre authCore.ts/iniciarSesionCore() (paso 2b) con el singleton `supabase` real --
+// mismo contrato que usan hoy las pantallas (LoginScreen.tsx, CambiarContrasenaScreen.tsx): recibe
+// lo que hoy siempre es un número de empleado (identificadorACorreo(), dentro del núcleo, ya sabe
+// resolver un correo real también, pero ninguna pantalla envía uno todavía -- eso es del paso 2c)
+// y devuelve un Usuario o lanza ErrorApi(401, ...), igual que antes. Colapsa TODOS los resultados
+// de error del núcleo (credenciales, sin confirmar, dado de baja, red) al mismo 401 genérico de
+// siempre -- distinguirlos de verdad en la UI es trabajo de las pantallas nuevas del paso 2c, que
+// van a llamar a iniciarSesionCore() directo en vez de a esta función.
+export async function iniciarSesion(identificador: string, contrasena: string): Promise<Usuario> {
+  const resultado = await iniciarSesionCore(identificador, contrasena, supabase);
+  if (!resultado.ok) {
     throw new ErrorApi(401, "Número de empleado o contraseña incorrectos.");
   }
-
-  // debe_cambiar_contrasena decide si RootNavigator.tsx manda a
-  // CambiarContrasenaObligatorioScreen en vez de la app normal. No se chequea `activo` acá:
-  // Supabase Auth ya lo hizo arriba — un chofer dado de baja tiene su credencial baneada
-  // (ban_duration, ver dashboard/app/api/choferes/editar/route.ts) y signInWithPassword falla
-  // antes de llegar a esta consulta. Un segundo chequeo acá sería una segunda fuente de verdad
-  // que podría desincronizarse de la primera.
-  const { data: perfil, error: errorPerfil } = await supabase
-    .from("choferes")
-    .select("nombre, debe_cambiar_contrasena")
-    .eq("id", data.user.id)
-    .single();
-
-  if (errorPerfil || !perfil) {
-    throw new ErrorApi(401, "No se pudo cargar el perfil del chofer.");
-  }
-
-  // empresaDefecto/rutaDefecto: fijo en null acá, de paso, SOLO para que el tipo Usuario (ya sin
-  // numeroEmpleado, paso 2b punto 1) siga compilando -- el commit siguiente de este mismo paso
-  // reemplaza esta función entera por un envoltorio sobre authCore.ts/construirUsuarioDesdeChofer,
-  // que sí los completa de verdad.
-  return {
-    id: data.user.id,
-    nombre: perfil.nombre,
-    empresaDefecto: null,
-    rutaDefecto: null,
-    debeCambiarContrasena: perfil.debe_cambiar_contrasena,
-  };
+  return resultado.usuario;
 }
 
 export async function cerrarSesion(): Promise<void> {
   await supabase.auth.signOut();
 }
 
-// El alta pasó a ser exclusiva del Dashboard (spec_alta_choferes_dashboard.md) — el registro
-// propio desde la app se deshabilitó, RegistroScreen.tsx ya no llama a nada de este archivo.
+// El alta por Dashboard con contraseña temporal (acá abajo) sigue vigente para choferes que ya
+// dio de alta Administración. RegistroScreen.tsx (el registro propio viejo, de antes de
+// spec_alta_choferes_dashboard.md) ya no existe -- el registro propio se está REINTRODUCIENDO por
+// un camino distinto (Hallazgo #51, spec_app_registro_paso5.md): ver authCore.ts
+// (registrarChofer/verificarCodigo, paso 2b) y las pantallas del paso 2c, no este archivo.
 //
 // Llamada obligatoria en el primer ingreso (o después de un reseteo) — CambiarContrasenaObligatorioScreen
 // es la única pantalla que la usa. Cambia la contraseña en Auth y apaga la bandera en el perfil;
