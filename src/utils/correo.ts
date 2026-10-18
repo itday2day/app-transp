@@ -1,7 +1,11 @@
 // ⚠️ COPIA LITERAL de dashboard/lib/correo.ts (app-transp-project, dashboard) -- mismo criterio
 // que numeroEmpleadoAEmail() en src/services/authService.ts o la lista de países en
 // src/data/paises.ts: duplicada a propósito (son dos proyectos independientes, cada uno con su
-// propio bundle), no inventada acá. Si se toca un lado, tocar el otro en el mismo commit.
+// propio bundle), no inventada acá. Si se toca un lado, tocar el otro en el mismo commit. La
+// ÚNICA diferencia sintáctica con el original del Dashboard es el tipo de
+// CASOS_PRUEBA_SUGERENCIA_CORREO más abajo (`readonly {...}[]` en vez de `ReadonlyArray<{...}>`
+// -- misma forma, para que el `eslint` de la app, que prohíbe `ReadonlyArray<T>`, quede sin
+// avisos); el Dashboard tiene su propio `eslint` y no exige esa regla.
 // spec_bloque_b_alta_asistida_enlace_unico.md (ajuste al Hallazgo #51), "Resolución de la Fase 1"
 // (2026-10-14), criterio 39 -- aviso de posible errata en el dominio del correo, NUNCA bloqueante
 // (quien llama decide qué hacer con la sugerencia).
@@ -97,11 +101,11 @@ export const CORREO_VALIDO_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * búsqueda exhaustiva de mutaciones de hasta 2 ediciones sobre los 17 dominios de
  * DOMINIOS_POPULARES -- "hamail.com" queda a distancia 2 de "gmail.com" Y de "hotmail.com" a la
  * vez. */
-export const CASOS_PRUEBA_SUGERENCIA_CORREO: ReadonlyArray<{
+export const CASOS_PRUEBA_SUGERENCIA_CORREO: readonly {
   correo: string;
   sugerencia: string | null;
   motivo: string;
-}> = [
+}[] = [
   {
     correo: "juan@gmial.com",
     sugerencia: "juan@gmail.com",
