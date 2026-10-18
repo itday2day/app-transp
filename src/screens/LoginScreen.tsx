@@ -10,7 +10,6 @@ import { TextoEnlace } from "@/components/TextoEnlace";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
-import { ErrorApi } from "@/services/api";
 import { RootStackNavigationProp } from "@/navigation/types";
 
 export default function LoginScreen() {
@@ -28,17 +27,17 @@ export default function LoginScreen() {
     if (!puedeEnviar) return;
     setError(null);
     setCargando(true);
-    try {
-      await iniciarSesion(numeroEmpleado.trim(), contrasena);
-    } catch (err) {
-      if (err instanceof ErrorApi && err.status === 401) {
-        setError(t("login.errorCredenciales"));
-      } else {
-        setError(t("login.errorConexion"));
-      }
-    } finally {
-      setCargando(false);
+    // Paso 2c-0 (P6): iniciarSesion() de AuthContext ya no lanza -- devuelve ResultadoLogin. Antes
+    // de este cambio, el envoltorio de authService.ts colapsaba TODO fallo (credenciales, red,
+    // dado de baja) al mismo ErrorApi(401, ...) -- el `else` de abajo (errorConexion) ya era
+    // código muerto, nunca se alcanzaba. Este ajuste mínimo reproduce EXACTAMENTE ese
+    // comportamiento anterior (siempre errorCredenciales) sin reescribir la pantalla -- distinguir
+    // de verdad "correoSinConfirmar"/credenciales/red por `clave` es trabajo de 2c-1.
+    const resultado = await iniciarSesion(numeroEmpleado.trim(), contrasena);
+    if (!resultado.ok) {
+      setError(t("login.errorCredenciales"));
     }
+    setCargando(false);
   }
 
   return (
