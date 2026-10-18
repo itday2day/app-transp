@@ -89,10 +89,13 @@ function fechaHoyEnMadrid(): string {
     // Respaldo si Intl con "timeZone" no existe o lanza en el motor del dispositivo (Hermes
     // viejo, sin ICU completo): NUNCA se usa la zona horaria LOCAL del teléfono en silencio (que
     // podría ser cualquiera) -- se usa la fecha en UTC, documentada como respaldo, nunca como el
-    // cálculo normal. El trigger es la garantía final de todos modos: si este respaldo da un día
-    // de más o de menos cerca de medianoche en España, el peor caso es un falso "cumple 18" que
-    // el trigger rechaza igual (edad_minima), o un falso "no cumple" que el chofer reintenta al
-    // día siguiente -- nunca deja pasar a un menor de edad real. Prueba que lo cubre: A12 (o la
+    // cálculo normal. Madrid va SIEMPRE por delante de UTC (+1 o +2 horas según el horario de
+    // verano), así que la fecha de "hoy" en UTC es igual o ANTERIOR a la de Madrid -- nunca
+    // posterior. El límite de 18 años calculado con ese "hoy" sale igual o más temprano, nunca
+    // más tarde, así que este respaldo solo puede volver el chequeo MÁS estricto: el peor caso es
+    // un falso "no cumple" (edad_minima) para quien cumple 18 justo ese día cerca de medianoche
+    // en España -- el chofer reintenta al día siguiente. Nunca deja pasar a un menor de edad real
+    // (y el trigger, además, es la garantía final de todos modos). Prueba que lo cubre: A12 (o la
     // que se agregue) en el iPhone real, un día cercano a medianoche en España, comparando contra
     // la fecha real.
     const ahora = new Date();
