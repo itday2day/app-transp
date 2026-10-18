@@ -70,18 +70,26 @@ export async function cambiarContrasenaObligatoria(nuevaContrasena: string): Pro
 //    se vería, ver RootNavigator.tsx) y un cambio voluntario no es un reseteo: no tiene que volver
 //    a obligar a nada en el próximo ingreso.
 //
-// Corrección C4: el `numeroEmpleado` que recibe esta función es el que el chofer TIPEÓ en
-// CambiarContrasenaScreen.tsx (un campo de texto de esa pantalla, que vive SIN sesión, antes de
-// cualquier login) -- NO viene del tipo `Usuario` (que ya no tiene `numeroEmpleado` desde el paso
-// 2b punto 1) ni de ningún Usuario en memoria. Antes, re-autenticaba SIEMPRE con
-// `numeroEmpleadoAEmail(numeroEmpleado)`, es decir, con el correo SINTÉTICO -- correcto solo para
-// cuentas viejas (hoy, solo chofer 01) y roto para cualquier chofer que ya se registró con su
-// propio correo real (paso 5, Hallazgo #51): esa cuenta NO tiene el correo sintético en Auth, el
-// `signInWithPassword` fallaría siempre con "credenciales incorrectas", aunque la contraseña
-// actual fuera correcta. Ahora intenta leer el correo REAL de la sesión ya activa
-// (`supabase.auth.getSession()` -- esta función solo se llama con sesión válida, ver el comentario
-// de arriba) y solo cae al sintético si esa sesión no trae correo (chofer 01, o cualquier cuenta
-// vieja que siga usando el correo sintético en Auth).
+// Corrección C4/D2: el `numeroEmpleado` que recibe esta función es el que el chofer TIPEÓ en
+// CambiarContrasenaScreen.tsx (un campo de texto de esa pantalla, que vive sin Usuario en
+// AuthContext -- confirmado en RootNavigator.tsx: "CambiarContrasena" solo está registrada en la
+// rama donde `usuario` es null, junto a Login) -- NO viene del tipo `Usuario` (que ya no tiene
+// `numeroEmpleado` desde el paso 2b punto 1) ni de ningún Usuario en memoria.
+//
+// ⚠️ "Sin Usuario en AuthContext" NO es lo mismo que "sin sesión de Supabase": en el caso normal
+// (recién abierta la app, nunca hubo signUp/recovery a medio terminar) tampoco hay sesión, pero en
+// el caso que cubre el `signOut({scope:"local"})` de "caducada" (AuthContext.tsx, punto 4.1) --
+// un registro o una recuperación abandonados DURANTE la misma sesión de la app, sin reiniciar --
+// SÍ puede quedar una sesión de Supabase viva mientras `usuario` sigue siendo null, porque ese
+// efecto de limpieza solo corre UNA VEZ al montar, no cada vez que cambia `usuario`.
+// `correoParaReautenticar()` cubre los dos casos sin asumir cuál es: si hay sesión (con el correo
+// real de ESA sesión, sea sintético -- chofer 01 -- o real) o si no hay ninguna (cae al sintético
+// calculado a partir de `numeroEmpleado`). Antes, re-autenticaba SIEMPRE con
+// `numeroEmpleadoAEmail(numeroEmpleado)` sin mirar la sesión -- correcto solo para cuentas viejas
+// (hoy, solo chofer 01) y roto para cualquier chofer que ya se registró con su propio correo real
+// (paso 5, Hallazgo #51) **si** llega a esta pantalla con una sesión viva de ese tipo (el caso
+// raro de arriba): esa cuenta no tiene el correo sintético en Auth, el `signInWithPassword`
+// fallaría con "credenciales incorrectas" aunque la contraseña actual fuera correcta.
 //
 // Ninguna de las dos llamadas de acá abajo cierra la sesión ni toca SQLite — confirmado leyendo
 // cerrarSesion() (arriba, este mismo archivo) y almacenamientoSeguro.ts: el logout solo borra la
