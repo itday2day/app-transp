@@ -5,7 +5,8 @@
     "campoObligatorio": "This field is required.",
     "sinConexion": "No connection. Check your internet and try again.",
     "errorGenerico": "Something went wrong. Try again; if it keeps happening, contact Administration.",
-    "esperarCodigo": "Wait {{segundos}} s before requesting another code."
+    "esperarCodigo": "Wait {{segundos}} s before requesting another code.",
+    "contrasenaCorta": "The password must be at least 6 characters long."
   },
   "visorFoto": {
     "cerrar": "Close"

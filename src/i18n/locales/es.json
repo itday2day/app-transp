@@ -5,7 +5,8 @@
     "campoObligatorio": "Este campo es obligatorio.",
     "sinConexion": "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
     "errorGenerico": "Algo salió mal. Inténtalo de nuevo; si sigue, contacta con Administración.",
-    "esperarCodigo": "Espera {{segundos}} s antes de pedir otro código."
+    "esperarCodigo": "Espera {{segundos}} s antes de pedir otro código.",
+    "contrasenaCorta": "La contraseña debe tener al menos 6 caracteres."
   },
   "visorFoto": {
     "cerrar": "Cerrar"
