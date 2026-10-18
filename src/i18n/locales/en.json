@@ -2,7 +2,10 @@
   "comun": {
     "cancelar": "Cancel",
     "abreFuera": "Opens outside the app",
-    "campoObligatorio": "This field is required."
+    "campoObligatorio": "This field is required.",
+    "sinConexion": "No connection. Check your internet and try again.",
+    "errorGenerico": "Something went wrong. Try again; if it keeps happening, contact Administration.",
+    "esperarCodigo": "Wait a moment before requesting another code."
   },
   "visorFoto": {
     "cerrar": "Close"
@@ -25,7 +28,20 @@
     "errorCredenciales": "Incorrect employee number or password.",
     "errorConexion": "We couldn't connect to the server. Check your connection and try again.",
     "botonIngresar": "Log in",
-    "ayudaContrasena": "Forgot or want to change your password?"
+    "ayudaContrasena": "Forgot or want to change your password?",
+    "credencialesIncorrectas": "Incorrect email or password.",
+    "cuentaDadaDeBaja": "Your account has been deactivated. Contact Administration."
+  },
+  "registro": {
+    "dniInvalido": "The ID number must have 9 characters.",
+    "nombreVacio": "Enter your first name.",
+    "apellidosVacio": "Enter your last name.",
+    "fechaInvalida": "Check your date of birth.",
+    "edadMinima": "You must be over 18 to register.",
+    "telefonoInvalido": "The phone number must include the country code (for example, +34600000000)."
+  },
+  "codigo": {
+    "codigoIncorrectoOVencido": "The code is incorrect or expired. Request a new one."
   },
   "navegacion": {
     "tabCheckIn": "Check-in",

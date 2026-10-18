@@ -2,7 +2,10 @@
   "comun": {
     "cancelar": "Cancelar",
     "abreFuera": "Se abre fuera de la app",
-    "campoObligatorio": "Este campo es obligatorio."
+    "campoObligatorio": "Este campo es obligatorio.",
+    "sinConexion": "Sin conexión. Revisa tu internet e inténtalo de nuevo.",
+    "errorGenerico": "Algo salió mal. Inténtalo de nuevo; si sigue, contacta con Administración.",
+    "esperarCodigo": "Espera un momento antes de pedir otro código."
   },
   "visorFoto": {
     "cerrar": "Cerrar"
@@ -25,7 +28,20 @@
     "errorCredenciales": "Número de empleado o contraseña incorrectos.",
     "errorConexion": "No pudimos conectar con el servidor. Verifica tu conexión e intenta de nuevo.",
     "botonIngresar": "Ingresar",
-    "ayudaContrasena": "¿Olvidaste o querés cambiar tu contraseña?"
+    "ayudaContrasena": "¿Olvidaste o querés cambiar tu contraseña?",
+    "credencialesIncorrectas": "Correo o contraseña incorrectos.",
+    "cuentaDadaDeBaja": "Tu cuenta está dada de baja. Contacta con Administración."
+  },
+  "registro": {
+    "dniInvalido": "El DNI debe tener 9 caracteres.",
+    "nombreVacio": "Escribe tu nombre.",
+    "apellidosVacio": "Escribe tus apellidos.",
+    "fechaInvalida": "Revisa la fecha de nacimiento.",
+    "edadMinima": "Tienes que ser mayor de 18 años para registrarte.",
+    "telefonoInvalido": "El teléfono debe incluir el código de país (por ejemplo, +34600000000)."
+  },
+  "codigo": {
+    "codigoIncorrectoOVencido": "El código es incorrecto o venció. Pide uno nuevo."
   },
   "navegacion": {
     "tabCheckIn": "Check-in",
