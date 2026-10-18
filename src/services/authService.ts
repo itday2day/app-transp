@@ -1,7 +1,7 @@
 import { ErrorApi } from "./api";
 import { supabase } from "@/lib/supabase";
 import { Usuario } from "@/types";
-import { iniciarSesionCore, correoParaReautenticar } from "./authCore";
+import { iniciarSesionCore, identificadorACorreo } from "./authCore";
 
 // Punto 3.4: numeroEmpleadoAEmail() YA NO tiene su propia copia acá -- se importa de authCore.ts
 // (arriba), que es quien la exporta ahora. Queda UNA sola copia en toda la app (más la del
@@ -70,26 +70,21 @@ export async function cambiarContrasenaObligatoria(nuevaContrasena: string): Pro
 //    se vería, ver RootNavigator.tsx) y un cambio voluntario no es un reseteo: no tiene que volver
 //    a obligar a nada en el próximo ingreso.
 //
-// Corrección C4/D2: el `numeroEmpleado` que recibe esta función es el que el chofer TIPEÓ en
-// CambiarContrasenaScreen.tsx (un campo de texto de esa pantalla, que vive sin Usuario en
-// AuthContext -- confirmado en RootNavigator.tsx: "CambiarContrasena" solo está registrada en la
+// Corrección E1 (revierte C4 -- ese enfoque estaba mal planteado): el `identificador` que recibe
+// esta función es el que el chofer TIPEÓ en CambiarContrasenaScreen.tsx, que vive SIN Usuario en
+// AuthContext (confirmado en RootNavigator.tsx: "CambiarContrasena" solo está registrada en la
 // rama donde `usuario` es null, junto a Login) -- NO viene del tipo `Usuario` (que ya no tiene
 // `numeroEmpleado` desde el paso 2b punto 1) ni de ningún Usuario en memoria.
 //
-// ⚠️ "Sin Usuario en AuthContext" NO es lo mismo que "sin sesión de Supabase": en el caso normal
-// (recién abierta la app, nunca hubo signUp/recovery a medio terminar) tampoco hay sesión, pero en
-// el caso que cubre el `signOut({scope:"local"})` de "caducada" (AuthContext.tsx, punto 4.1) --
-// un registro o una recuperación abandonados DURANTE la misma sesión de la app, sin reiniciar --
-// SÍ puede quedar una sesión de Supabase viva mientras `usuario` sigue siendo null, porque ese
-// efecto de limpieza solo corre UNA VEZ al montar, no cada vez que cambia `usuario`.
-// `correoParaReautenticar()` cubre los dos casos sin asumir cuál es: si hay sesión (con el correo
-// real de ESA sesión, sea sintético -- chofer 01 -- o real) o si no hay ninguna (cae al sintético
-// calculado a partir de `numeroEmpleado`). Antes, re-autenticaba SIEMPRE con
-// `numeroEmpleadoAEmail(numeroEmpleado)` sin mirar la sesión -- correcto solo para cuentas viejas
-// (hoy, solo chofer 01) y roto para cualquier chofer que ya se registró con su propio correo real
-// (paso 5, Hallazgo #51) **si** llega a esta pantalla con una sesión viva de ese tipo (el caso
-// raro de arriba): esa cuenta no tiene el correo sintético en Auth, el `signInWithPassword`
-// fallaría con "credenciales incorrectas" aunque la contraseña actual fuera correcta.
+// ⚠️ Por eso el identificador TECLEADO es la ÚNICA fuente de verdad -- nunca el correo de una
+// sesión de Supabase que pudiera estar viva (el caso raro del punto 4.1: un registro o una
+// recuperación abandonados DURANTE la misma sesión de la app, sin reiniciar, dejan una sesión de
+// Supabase viva mientras `usuario` sigue siendo null). Esa sesión viva puede ser de OTRA cuenta
+// -- leer su correo (como hacía la versión C4 de esta función) re-autenticaría la cuenta
+// EQUIVOCADA, no la del chofer que está tipeando en esta pantalla. `identificadorACorreo()`
+// (authCore.ts) resuelve el identificador tecleado -- correo real o número de empleado sintético
+// -- sin mirar para nada la sesión; `signInWithPassword()` de abajo reemplaza cualquier sesión
+// previa (la que fuera) por la de la cuenta que el `signInWithPassword` efectivamente autentica.
 //
 // Ninguna de las dos llamadas de acá abajo cierra la sesión ni toca SQLite — confirmado leyendo
 // cerrarSesion() (arriba, este mismo archivo) y almacenamientoSeguro.ts: el logout solo borra la
@@ -98,13 +93,16 @@ export async function cambiarContrasenaObligatoria(nuevaContrasena: string): Pro
 // y el logout limpiara SQLite, un chofer con una jornada abierta sin sincronizar la perdería por
 // hacer lo correcto.
 export async function cambiarContrasenaVoluntaria(
-  numeroEmpleado: string,
+  identificador: string,
   contrasenaActual: string,
   contrasenaNueva: string
 ): Promise<void> {
-  const correo = await correoParaReautenticar(numeroEmpleado, supabase);
+  if (identificador.trim() === "") {
+    throw new ErrorApi(401, "La contraseña actual no es correcta.");
+  }
+
   const { error: errorReauth } = await supabase.auth.signInWithPassword({
-    email: correo,
+    email: identificadorACorreo(identificador),
     password: contrasenaActual,
   });
   if (errorReauth) {
