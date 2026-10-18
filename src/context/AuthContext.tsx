@@ -2,25 +2,33 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { guardarValor, obtenerValor, borrarValor } from "@/services/almacenamientoSeguro";
 import { supabase } from "@/lib/supabase";
 import { Usuario } from "@/types";
-import { iniciarSesion as iniciarSesionApi, cerrarSesion as cerrarSesionApi } from "@/services/authService";
-import { construirUsuarioDesdeChofer } from "@/services/authCore";
+import { cerrarSesion as cerrarSesionApi } from "@/services/authService";
+import { iniciarSesionCore, type ResultadoLogin } from "@/services/authCore";
 import { restaurarSesion } from "./restaurarSesion";
 import { manejarEventoAuth } from "./manejarEventoAuth";
-import { resultadoRecargaUsuario } from "./recargaUsuario";
+import { programarRecargaUsuario } from "./programarRecargaUsuario";
 
 const CLAVE_USUARIO = "app_transp_usuario";
 
 interface AuthContextValor {
   usuario: Usuario | null;
   cargando: boolean;
-  iniciarSesion: (identificador: string, contrasena: string) => Promise<void>;
+  // Paso 2c-0 (P6): ya NO lanza -- devuelve el ResultadoLogin completo (authCore.ts) para que la
+  // pantalla decida qué mostrar según `clave` (ej. "correoSinConfirmar" -> navegar a la pantalla
+  // de código, 2c-1) en vez de colapsar todo a un único error genérico. Llama a
+  // iniciarSesionCore() directo (ya no pasa por el envoltorio de authService.ts, retirado en este
+  // mismo commit por quedar sin ningún otro llamador) y, si `ok:true`, ya llamó a
+  // establecerSesion() internamente -- el llamador no tiene que hacerlo de nuevo.
+  iniciarSesion: (identificador: string, contrasena: string) => Promise<ResultadoLogin>;
   cerrarSesion: () => Promise<void>;
   // Único punto que establece una sesión "completa" (estado en memoria + SecureStore) -- paso 2b,
-  // punto 4a. TODOS los caminos de entrada terminan acá: iniciarSesion() (login por número o, en
-  // el paso 2c, por correo) y, desde el paso 2c, verifyOtp de signup y el cambiarContrasena() de
-  // recovery. Antes de este paso, iniciarSesion() guardaba y seteaba por su cuenta -- ahora llama
-  // a esto, para que ningún camino de entrada nuevo pueda volver a desincronizar el Usuario en
-  // memoria del que persiste SecureStore.
+  // punto 4a. TODOS los caminos de entrada terminan acá: iniciarSesion() (arriba), y desde el paso
+  // 2c, verifyOtp de signup y terminarRecuperacion() de recovery. Paso 2c-0 (P4): además de
+  // guardar y aplicar, SIEMPRE dispara en segundo plano la misma recarga que antes solo corría en
+  // el efecto de montaje (programarRecargaUsuario()) -- si el Usuario que llegó ya era completo
+  // (no un usuarioMinimo), reaplicar el mismo dato leído de nuevo es inocuo; si era un
+  // usuarioMinimo, esta es la única oportunidad de corregirlo para los caminos de entrada que no
+  // sea el arranque en frío.
   establecerSesion: (usuario: Usuario) => Promise<void>;
   // Llamada por CambiarContrasenaObligatorioScreen tras un cambio exitoso — actualiza el usuario
   // en memoria Y en SecureStore (si no se persistiera acá también, cerrar y reabrir la app antes
@@ -51,6 +59,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (nuevoUsuario: Usuario) => {
       await guardarValor(CLAVE_USUARIO, JSON.stringify(nuevoUsuario));
       aplicarUsuario(nuevoUsuario);
+      programarRecargaUsuario(nuevoUsuario.id, {
+        cliente: supabase,
+        obtenerUsuarioActual: () => usuarioRef.current,
+        aplicarUsuario,
+        persistirUsuario: (u) => guardarValor(CLAVE_USUARIO, JSON.stringify(u)),
+      });
     },
     [aplicarUsuario]
   );
@@ -135,42 +149,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // volver a guardarlo acá deja SecureStore con la forma nueva (punto 4c).
         await guardarValor(CLAVE_USUARIO, JSON.stringify(restaurado.usuario));
 
-        // Punto 4.2: SOLO con "valida" (hay sesión real confirmada, no solo el Usuario cacheado) se
-        // dispara una recarga EN SEGUNDO PLANO con construirUsuarioDesdeChofer() -- corrige
-        // `nombre: ""` (si el guardado venía de un usuarioMinimo) y los `empresaDefecto`/
-        // `rutaDefecto` en null de un guardado viejo, sin esperarla para bajar `cargando` (no
-        // bloquea el arranque) y sin arriesgar la sesión si falla: el `.catch` de abajo es a
-        // propósito un no-op, nunca borra `app_transp_usuario` ni desloguea por un fallo de esta
-        // lectura puntual -- es la MISMA razón por la que construirUsuarioDesdeChofer() nunca
-        // lanza (ver authCore.ts). Con "indeterminada" NO se intenta (no hay red; sería una
-        // llamada perdida).
+        // Punto 4.2 (y, desde 2c-0, P4): SOLO con "valida" (hay sesión real confirmada, no solo el
+        // Usuario cacheado) se dispara una recarga EN SEGUNDO PLANO -- corrige `nombre: ""` (si el
+        // guardado venía de un usuarioMinimo) y los `empresaDefecto`/`rutaDefecto` en null de un
+        // guardado viejo, sin esperarla para bajar `cargando` (no bloquea el arranque). Con
+        // "indeterminada" NO se intenta (no hay red; sería una llamada perdida).
+        //
+        // programarRecargaUsuario() (ya no inline acá, ver ese archivo) es el MISMO mecanismo que
+        // establecerSesion() usa para login/verifyOtp(signup)/terminarRecuperacion() -- un solo
+        // lugar que decide si aplicar o descartar un resultado tardío (resultadoRecargaUsuario(),
+        // corrección C1), en vez de una copia de esa orquestación por cada camino de entrada.
         if (restaurado.resultado === "valida") {
-          const idEsperado = restaurado.usuario.id;
-          construirUsuarioDesdeChofer(idEsperado, supabase)
-            .then((reconstruido) => {
-              // Corrección C1: el resultado es TARDÍO (esta consulta puede seguir en vuelo
-              // después de un logout o un SIGNED_OUT real). `usuarioRef.current` se lee ACÁ, al
-              // RESPONDER -- no una variable capturada al lanzar la consulta -- y, desde la
-              // corrección D1, siempre está al día (aplicarUsuario() la mantiene sincronizada en
-              // el mismo punto que cualquier otro cambio). resultadoRecargaUsuario() exige que ese
-              // Usuario actual siga existiendo y tenga el MISMO id antes de aplicar nada; si no,
-              // devuelve `null` y NO se toca ni el estado ni SecureStore.
-              const usuarioAAplicar = resultadoRecargaUsuario(usuarioRef.current, idEsperado, reconstruido);
-              if (usuarioAAplicar) {
-                aplicarUsuario(usuarioAAplicar);
-                void guardarValor(CLAVE_USUARIO, JSON.stringify(usuarioAAplicar));
-              }
-            })
-            .catch(() => {});
+          programarRecargaUsuario(restaurado.usuario.id, {
+            cliente: supabase,
+            obtenerUsuarioActual: () => usuarioRef.current,
+            aplicarUsuario,
+            persistirUsuario: (u) => guardarValor(CLAVE_USUARIO, JSON.stringify(u)),
+          });
         }
       })
       .finally(() => setCargando(false));
   }, [aplicarUsuario]);
 
   const iniciarSesion = useCallback(
-    async (identificador: string, contrasena: string) => {
-      const usuarioAutenticado = await iniciarSesionApi(identificador, contrasena);
-      await establecerSesion(usuarioAutenticado);
+    async (identificador: string, contrasena: string): Promise<ResultadoLogin> => {
+      const resultado = await iniciarSesionCore(identificador, contrasena, supabase);
+      if (resultado.ok) {
+        await establecerSesion(resultado.usuario);
+      }
+      return resultado;
     },
     [establecerSesion]
   );

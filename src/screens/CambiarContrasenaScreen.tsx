@@ -27,7 +27,7 @@ export default function CambiarContrasenaScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { iniciarSesion } = useAuth();
 
-  const [numeroEmpleado, setNumeroEmpleado] = useState("");
+  const [identificador, setIdentificador] = useState("");
   const [contrasenaActual, setContrasenaActual] = useState("");
   const [contrasenaNueva, setContrasenaNueva] = useState("");
   const [confirmarContrasenaNueva, setConfirmarContrasenaNueva] = useState("");
@@ -41,7 +41,7 @@ export default function CambiarContrasenaScreen() {
   const contrasenasCoinciden =
     confirmarContrasenaNueva.length === 0 || confirmarContrasenaNueva === contrasenaNueva;
   const puedeEnviar =
-    numeroEmpleado.trim().length > 0 &&
+    identificador.trim().length > 0 &&
     contrasenaActual.length > 0 &&
     contrasenaNueva.length >= 6 &&
     confirmarContrasenaNueva === contrasenaNueva;
@@ -51,7 +51,7 @@ export default function CambiarContrasenaScreen() {
     setError(null);
     setEnviando(true);
     try {
-      await cambiarContrasenaVoluntaria(numeroEmpleado.trim(), contrasenaActual, contrasenaNueva);
+      await cambiarContrasenaVoluntaria(identificador.trim(), contrasenaActual, contrasenaNueva);
     } catch (err) {
       if (err instanceof ErrorApi && err.status === 401) {
         setError(t("cambiarContrasena.errorContrasenaActual"));
@@ -61,16 +61,13 @@ export default function CambiarContrasenaScreen() {
       setEnviando(false);
       return;
     }
-    try {
-      // Mismo iniciarSesion() que llama LoginScreen — no una versión propia (ver comentario de
-      // arriba). Al resolver, RootNavigator.tsx cambia de stack solo (usuario deja de ser null):
-      // no hace falta navegar a mano.
-      await iniciarSesion(numeroEmpleado.trim(), contrasenaNueva);
-    } catch {
-      setExito(true);
-    } finally {
-      setEnviando(false);
-    }
+    // Paso 2c-0 (P7): iniciarSesion() de AuthContext ya no lanza -- devuelve ResultadoLogin. Al
+    // resolver con `ok:true`, RootNavigator.tsx cambia de stack solo (usuario deja de ser null):
+    // no hace falta navegar a mano. Con `ok:false` (ej. un hipo de red justo en este instante), la
+    // contraseña YA cambió (el try de arriba no lanzó) -- se le dice al chofer que entre a mano.
+    const resultado = await iniciarSesion(identificador.trim(), contrasenaNueva);
+    if (!resultado.ok) setExito(true);
+    setEnviando(false);
   }
 
   if (exito) {
@@ -93,12 +90,11 @@ export default function CambiarContrasenaScreen() {
         <Text style={estilos.subtitulo}>{t("cambiarContrasena.subtitulo")}</Text>
 
         <CampoTexto
-          etiqueta={t("cambiarContrasena.numeroEmpleadoEtiqueta")}
-          placeholder={t("cambiarContrasena.numeroEmpleadoPlaceholder")}
-          keyboardType="number-pad"
+          etiqueta={t("cambiarContrasena.identificadorEtiqueta")}
+          placeholder={t("cambiarContrasena.identificadorPlaceholder")}
           autoCapitalize="none"
-          value={numeroEmpleado}
-          onChangeText={setNumeroEmpleado}
+          value={identificador}
+          onChangeText={setIdentificador}
         />
 
         <CampoTexto

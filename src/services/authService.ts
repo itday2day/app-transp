@@ -1,29 +1,18 @@
 import { ErrorApi } from "./api";
 import { supabase } from "@/lib/supabase";
-import { Usuario } from "@/types";
-import { iniciarSesionCore, identificadorACorreo } from "./authCore";
+import { identificadorACorreo } from "./authCore";
 
 // Punto 3.4: numeroEmpleadoAEmail() YA NO tiene su propia copia acá -- se importa de authCore.ts
-// (arriba), que es quien la exporta ahora. Queda UNA sola copia en toda la app (más la del
+// (abajo), que es quien la exporta ahora. Queda UNA sola copia en toda la app (más la del
 // Dashboard, dashboard/lib/choferes.ts -- dos en total, no tres): el comentario de costo
 // completo (por qué gmail.com con ese sufijo, Supabase Auth exigiendo un dominio de MX real,
 // "Confirm email" desactivado) vive en authCore.ts, donde está la función de verdad.
 
-// Envoltorio sobre authCore.ts/iniciarSesionCore() (paso 2b) con el singleton `supabase` real --
-// mismo contrato que usan hoy las pantallas (LoginScreen.tsx, CambiarContrasenaScreen.tsx): recibe
-// lo que hoy siempre es un número de empleado (identificadorACorreo(), dentro del núcleo, ya sabe
-// resolver un correo real también, pero ninguna pantalla envía uno todavía -- eso es del paso 2c)
-// y devuelve un Usuario o lanza ErrorApi(401, ...), igual que antes. Colapsa TODOS los resultados
-// de error del núcleo (credenciales, sin confirmar, dado de baja, red) al mismo 401 genérico de
-// siempre -- distinguirlos de verdad en la UI es trabajo de las pantallas nuevas del paso 2c, que
-// van a llamar a iniciarSesionCore() directo en vez de a esta función.
-export async function iniciarSesion(identificador: string, contrasena: string): Promise<Usuario> {
-  const resultado = await iniciarSesionCore(identificador, contrasena, supabase);
-  if (!resultado.ok) {
-    throw new ErrorApi(401, "Número de empleado o contraseña incorrectos.");
-  }
-  return resultado.usuario;
-}
+// Paso 2c-0 (P6): el envoltorio `iniciarSesion()` que vivía acá se retiró -- AuthContext.tsx ya
+// llama a iniciarSesionCore() directo con el singleton `supabase`, y colapsar todos los errores a
+// un 401 genérico (lo que hacía este envoltorio) es exactamente lo que el paso 2c necesitaba dejar
+// de hacer para poder distinguir "correoSinConfirmar" de una credencial incorrecta de verdad. Sin
+// otro llamador en el repo (confirmado: solo AuthContext.tsx lo usaba), queda sin reemplazo acá.
 
 export async function cerrarSesion(): Promise<void> {
   await supabase.auth.signOut();
