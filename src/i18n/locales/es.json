@@ -267,7 +267,7 @@
   "cambiarContrasena": {
     "titulo": "Cambiar contraseña",
     "subtitulo": "Vas a necesitar tu contraseña actual.",
-    "avisoSinRecuperacion": "Si tu cuenta tiene un correo real, vas a poder recuperar la contraseña por correo si la olvidás. La excepción es una cuenta sin correo propio (número de empleado sintético): ahí no hay a dónde mandar nada, y la única salida es pedirle a tu administrador que te la resetee.",
+    "avisoSinRecuperacion": "Si tu cuenta tiene correo propio, podrás recuperar la contraseña por correo si la olvidas. Si entras solo con tu número de empleado, tendrás que pedirle a tu administrador que la restablezca.",
     "identificadorEtiqueta": "Correo o número de empleado",
     "identificadorPlaceholder": "Tu correo o tu número de empleado",
     "contrasenaActualEtiqueta": "Contraseña actual",
