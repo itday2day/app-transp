@@ -1,7 +1,7 @@
 import { ErrorApi } from "./api";
 import { supabase } from "@/lib/supabase";
 import { Usuario } from "@/types";
-import { iniciarSesionCore, numeroEmpleadoAEmail } from "./authCore";
+import { iniciarSesionCore, correoParaReautenticar } from "./authCore";
 
 // Punto 3.4: numeroEmpleadoAEmail() YA NO tiene su propia copia acá -- se importa de authCore.ts
 // (arriba), que es quien la exporta ahora. Queda UNA sola copia en toda la app (más la del
@@ -70,6 +70,19 @@ export async function cambiarContrasenaObligatoria(nuevaContrasena: string): Pro
 //    se vería, ver RootNavigator.tsx) y un cambio voluntario no es un reseteo: no tiene que volver
 //    a obligar a nada en el próximo ingreso.
 //
+// Corrección C4: el `numeroEmpleado` que recibe esta función es el que el chofer TIPEÓ en
+// CambiarContrasenaScreen.tsx (un campo de texto de esa pantalla, que vive SIN sesión, antes de
+// cualquier login) -- NO viene del tipo `Usuario` (que ya no tiene `numeroEmpleado` desde el paso
+// 2b punto 1) ni de ningún Usuario en memoria. Antes, re-autenticaba SIEMPRE con
+// `numeroEmpleadoAEmail(numeroEmpleado)`, es decir, con el correo SINTÉTICO -- correcto solo para
+// cuentas viejas (hoy, solo chofer 01) y roto para cualquier chofer que ya se registró con su
+// propio correo real (paso 5, Hallazgo #51): esa cuenta NO tiene el correo sintético en Auth, el
+// `signInWithPassword` fallaría siempre con "credenciales incorrectas", aunque la contraseña
+// actual fuera correcta. Ahora intenta leer el correo REAL de la sesión ya activa
+// (`supabase.auth.getSession()` -- esta función solo se llama con sesión válida, ver el comentario
+// de arriba) y solo cae al sintético si esa sesión no trae correo (chofer 01, o cualquier cuenta
+// vieja que siga usando el correo sintético en Auth).
+//
 // Ninguna de las dos llamadas de acá abajo cierra la sesión ni toca SQLite — confirmado leyendo
 // cerrarSesion() (arriba, este mismo archivo) y almacenamientoSeguro.ts: el logout solo borra la
 // clave `app_transp_usuario` de SecureStore, nunca la base de jornadas. `updateUser()` tampoco
@@ -81,8 +94,9 @@ export async function cambiarContrasenaVoluntaria(
   contrasenaActual: string,
   contrasenaNueva: string
 ): Promise<void> {
+  const correo = await correoParaReautenticar(numeroEmpleado, supabase);
   const { error: errorReauth } = await supabase.auth.signInWithPassword({
-    email: numeroEmpleadoAEmail(numeroEmpleado),
+    email: correo,
     password: contrasenaActual,
   });
   if (errorReauth) {

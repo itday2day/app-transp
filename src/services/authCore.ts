@@ -68,6 +68,23 @@ export function identificadorACorreo(identificador: string): string {
   return numeroEmpleadoAEmail(limpio);
 }
 
+/** Corrección C4 (authService.ts, cambiarContrasenaVoluntaria): correo a usar para RE-AUTENTICAR
+ * -- el correo REAL de la sesión YA ACTIVA (`session.user.email`) si lo tiene; el sintético
+ * (numeroEmpleadoAEmail) SOLO si esa sesión no trae correo (chofer 01, o cualquier cuenta vieja
+ * que siga usando el correo sintético en Auth) o si no hay sesión (defensivo -- esta función no
+ * debería llamarse sin sesión, pero no asume que sea imposible). Antes, cambiarContrasenaVoluntaria()
+ * SIEMPRE re-autenticaba con el sintético -- roto para cualquier chofer que ya se registró con su
+ * propio correo real (paso 5, Hallazgo #51): su cuenta no tiene ese correo sintético en Auth, el
+ * signInWithPassword fallaría siempre con "credenciales incorrectas" aunque la contraseña actual
+ * fuera correcta. */
+export async function correoParaReautenticar(
+  numeroEmpleado: string,
+  cliente: ClienteAuthCore
+): Promise<string> {
+  const { data } = await cliente.auth.getSession();
+  return data.session?.user.email ?? numeroEmpleadoAEmail(numeroEmpleado);
+}
+
 // ============================================================
 // construirUsuarioDesdeChofer
 // ============================================================
