@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { guardarValor, obtenerValor, borrarValor } from "@/services/almacenamientoSeguro";
 import { supabase } from "@/lib/supabase";
 import { Usuario } from "@/types";
@@ -6,6 +6,7 @@ import { iniciarSesion as iniciarSesionApi, cerrarSesion as cerrarSesionApi } fr
 import { construirUsuarioDesdeChofer } from "@/services/authCore";
 import { restaurarSesion } from "./restaurarSesion";
 import { manejarEventoAuth } from "./manejarEventoAuth";
+import { resultadoRecargaUsuario } from "./recargaUsuario";
 
 const CLAVE_USUARIO = "app_transp_usuario";
 
@@ -34,6 +35,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [cargando, setCargando] = useState(true);
 
+  // Correcciones C1/C2: el `usuario` de React (arriba) no sirve para leerlo dentro de un callback
+  // async que puede resolver mucho después del render que lo lanzó (closure sobre el valor VIEJO).
+  // Esta ref siempre tiene el valor MÁS RECIENTE -- un efecto la sincroniza después de cada
+  // cambio, lo que alcanza de sobra: un callback que resuelve después solo puede leerla después de
+  // que React ya corrió ese efecto para el render anterior.
+  const usuarioRef = useRef<Usuario | null>(usuario);
+  useEffect(() => {
+    usuarioRef.current = usuario;
+  }, [usuario]);
+
   const establecerSesion = useCallback(async (nuevoUsuario: Usuario) => {
     await guardarValor(CLAVE_USUARIO, JSON.stringify(nuevoUsuario));
     setUsuario(nuevoUsuario);
@@ -57,13 +68,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // lo de abajo hace await de ningún método de `supabase` -- manejarEventoAuth() ni siquiera
       // conoce el cliente -- pero el setTimeout sigue siendo la práctica defensiva recomendada
       // para TODO el cuerpo de este callback, no solo para llamadas a supabase-js.
+      //
+      // Corrección C2: la decisión (manejarEventoAuth) y el efecto secundario (borrarValor) corren
+      // AFUERA de `setUsuario` -- el updater de abajo solo pone `null`, sin leer `manejarEventoAuth`
+      // ni tocar SecureStore adentro. `usuarioRef.current` (no el `usuario` del closure de este
+      // efecto, que quedó fijo en el valor del montaje) es la lectura correcta del Usuario actual.
       setTimeout(() => {
-        setUsuario((actual) => {
-          const decision = manejarEventoAuth(event, actual);
-          if (decision.accion === "ignorar") return actual;
-          void borrarValor(CLAVE_USUARIO);
-          return null;
-        });
+        const decision = manejarEventoAuth(event, usuarioRef.current);
+        if (decision.accion === "ignorar") return;
+        void borrarValor(CLAVE_USUARIO);
+        setUsuario(null);
       }, 0);
     });
     return () => suscripcion.subscription.unsubscribe();
@@ -125,11 +139,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // lanza (ver authCore.ts). Con "indeterminada" NO se intenta (no hay red; sería una
         // llamada perdida).
         if (restaurado.resultado === "valida") {
-          construirUsuarioDesdeChofer(restaurado.usuario.id, supabase)
+          const idEsperado = restaurado.usuario.id;
+          construirUsuarioDesdeChofer(idEsperado, supabase)
             .then((reconstruido) => {
-              if (reconstruido.ok) {
-                setUsuario(reconstruido.usuario);
-                void guardarValor(CLAVE_USUARIO, JSON.stringify(reconstruido.usuario));
+              // Corrección C1: el resultado es TARDÍO (esta consulta puede seguir en vuelo
+              // después de un logout o un SIGNED_OUT real) -- resultadoRecargaUsuario() exige que
+              // el Usuario ACTUAL (leído de la ref, no del `restaurado.usuario` de arriba, que es
+              // una foto del momento en que se lanzó la consulta) siga existiendo y tenga el MISMO
+              // id antes de aplicar nada. Si no, se descarta: ni `setUsuario` ni SecureStore.
+              const usuarioAAplicar = resultadoRecargaUsuario(usuarioRef.current, idEsperado, reconstruido);
+              if (usuarioAAplicar) {
+                setUsuario(usuarioAAplicar);
+                void guardarValor(CLAVE_USUARIO, JSON.stringify(usuarioAAplicar));
               }
             })
             .catch(() => {});
