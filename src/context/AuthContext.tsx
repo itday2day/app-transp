@@ -3,6 +3,7 @@ import { guardarValor, obtenerValor, borrarValor } from "@/services/almacenamien
 import { supabase } from "@/lib/supabase";
 import { Usuario } from "@/types";
 import { iniciarSesion as iniciarSesionApi, cerrarSesion as cerrarSesionApi } from "@/services/authService";
+import { construirUsuarioDesdeChofer } from "@/services/authCore";
 import { restaurarSesion } from "./restaurarSesion";
 
 const CLAVE_USUARIO = "app_transp_usuario";
@@ -56,10 +57,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (restaurado.resultado === "caducada") {
           // Decisión 2, Fase 1c: un app_transp_usuario viejo sin sesión de Supabase válida se
           // trata como sesión caducada -- vuelve al login sin error visible ni cuelgue.
+          //
+          // Punto 4.1: además de borrar `app_transp_usuario`, se cierra la sesión de supabase-js
+          // con `signOut({ scope: "local" })` -- cubre el caso inverso (hay sesión de supabase-js
+          // pero NO hay Usuario guardado: un registro o una recuperación interrumpidos a mitad de
+          // camino, ver verificarCodigo()/cambiarContrasena() en authCore.ts, que dejan sesión
+          // abierta antes de que la app establezca ningún Usuario). `scope: "local"` -- no
+          // `"global"` -- porque esto corre SIEMPRE que restaurarSesion() da "caducada", incluida
+          // la rama donde la razón YA es de red/servidor caído (ver restaurarSesion.ts): un
+          // `signOut` sin `scope: "local"` intenta avisarle al servidor (llamada de red) antes de
+          // limpiar el storage local, y esa llamada podría fallar o demorar sin necesidad --
+          // `"local"` solo limpia el storage de este dispositivo, sin depender de que el servidor
+          // responda.
           if (guardado) await borrarValor(CLAVE_USUARIO);
+          await supabase.auth.signOut({ scope: "local" });
           setUsuario(null);
           return;
         }
+
+        setUsuario(restaurado.usuario);
 
         // "valida" o "indeterminada" (sin red: se conserva el Usuario para que el chofer pueda
         // seguir trabajando offline con el token vencido). En los dos casos se re-persiste el
@@ -67,7 +83,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // `empresaDefecto`/`rutaDefecto`), restaurarSesion() ya lo reconstruyó sin ese campo;
         // volver a guardarlo acá deja SecureStore con la forma nueva (punto 4c).
         await guardarValor(CLAVE_USUARIO, JSON.stringify(restaurado.usuario));
-        setUsuario(restaurado.usuario);
+
+        // Punto 4.2: SOLO con "valida" (hay sesión real confirmada, no solo el Usuario cacheado) se
+        // dispara una recarga EN SEGUNDO PLANO con construirUsuarioDesdeChofer() -- corrige
+        // `nombre: ""` (si el guardado venía de un usuarioMinimo) y los `empresaDefecto`/
+        // `rutaDefecto` en null de un guardado viejo, sin esperarla para bajar `cargando` (no
+        // bloquea el arranque) y sin arriesgar la sesión si falla: el `.catch` de abajo es a
+        // propósito un no-op, nunca borra `app_transp_usuario` ni desloguea por un fallo de esta
+        // lectura puntual -- es la MISMA razón por la que construirUsuarioDesdeChofer() nunca
+        // lanza (ver authCore.ts). Con "indeterminada" NO se intenta (no hay red; sería una
+        // llamada perdida).
+        if (restaurado.resultado === "valida") {
+          construirUsuarioDesdeChofer(restaurado.usuario.id, supabase)
+            .then((reconstruido) => {
+              if (reconstruido.ok) {
+                setUsuario(reconstruido.usuario);
+                void guardarValor(CLAVE_USUARIO, JSON.stringify(reconstruido.usuario));
+              }
+            })
+            .catch(() => {});
+        }
       })
       .finally(() => setCargando(false));
   }, []);
