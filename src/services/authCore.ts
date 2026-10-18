@@ -221,12 +221,23 @@ export type ResultadoLogin =
 
 /** `signInWithPassword` + construirUsuarioDesdeChofer(), con el identificador ya resuelto vía
  * identificadorACorreo(). No colapsa todo a un 401 genérico (a diferencia del authService.ts de
- * hoy): usa mapearErrorLogin() para distinguir credenciales/sin-confirmar/dado-de-baja/red. */
+ * hoy): usa mapearErrorLogin() para distinguir credenciales/sin-confirmar/dado-de-baja/red.
+ *
+ * Corrección D3: un identificador vacío o solo espacios NUNCA puede ser una cuenta real (ni
+ * correo ni número de empleado) -- se corta ACÁ, antes de llamar a Supabase. Sin esto,
+ * identificadorACorreo("") devuelve `apptransp.chofer..f83a1c@gmail.com` (un correo sintético
+ * "vacío" válido en su FORMATO) y el intento de login real contra ese correo gasta una llamada de
+ * red para, en el mejor caso, terminar en el mismo "credencialesIncorrectas" de todos modos --
+ * nunca puede haber una cuenta real con ese correo. */
 export async function iniciarSesionCore(
   identificador: string,
   contrasena: string,
   cliente: ClienteAuthCore
 ): Promise<ResultadoLogin> {
+  if (identificador.trim() === "") {
+    return { ok: false, clave: "credencialesIncorrectas" };
+  }
+
   const correo = identificadorACorreo(identificador);
   const { data, error } = await cliente.auth.signInWithPassword({ email: correo, password: contrasena });
 
