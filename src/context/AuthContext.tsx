@@ -35,20 +35,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [cargando, setCargando] = useState(true);
 
-  // Correcciones C1/C2: el `usuario` de React (arriba) no sirve para leerlo dentro de un callback
-  // async que puede resolver mucho después del render que lo lanzó (closure sobre el valor VIEJO).
-  // Esta ref siempre tiene el valor MÁS RECIENTE -- un efecto la sincroniza después de cada
-  // cambio, lo que alcanza de sobra: un callback que resuelve después solo puede leerla después de
-  // que React ya corrió ese efecto para el render anterior.
+  // Corrección D1: antes, esta ref se sincronizaba desde un `useEffect(() => {...}, [usuario])`
+  // -- un render DESPUÉS de cada `setUsuario`, no en el mismo punto. Un callback async que
+  // resolviera justo en esa ventana (entre el `setUsuario` y el efecto corriendo) podía leer
+  // `usuarioRef.current` todavía VIEJO. `aplicarUsuario()` (abajo) es ahora el ÚNICO camino para
+  // cambiar el Usuario -- pone la ref y el estado de React en el MISMO punto, sin esperar a
+  // ningún render ni efecto. Ningún otro lugar de este archivo llama a `setUsuario` directo.
   const usuarioRef = useRef<Usuario | null>(usuario);
-  useEffect(() => {
-    usuarioRef.current = usuario;
-  }, [usuario]);
-
-  const establecerSesion = useCallback(async (nuevoUsuario: Usuario) => {
-    await guardarValor(CLAVE_USUARIO, JSON.stringify(nuevoUsuario));
+  const aplicarUsuario = useCallback((nuevoUsuario: Usuario | null) => {
+    usuarioRef.current = nuevoUsuario;
     setUsuario(nuevoUsuario);
   }, []);
+
+  const establecerSesion = useCallback(
+    async (nuevoUsuario: Usuario) => {
+      await guardarValor(CLAVE_USUARIO, JSON.stringify(nuevoUsuario));
+      aplicarUsuario(nuevoUsuario);
+    },
+    [aplicarUsuario]
+  );
 
   // Hueco cerrado tras el punto 4.3: si el refresh falla de forma NO retryable mientras la app
   // sigue abierta (ej. un refresh token revocado/rotado, no un corte de red/infraestructura),
@@ -70,18 +75,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // para TODO el cuerpo de este callback, no solo para llamadas a supabase-js.
       //
       // Corrección C2: la decisión (manejarEventoAuth) y el efecto secundario (borrarValor) corren
-      // AFUERA de `setUsuario` -- el updater de abajo solo pone `null`, sin leer `manejarEventoAuth`
-      // ni tocar SecureStore adentro. `usuarioRef.current` (no el `usuario` del closure de este
-      // efecto, que quedó fijo en el valor del montaje) es la lectura correcta del Usuario actual.
+      // AFUERA de `setUsuario` -- el updater queda puro (solo pone `null`, vía aplicarUsuario).
+      // `usuarioRef.current` (no el `usuario` del closure de este efecto, que quedó fijo en el
+      // valor del montaje) es la lectura correcta del Usuario actual -- y ahora SIEMPRE está al
+      // día, sin la ventana de desfase que tenía el efecto de sincronización viejo (punto D1).
       setTimeout(() => {
         const decision = manejarEventoAuth(event, usuarioRef.current);
         if (decision.accion === "ignorar") return;
         void borrarValor(CLAVE_USUARIO);
-        setUsuario(null);
+        aplicarUsuario(null);
       }, 0);
     });
     return () => suscripcion.subscription.unsubscribe();
-  }, []);
+  }, [aplicarUsuario]);
 
   useEffect(() => {
     Promise.all([
@@ -116,11 +122,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // responda.
           if (guardado) await borrarValor(CLAVE_USUARIO);
           await supabase.auth.signOut({ scope: "local" });
-          setUsuario(null);
+          aplicarUsuario(null);
           return;
         }
 
-        setUsuario(restaurado.usuario);
+        aplicarUsuario(restaurado.usuario);
 
         // "valida" o "indeterminada" (sin red: se conserva el Usuario para que el chofer pueda
         // seguir trabajando offline con el token vencido). En los dos casos se re-persiste el
@@ -143,13 +149,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           construirUsuarioDesdeChofer(idEsperado, supabase)
             .then((reconstruido) => {
               // Corrección C1: el resultado es TARDÍO (esta consulta puede seguir en vuelo
-              // después de un logout o un SIGNED_OUT real) -- resultadoRecargaUsuario() exige que
-              // el Usuario ACTUAL (leído de la ref, no del `restaurado.usuario` de arriba, que es
-              // una foto del momento en que se lanzó la consulta) siga existiendo y tenga el MISMO
-              // id antes de aplicar nada. Si no, se descarta: ni `setUsuario` ni SecureStore.
+              // después de un logout o un SIGNED_OUT real). `usuarioRef.current` se lee ACÁ, al
+              // RESPONDER -- no una variable capturada al lanzar la consulta -- y, desde la
+              // corrección D1, siempre está al día (aplicarUsuario() la mantiene sincronizada en
+              // el mismo punto que cualquier otro cambio). resultadoRecargaUsuario() exige que ese
+              // Usuario actual siga existiendo y tenga el MISMO id antes de aplicar nada; si no,
+              // devuelve `null` y NO se toca ni el estado ni SecureStore.
               const usuarioAAplicar = resultadoRecargaUsuario(usuarioRef.current, idEsperado, reconstruido);
               if (usuarioAAplicar) {
-                setUsuario(usuarioAAplicar);
+                aplicarUsuario(usuarioAAplicar);
                 void guardarValor(CLAVE_USUARIO, JSON.stringify(usuarioAAplicar));
               }
             })
@@ -157,7 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .finally(() => setCargando(false));
-  }, []);
+  }, [aplicarUsuario]);
 
   const iniciarSesion = useCallback(
     async (identificador: string, contrasena: string) => {
@@ -170,17 +178,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const cerrarSesion = useCallback(async () => {
     await cerrarSesionApi();
     await borrarValor(CLAVE_USUARIO);
-    setUsuario(null);
-  }, []);
+    aplicarUsuario(null);
+  }, [aplicarUsuario]);
 
   const marcarContrasenaCambiada = useCallback(async () => {
-    setUsuario((actual) => {
-      if (!actual) return actual;
-      const actualizado = { ...actual, debeCambiarContrasena: false };
-      guardarValor(CLAVE_USUARIO, JSON.stringify(actualizado));
-      return actualizado;
-    });
-  }, []);
+    const actual = usuarioRef.current;
+    if (!actual) return;
+    const actualizado = { ...actual, debeCambiarContrasena: false };
+    await guardarValor(CLAVE_USUARIO, JSON.stringify(actualizado));
+    aplicarUsuario(actualizado);
+  }, [aplicarUsuario]);
 
   return (
     <AuthContext.Provider
