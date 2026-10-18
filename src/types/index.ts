@@ -6,7 +6,14 @@ export type NivelCombustible = number;
 export interface Usuario {
   id: string;
   nombre: string;
-  numeroEmpleado: string;
+  // Nombres (no ids) de la empresa/ruta por defecto del chofer (criterio 17,
+  // spec_app_registro_paso5.md paso 2b) -- vienen del embed empresas(nombre)/rutas(nombre) sobre
+  // choferes.empresa_defecto_id/ruta_defecto_id (ver authCore.ts, construirUsuarioDesdeChofer()).
+  // `null` si el chofer no tiene default (ej. invitación "abierta", sin empresa/ruta fijada) o si
+  // la lectura de choferes falló y se usó un Usuario mínimo. El preselect real de CheckInForm con
+  // estos dos campos es del paso 2c -- acá solo se agrega el dato al tipo.
+  empresaDefecto: string | null;
+  rutaDefecto: string | null;
   // El alta la hace el Dashboard con una contraseña temporal (spec_alta_choferes_dashboard.md);
   // mientras esto sea true, RootNavigator.tsx no deja pasar de
   // CambiarContrasenaObligatorioScreen a ninguna otra pantalla. La fija el alta y el reseteo

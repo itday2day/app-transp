@@ -44,10 +44,15 @@ export async function iniciarSesion(numeroEmpleado: string, contrasena: string):
     throw new ErrorApi(401, "No se pudo cargar el perfil del chofer.");
   }
 
+  // empresaDefecto/rutaDefecto: fijo en null acá, de paso, SOLO para que el tipo Usuario (ya sin
+  // numeroEmpleado, paso 2b punto 1) siga compilando -- el commit siguiente de este mismo paso
+  // reemplaza esta función entera por un envoltorio sobre authCore.ts/construirUsuarioDesdeChofer,
+  // que sí los completa de verdad.
   return {
     id: data.user.id,
     nombre: perfil.nombre,
-    numeroEmpleado,
+    empresaDefecto: null,
+    rutaDefecto: null,
     debeCambiarContrasena: perfil.debe_cambiar_contrasena,
   };
 }
