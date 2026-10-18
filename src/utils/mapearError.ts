@@ -6,7 +6,10 @@
 // acá) y, si aplica, los segundos de espera.
 //
 // Cada clave corresponde a UN renglón literal de la tabla 4 de la spec:
-//   - "sinConexion": `status` 0 o sin respuesta -- en cualquiera de las tres llamadas.
+//   - "sinConexion": `status` 0 -- y nada más. supabase-js entrega los fallos de red reales
+//     como `AuthRetryableFetchError` con `status` 0; un error SIN `status` (ej. una excepción
+//     cruda que no pasó por supabase-js) no es necesariamente de red, y cae en "generico" por la
+//     regla normal en vez de asumirse como "sin conexión" a ciegas.
 //   - "esperar" (+ segundos): `status` 429, en `signUp`, `resend` o `resetPasswordForEmail`
 //     (`over_email_send_rate_limit`) -- los segundos del `message` si vienen, 60 si no.
 //   - "generico": cualquier otro error no reconocido por ninguna regla de abajo.
@@ -58,7 +61,7 @@ function extraerSegundosDeEspera(message: string | undefined): number {
 }
 
 function esSinConexion(error: ErrorSupabase): boolean {
-  return error.status === 0 || error.status === undefined;
+  return error.status === 0;
 }
 
 /** `signUp`. `resultado.error` ausente/null = éxito; en ese caso `identities` decide (array
