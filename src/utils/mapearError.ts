@@ -104,6 +104,14 @@ export function mapearErrorRegistro(resultado: {
   if (esSinConexion(error)) return { clave: "sinConexion" };
   if (error.status === 429) return { clave: "esperar", segundos: extraerSegundosDeEspera(error.message) };
   if (error.status === 422 && error.code === "weak_password") return { clave: "contrasenaDebil" };
+  // SOLO 500 -- NO 502/503/504/52x. El 500 de signUp es el que mide la Fase 1b (el trigger
+  // rechazando, "Database error saving new user"): ahí SÍ vale la pena volver a pedir
+  // validar_invitacion ("revisarInvitacion", capa 2). Un 502/503/504/52x es un corte de
+  // infraestructura DURANTE la llamada, no una respuesta del trigger -- cae en "generico" (reintentar).
+  // Reintentar un signUp tras un 5xx ambiguo es seguro aunque la cuenta ya se hubiera creado antes
+  // del corte: medido en la Fase 1b, un signUp sobre una cuenta sin confirmar devuelve 200 e
+  // `identities` con elementos (manda un correo nuevo), nunca un error -- nunca se duplica ni se
+  // pierde el registro por reintentar.
   if (error.status === 500) return { clave: "revisarInvitacion" };
   return { clave: "generico" };
 }

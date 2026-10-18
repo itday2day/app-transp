@@ -78,7 +78,18 @@ export function identificadorACorreo(identificador: string): string {
  * las ÚNICAS dos FK de choferes hacia empresas/rutas, así que el embed no es ambiguo). Se agrega
  * `debe_cambiar_contrasena` (que m4 no necesitaba, pero hace falta para armar el Usuario completo)
  * -- `empresa_defecto_id`/`ruta_defecto_id` quedan en el select, igual que en m4, aunque esta
- * función solo usa los nombres embebidos, no los ids. */
+ * función solo usa los nombres embebidos, no los ids.
+ *
+ * ⚠️ `FilaChoferConDefectos` (abajo) tipa `empresas`/`rutas` como OBJETO (`{nombre: string} |
+ * null`), NO como arreglo -- NO se volvió a medir contra una fila real de choferes en esta ronda
+ * (RLS exige `auth.uid() = id`, y esta ronda tiene prohibido hacer login real para probarlo). La
+ * razón para tipificarlo como objeto es la regla de PostgREST para un embed many-to-one (la FK
+ * vive en la tabla que se consulta -- choferes -- apuntando a la tabla embebida -- empresas/rutas
+ * -- así que cada chofer tiene A LO SUMO una fila del otro lado: PostgREST devuelve objeto o
+ * `null`, nunca arreglo, para esa dirección de FK) más el precedente YA EN PRODUCCIÓN de
+ * `syncService.ts` (`FilaRutaCatalogo`, el mismo tipo de embed -- `rutas.empresa_id ->
+ * empresas.id` -- ya tipado como objeto y funcionando). Si una prueba futura con sesión real
+ * muestra arreglo en vez de objeto, corregir ACÁ y en syncService.ts a la vez. */
 const SELECT_CHOFER_CON_DEFECTOS =
   "nombre, debe_cambiar_contrasena, empresa_defecto_id, ruta_defecto_id, empresas(nombre), rutas(nombre)";
 
@@ -108,6 +119,22 @@ export type ResultadoConstruirUsuario =
  * caso tiene `nombre: ""` y `debeCambiarContrasena: false` como placeholders optimistas -- el
  * llamador debe tratar `ok: false` como "hay que reintentar esta lectura", no asumir que esos
  * valores son reales.
+ *
+ * ⚠️ Punto 3.5, caso marginal ACEPTADO: si el select falla justo en el login de un chofer que
+ * SÍ tiene `debe_cambiar_contrasena = true` pendiente (alta o reseteo del Dashboard, Hallazgo #25),
+ * `usuarioMinimo.debeCambiarContrasena` queda en `false` -- esa sesión entraría directo a la app
+ * normal, saltándose por esta vez la pantalla obligatoria de cambio de contraseña, en vez de
+ * bloquear el ingreso por un fallo de lectura transitorio. Es el mismo criterio que ya elige
+ * "dejar entrar y reintentar" para el resto de este Usuario mínimo -- el reintento posterior
+ * (AuthContext.tsx, "valida") vuelve a leer la fila real y corrige el campo si sigue activo en una
+ * sesión futura; mientras tanto, este único login puntual queda sin el bloqueo.
+ *
+ * No distingue, A PROPÓSITO, un fallo de RED/servidor de una fila genuinamente inexistente (ej.
+ * PGRST116, 0 filas): a diferencia de validarInvitacion() (donde esa distinción cambia qué mensaje
+ * se muestra), acá el resultado es el MISMO en los dos casos -- "no se pudo construir el Usuario
+ * completo, usar el mínimo y reintentar" -- así que no hay ninguna decisión que dependa de la
+ * causa. Ver la tabla de pruebas: ambos casos (red caída y .single() sin fila) llegan al mismo
+ * `usuarioMinimo`.
  */
 export async function construirUsuarioDesdeChofer(
   idAuth: string,
@@ -194,19 +221,56 @@ export interface FilaValidarInvitacion {
   vence_at: string | null;
 }
 
+/**
+ * Punto 3.1 -- medido ANTES de escribir esto (fetch falso, sin red real, contra `rpc()`):
+ *
+ *   entrada del fetch falso      | data   | error                                  | status (TOP-LEVEL, no en error)
+ *   ------------------------------+--------+----------------------------------------+----------------------------------
+ *   rechaza (sin red real)       | null   | {message,details,hint:'',code:''}     | 0
+ *   responde 500 con JSON        | null   | {message} (solo lo que trae el cuerpo) | 500
+ *   responde 500 con HTML        | null   | {message: "<html>..."}                 | 500
+ *   0 filas reales (array vacío) | []     | null                                   | 200
+ *
+ * HALLAZGO CLAVE: postgrest-js NO pone `status` dentro de `error` -- `error` (PostgrestError) solo
+ * tiene `message`/`details`/`hint`/`code`, NUNCA `status`. El `status` real vive en el nivel de
+ * arriba del resultado, como hermano de `data`/`error` (`const { data, error, status } =
+ * await cliente.rpc(...)`), igual que ya sabíamos para postgrest-js por convención del proyecto
+ * (ver mapearError.ts, que opera sobre errores de AUTH-js, un cliente distinto, donde `error.status`
+ * SÍ existe -- NO es el mismo objeto ni el mismo contrato). La versión anterior de esta función
+ * miraba solo `data` y nunca el `error`/`status` del rpc -- un fallo de red o de servidor (sea cual
+ * sea su status) se tragaba exactamente igual que una respuesta real de 0 filas, y las dos se
+ * devolvían como `{estado: "no_existe"}`: un fallo de RED podía hacerle creer al chofer que su
+ * invitación "no existe" cuando en realidad nunca se pudo preguntar.
+ *
+ * Esta versión usa `status` (no `error.status`, que no existe) para distinguir tres casos:
+ *   - `error` presente y `status === 0` -> `{ ok:false, motivo:"sinConexion" }`.
+ *   - `error` presente con cualquier otro `status` (500, 502, etc. -- el servidor respondió algo,
+ *     aunque sea un error) -> `{ ok:false, motivo:"error" }` -- genérico, reintentable.
+ *   - SIN error: la única forma real de "no_existe" por esta vía es un arreglo vacío (defensivo;
+ *     el RPC, schema.sql:518-561, SIEMPRE devuelve exactamente una fila en uso normal -- nunca
+ *     medido así en producción).
+ */
+export type ResultadoValidarInvitacion =
+  { ok: true; fila: FilaValidarInvitacion } | { ok: false; motivo: "sinConexion" | "error" };
+
 /** RPC `validar_invitacion` (schema.sql:518-561) -- acepta token de 32 hex O código de 8
- * caracteres, SIN sesión (grant a anon). Devuelve SIEMPRE exactamente una fila (nunca error ni 0
- * filas en uso normal); si por algún motivo de red/config no viniera ninguna, se trata como
- * "no_existe" -- el estado más conservador, nunca deja avanzar un registro por error. */
+ * caracteres, SIN sesión (grant a anon). */
 export async function validarInvitacion(
   valor: string | null,
   cliente: ClienteAuthCore
-): Promise<FilaValidarInvitacion> {
-  const { data } = await cliente.rpc("validar_invitacion", { p_valor: valor });
-  if (!data || !Array.isArray(data) || data.length === 0) {
-    return { estado: "no_existe", empresa_nombre: null, ruta_nombre: null, vence_at: null };
+): Promise<ResultadoValidarInvitacion> {
+  const { data, error, status } = await cliente.rpc("validar_invitacion", { p_valor: valor });
+
+  if (error) {
+    return { ok: false, motivo: status === 0 ? "sinConexion" : "error" };
   }
-  return data[0] as FilaValidarInvitacion;
+  if (!Array.isArray(data) || data.length === 0) {
+    return {
+      ok: true,
+      fila: { estado: "no_existe", empresa_nombre: null, ruta_nombre: null, vence_at: null },
+    };
+  }
+  return { ok: true, fila: data[0] as FilaValidarInvitacion };
 }
 
 /** Shape literal de obtener_datos_invitacion (schema.sql:573-610). */
@@ -287,7 +351,10 @@ export type ResultadoRegistro =
  * Tras un 500 (mapearErrorRegistro() -> "revisarInvitacion"), vuelve a pedir validarInvitacion()
  * con el MISMO valor: si el estado ya cambió, usa la clave de ESE estado; si sigue "valida", usa
  * "genericoConPista" (el motivo real sigue sin conocerse -- medido en la Fase 1b, supabase-js
- * nunca lo entrega).
+ * nunca lo entrega). Si la REVALIDACIÓN misma falla (red o servidor -- `validarInvitacion()`
+ * devuelve `ok:false`), el resultado es SIEMPRE "genericoConPista", nunca una clave de invitación
+ * -- no hay ninguna base para afirmar que la invitación cambió de estado si ni siquiera se pudo
+ * volver a leer.
  */
 export async function registrarChofer(
   datos: DatosRegistroCompletos,
@@ -316,8 +383,9 @@ export async function registrarChofer(
   if (mapeado.clave === "esperar") return { clave: "esperar", segundos: mapeado.segundos };
   if (mapeado.clave !== "revisarInvitacion") return { clave: mapeado.clave };
 
-  const filaInvitacion = await validarInvitacion(datos.invitacion, cliente);
-  const claveEstado = claveDeEstadoInvitacion(filaInvitacion.estado);
+  const resultado = await validarInvitacion(datos.invitacion, cliente);
+  if (!resultado.ok) return { clave: "genericoConPista" };
+  const claveEstado = claveDeEstadoInvitacion(resultado.fila.estado);
   return claveEstado ? { clave: claveEstado } : { clave: "genericoConPista" };
 }
 
