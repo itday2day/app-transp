@@ -5,7 +5,11 @@
 // Comparación normalizada (mayúsculas, sin espacios sobrantes) -- si ya existe con otra grafía, se
 // usa la grafía de la lista (la fuente de verdad real, el catálogo), no la del Usuario guardado.
 
-function normalizar(texto: string): string {
+// Exportada (ronda de revisión del Hallazgo #57/bug de CheckInForm): aplicarDefectosCheckIn.ts
+// necesita la MISMA comparación normalizada para decidir si una empresa ya resuelta coincide con
+// `empresaDefecto` -- nunca una comparación `===` cruda entre una grafía de catálogo y una de
+// Usuario, que pueden diferir en mayúsculas/espacios aunque sean "la misma" empresa.
+export function normalizar(texto: string): string {
   return texto.trim().toUpperCase();
 }
 
