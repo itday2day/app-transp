@@ -27,17 +27,18 @@ export default function LoginScreen() {
     if (!puedeEnviar) return;
     setError(null);
     setCargando(true);
-    // Paso 2c-0 (P6): iniciarSesion() de AuthContext ya no lanza -- devuelve ResultadoLogin. Antes
-    // de este cambio, el envoltorio de authService.ts colapsaba TODO fallo (credenciales, red,
-    // dado de baja) al mismo ErrorApi(401, ...) -- el `else` de abajo (errorConexion) ya era
-    // código muerto, nunca se alcanzaba. Este ajuste mínimo reproduce EXACTAMENTE ese
-    // comportamiento anterior (siempre errorCredenciales) sin reescribir la pantalla -- distinguir
-    // de verdad "correoSinConfirmar"/credenciales/red por `clave` es trabajo de 2c-1.
-    const resultado = await iniciarSesion(numeroEmpleado.trim(), contrasena);
-    if (!resultado.ok) {
-      setError(t("login.errorCredenciales"));
+    // Observación 0.3 (cierre de 2c-0): iniciarSesion() del contexto ya no lanza por un fallo de
+    // credenciales/red (devuelve ResultadoLogin), pero SÍ puede rechazar la promesa si
+    // guardarValor()/SecureStore falla al persistir el Usuario dentro de establecerSesion() --
+    // try/finally asegura que `cargando` siempre vuelva a false, pase lo que pase.
+    try {
+      const resultado = await iniciarSesion(numeroEmpleado.trim(), contrasena);
+      if (!resultado.ok) {
+        setError(t("login.errorCredenciales"));
+      }
+    } finally {
+      setCargando(false);
     }
-    setCargando(false);
   }
 
   return (

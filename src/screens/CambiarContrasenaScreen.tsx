@@ -61,13 +61,21 @@ export default function CambiarContrasenaScreen() {
       setEnviando(false);
       return;
     }
-    // Paso 2c-0 (P7): iniciarSesion() de AuthContext ya no lanza -- devuelve ResultadoLogin. Al
-    // resolver con `ok:true`, RootNavigator.tsx cambia de stack solo (usuario deja de ser null):
-    // no hace falta navegar a mano. Con `ok:false` (ej. un hipo de red justo en este instante), la
-    // contraseña YA cambió (el try de arriba no lanzó) -- se le dice al chofer que entre a mano.
-    const resultado = await iniciarSesion(identificador.trim(), contrasenaNueva);
-    if (!resultado.ok) setExito(true);
-    setEnviando(false);
+    // Paso 2c-0 (P7) + observación 0.3: iniciarSesion() de AuthContext ya no lanza por
+    // credenciales/red (devuelve ResultadoLogin) -- al resolver con `ok:true`, RootNavigator.tsx
+    // cambia de stack solo (usuario deja de ser null), no hace falta navegar a mano. Pero SÍ puede
+    // rechazar la promesa si guardarValor()/SecureStore falla al persistir (ver AuthContext.tsx) --
+    // try/finally cubre los dos casos (`ok:false` y un rechazo) con el MISMO resultado: la
+    // contraseña YA cambió (el try de arriba no lanzó), así que de cualquier manera se le dice al
+    // chofer que entre a mano, nunca se deja `enviando` trabado en true.
+    try {
+      const resultado = await iniciarSesion(identificador.trim(), contrasenaNueva);
+      if (!resultado.ok) setExito(true);
+    } catch {
+      setExito(true);
+    } finally {
+      setEnviando(false);
+    }
   }
 
   if (exito) {

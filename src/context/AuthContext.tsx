@@ -175,7 +175,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async (identificador: string, contrasena: string): Promise<ResultadoLogin> => {
       const resultado = await iniciarSesionCore(identificador, contrasena, supabase);
       if (resultado.ok) {
-        await establecerSesion(resultado.usuario);
+        try {
+          await establecerSesion(resultado.usuario);
+        } catch {
+          // Observación 0.3 (cierre de 2c-0): establecerSesion() llama a guardarValor()
+          // (SecureStore.setItemAsync, una operación nativa real) ANTES de aplicarUsuario() -- si
+          // ese guardado rechaza, ni se persiste ni se aplica el Usuario, y supabase-js YA
+          // autenticó la sesión (iniciarSesionCore corrió signInWithPassword con éxito antes de
+          // llegar acá). Nunca se deja que ese rechazo suba sin atrapar -- la pantalla lo vería
+          // como una promesa rechazada y, sin su propio try/finally, podría quedar con el botón
+          // "cargando" trabado para siempre. Se devuelve "generico" (no hay una clave más
+          // específica: esto no es un error de credenciales ni de red, es un fallo de
+          // almacenamiento local). La sesión de Supabase que quedó abierta sin Usuario
+          // persistido se limpia sola en el próximo arranque: restaurarSesion.ts:121
+          // (`if (!guardadoJson) return { resultado: "caducada" }`) -- sin `app_transp_usuario`
+          // guardado, el próximo mount la trata como "caducada" y llama
+          // `signOut({ scope: "local" })` (AuthContext.tsx, rama "caducada" del efecto de
+          // montaje) -- el mismo camino que ya cubre un registro/recuperación interrumpidos.
+          return { ok: false, clave: "generico" };
+        }
       }
       return resultado;
     },
