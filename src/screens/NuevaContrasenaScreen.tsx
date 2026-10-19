@@ -40,6 +40,31 @@ type NuevaContrasenaRouteProp = RouteProp<RootStackParamList, "NuevaContrasena">
 //     está "prevented" -- confirma que el gesto de iOS también queda cubierto, no solo el botón de
 //     Android.
 //
+// M4 (ronda de revisión): el callback hace `navigation.dispatch(data.action)` mientras
+// `usePreventRemove(!completada, ...)` SIGUE en `true` (nada cambia `completada` en este camino,
+// solo en el de éxito) -- ¿ese segundo dispatch vuelve a disparar "beforeRemove" y se intercepta
+// de nuevo, en bucle? NO, y no es por casualidad de timing sino por una marca explícita en la
+// propia acción, confirmada leyendo el código fuente instalado:
+//   - useOnPreventRemove.js:6 (`const VISITED_ROUTE_KEYS = Symbol('VISITED_ROUTE_KEYS')`) +
+//     líneas 7-13 (`shouldPreventRemove`): la acción que de verdad le llega al callback como
+//     `e.data.action` NO es la acción original -- es `beforeRemoveAction = {...action,
+//     [VISITED_ROUTE_KEYS]: visitedRouteKeys}`, y `visitedRouteKeys` es el MISMO objeto `Set` que
+//     ya existía si la acción llega de un redispatch (línea 9: lo reusa si `VISITED_ROUTE_KEYS in
+//     action`), nunca uno nuevo.
+//   - useOnPreventRemove.js:18-21 (`if (visitedRouteKeys.has(route.key)) continue;`) +
+//     línea 29 (`visitedRouteKeys.add(route.key)`, justo ANTES de emitir "beforeRemove" para esa
+//     ruta): la primera vez que esta pantalla ve la acción, su `route.key` se agrega al `Set` que
+//     viaja DENTRO de la acción misma (por referencia, no por copia).
+//   - useEventEmitter.js:55 (`target !== undefined ? items[target]?.slice() : ...`) + líneas
+//     69-73 (`data` se pasa tal cual, por referencia): confirma que `e.data.action` que recibe
+//     este callback es ESE MISMO objeto con el `Set` ya mutado, no una copia.
+// Resultado: cuando este callback redespacha `data.action`, `shouldPreventRemove()` vuelve a
+// envolverla pero el `Set` que lleva adentro YA tiene la clave de ESTA ruta -- el `continue` de la
+// línea 18-21 se la salta sin volver a emitir "beforeRemove" para ella, así que el callback NO
+// se vuelve a llamar y la navegación de verdad se completa en este segundo dispatch. Es el mismo
+// mecanismo (y el mismo patrón) que usa la documentación oficial de React Navigation para su
+// ejemplo de "confirmar antes de salir" -- no es un comportamiento implícito de esta pantalla.
+//
 // El guard `completada` es la salvedad que pidió la ronda: si por cualquier motivo el componente
 // siguiera montado un instante después de un `terminarRecuperacion()` exitoso (ej. una doble
 // pulsación en vuelo), `usePreventRemove(false, ...)` deja de interceptar nada, en vez de

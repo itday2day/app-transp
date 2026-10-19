@@ -17,20 +17,27 @@ export type RootStackParamList = {
   // para la misma acción era el patrón del Hallazgo #21).
   CambiarContrasena: undefined;
   CambiarContrasenaObligatorio: undefined;
-  // spec_app_registro_paso5.md, paso 2c-1: `correo` es el ÚNICO dato no sensible que necesita esta
-  // pantalla (se muestra en pantalla: "te enviamos un código a {{correo}}") -- NUNCA una
-  // contraseña ni un código acá (criterio 10, nada sensible en route.params persistentes).
-  // `tipo` decide qué llama verificarCodigo()/reenviarCodigo() ("recovery" lo completa 2c-2, esta
-  // ronda solo implementa "signup"). `origen` es solo para matizar el arranque de la cuenta
-  // regresiva (ver CodigoVerificacionScreen.tsx) y, en 2c-2, para el botón "Olvidé mi contraseña"
-  // que solo aplica si origen:"login" -- no cambia ninguna llamada a authCore.ts.
+  // spec_app_registro_paso5.md, pasos 2c-1/2c-2: `correo` es el ÚNICO dato no sensible que
+  // necesita esta pantalla (se muestra en pantalla: "te enviamos un código a {{correo}}") --
+  // NUNCA una contraseña ni un código acá (criterio 10, nada sensible en route.params
+  // persistentes). `tipo` decide qué llama verificarCodigo()/reenviarCodigo()/pedirRecuperacion()
+  // ("signup" = registro/correoSinConfirmar, "recovery" = recuperación de contraseña -- los dos
+  // ya implementados). `origen` matiza el arranque de la cuenta regresiva (ver
+  // CodigoVerificacionScreen.tsx: "login" arranca en 0s, los otros dos en 60s porque YA se mandó
+  // un correo al llegar) y decide el botón "Olvidé mi contraseña", que solo aparece con
+  // `tipo==="signup" && origen==="login"` (correoSinConfirmar) -- nunca con origen:"recuperacion"
+  // ni origen:"registro", donde no tiene sentido ofrecer esa salida.
   CodigoVerificacion: {
     correo: string;
     tipo: "signup" | "recovery";
     origen: "registro" | "login" | "recuperacion";
   };
   // spec_app_registro_paso5.md, paso 2c-2: pide el correo (resetPasswordForEmail/pedirRecuperacion)
-  // y navega a CodigoVerificacion({correo, tipo:"recovery", origen:"login"}) -- sin params.
+  // y navega a CodigoVerificacion({correo, tipo:"recovery", origen:"recuperacion"}) -- sin params
+  // propios. "Olvidé mi contraseña" desde la pantalla de código (origen:"login") llega al MISMO
+  // destino pero con origen:"recuperacion" (no "login"): ya se mandó un correo real desde ahí, la
+  // cuenta regresiva de la pantalla destino debe arrancar en 60s, no en 0 (ver M1,
+  // CodigoVerificacionScreen.tsx).
   RecuperarContrasena: undefined;
   // paso 2c-2: `correo` es solo para mostrarlo en pantalla ("nueva contraseña para {{correo}}") --
   // terminarRecuperacion() opera sobre la sesión YA activa (verifyOtp(recovery) la deja abierta),
