@@ -24,6 +24,7 @@ import {
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { EMPRESAS, RUTAS_POR_EMPRESA } from "@/data/empresas";
 import { obtenerCatalogoEmpresas, obtenerCatalogoRutasPorEmpresa } from "@/db/catalogoRepo";
+import { listaConDefecto, grafiaDeLista } from "@/utils/catalogoConDefecto";
 import { IncidenciaData, NivelCombustible, TipoIncidenciaCheckin } from "@/types";
 import { scrollAlCampo } from "@/utils/scrollAlCampo";
 import { colores } from "@/theme/colors";
@@ -52,6 +53,12 @@ interface Props {
    * campo de detalle a la vista cuando se enfoca (spec_incidencia_en_checkin.md,
    * mismo patrón que ya usa CheckOutForm). */
   scrollViewRef: RefObject<ScrollView | null>;
+  /** spec_app_registro_paso5.md, paso 2c-4: Usuario.empresaDefecto/rutaDefecto -- vienen de
+   * SecureStore, disponibles incluso sin red (A11). Pueden llegar DESPUÉS de montar (la recarga en
+   * segundo plano de programarRecargaUsuario() puede corregir un usuarioMinimo ya en pantalla) --
+   * por eso son props reactivas, no solo un valor inicial. */
+  empresaDefecto?: string | null;
+  rutaDefecto?: string | null;
 }
 
 const INCIDENCIA_INICIAL: IncidenciaData = {
@@ -61,11 +68,24 @@ const INCIDENCIA_INICIAL: IncidenciaData = {
   fotos: [],
 };
 
-export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollViewRef }: Props) {
+export function CheckInForm({
+  onEnviar,
+  enviando,
+  matriculasFrecuentes,
+  scrollViewRef,
+  empresaDefecto = null,
+  rutaDefecto = null,
+}: Props) {
   const { t } = useTranslation();
-  const [empresa, setEmpresa] = useState<string | null>(null);
+  const [empresa, setEmpresa] = useState<string | null>(empresaDefecto);
   const [matricula, setMatricula] = useState("");
-  const [ruta, setRuta] = useState("");
+  const [ruta, setRuta] = useState(rutaDefecto ?? "");
+  // true en cuanto el chofer toca empresa o ruta a mano -- a partir de ahí, un empresaDefecto/
+  // rutaDefecto que llegue tarde (R6: la recarga en segundo plano puede corregirlos después de
+  // montar) ya NO se aplica, para no pisar una elección que el chofer ya hizo. Arranca en false
+  // SIEMPRE (incluso si ya había un defecto al montar) -- lo que importa es si el chofer tocó el
+  // campo, no si ya traía un valor.
+  const [empresaORutaTocada, setEmpresaORutaTocada] = useState(false);
   const [rutaManual, setRutaManual] = useState(false);
   const [kmInicial, setKmInicial] = useState("");
   const [combustible, setCombustible] = useState<NivelCombustible | null>(null);
@@ -120,7 +140,45 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
     };
   }, []);
 
-  const rutasDisponibles = empresa ? (rutasPorEmpresa[empresa] ?? []) : [];
+  // 2c-4: empresasDisponibles/rutasPorEmpresa vienen del catálogo (bundle o SQLite) -- si
+  // empresaDefecto/rutaDefecto no están ahí (ej. el chofer tiene una invitación "abierta" con una
+  // empresa que todavía no está en ningún catálogo descargado), listaConDefecto() los antepone
+  // para que sean una opción GENUINA del desplegable, no solo texto preseleccionado. Funciona sin
+  // red: empresaDefecto/rutaDefecto vienen de SecureStore (Usuario), no de ningún catálogo.
+  const empresasConDefecto = listaConDefecto(empresasDisponibles, empresaDefecto);
+  const rutasPorEmpresaConDefecto =
+    empresaDefecto && rutaDefecto
+      ? {
+          ...rutasPorEmpresa,
+          [empresaDefecto]: listaConDefecto(rutasPorEmpresa[empresaDefecto] ?? [], rutaDefecto),
+        }
+      : rutasPorEmpresa;
+  const rutasDisponibles = empresa ? (rutasPorEmpresaConDefecto[empresa] ?? []) : [];
+
+  // R6: empresaDefecto/rutaDefecto pueden llegar DESPUÉS de montar (la recarga en segundo plano de
+  // programarRecargaUsuario() puede corregir un usuarioMinimo que entró con estos dos en null) --
+  // solo se aplican si el chofer todavía no tocó ninguno de los dos campos. Ajuste de estado
+  // durante el RENDER (no en un efecto): comparar contra el valor anterior del prop y llamar a
+  // setState condicionalmente en el cuerpo del componente es el patrón que React recomienda para
+  // esto (react-hooks/set-state-in-effect: un setState síncrono DENTRO de un efecto dispara un
+  // re-render en cascada evitable; acá no se evita un re-render, se evita UNO de más).
+  const [empresaDefectoProcesado, setEmpresaDefectoProcesado] = useState<string | null>(null);
+  if (empresaDefecto !== empresaDefectoProcesado) {
+    setEmpresaDefectoProcesado(empresaDefecto);
+    if (!empresaORutaTocada && empresaDefecto && empresa === null) {
+      setEmpresa(grafiaDeLista(empresasConDefecto, empresaDefecto));
+    }
+  }
+
+  const [rutaDefectoProcesado, setRutaDefectoProcesado] = useState<string | null>(null);
+  if (rutaDefecto !== rutaDefectoProcesado) {
+    setRutaDefectoProcesado(rutaDefecto);
+    // rutaDefecto solo tiene sentido junto a SU PROPIA empresa -- si todavía no se llegó a
+    // empresaDefecto (arriba), no hay nada que preseleccionar todavía.
+    if (!empresaORutaTocada && rutaDefecto && ruta === "" && empresa === empresaDefecto) {
+      setRuta(grafiaDeLista(rutasDisponibles, rutaDefecto) ?? rutaDefecto);
+    }
+  }
 
   useEffect(() => {
     if (!rutaManual) return;
@@ -139,11 +197,17 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
   }, [enviando]);
 
   function manejarCambioEmpresa(nuevaEmpresa: string) {
+    setEmpresaORutaTocada(true);
     setEmpresa(nuevaEmpresa);
     // Las rutas dependen de la empresa, así que una ruta ya elegida deja de
     // tener sentido en cuanto cambia la empresa.
     setRuta("");
     setRutaManual(false);
+  }
+
+  function manejarCambioRuta(nuevaRuta: string) {
+    setEmpresaORutaTocada(true);
+    setRuta(nuevaRuta);
   }
 
   const detalleIncidenciaValido = incidencia.tipo !== "Otro" || incidencia.detalle.trim().length > 0;
@@ -229,7 +293,7 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
             etiqueta={t("checkInForm.empresaEtiqueta")}
             placeholder={t("checkInForm.empresaPlaceholder")}
             valor={empresa}
-            opciones={empresasDisponibles}
+            opciones={empresasConDefecto}
             obtenerEtiqueta={(item) => item}
             onSeleccionar={manejarCambioEmpresa}
             error={mostrarErrores && empresa === null ? t("comun.campoObligatorio") : undefined}
@@ -244,7 +308,7 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
                 etiqueta={t("checkInForm.rutaEtiqueta")}
                 placeholder={t("checkInForm.rutaPlaceholderManual")}
                 value={ruta}
-                onChangeText={setRuta}
+                onChangeText={manejarCambioRuta}
                 autoCapitalize="characters"
                 returnKeyType="done"
                 onSubmitEditing={() => Keyboard.dismiss()}
@@ -271,7 +335,7 @@ export function CheckInForm({ onEnviar, enviando, matriculasFrecuentes, scrollVi
               valor={ruta || null}
               opciones={rutasDisponibles}
               deshabilitado={empresa === null}
-              onSeleccionar={setRuta}
+              onSeleccionar={manejarCambioRuta}
               opcionEspecial={{
                 texto: t("checkInForm.agregarRutaManual"),
                 onPress: () => setRutaManual(true),

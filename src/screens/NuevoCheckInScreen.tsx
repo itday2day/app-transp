@@ -87,6 +87,8 @@ export default function NuevoCheckInScreen() {
             enviando={enviando || obteniendoUbicacion}
             matriculasFrecuentes={matriculasFrecuentes}
             scrollViewRef={refScroll}
+            empresaDefecto={usuario?.empresaDefecto}
+            rutaDefecto={usuario?.rutaDefecto}
           />
 
           <BotonPrimario
