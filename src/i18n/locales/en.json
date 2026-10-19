@@ -24,11 +24,10 @@
   "login": {
     "titulo": "Shift Control",
     "subtitulo": "Sign in with your employee number",
-    "numeroEmpleadoEtiqueta": "Employee number",
-    "numeroEmpleadoPlaceholder": "E.g. 4821",
+    "correoEtiqueta": "Email",
+    "correoPlaceholder": "you@example.com",
     "contrasenaEtiqueta": "Password",
     "contrasenaPlaceholder": "Your password",
-    "errorCredenciales": "Incorrect employee number or password.",
     "errorConexion": "We couldn't connect to the server. Check your connection and try again.",
     "botonIngresar": "Log in",
     "ayudaContrasena": "Forgot or want to change your password?",

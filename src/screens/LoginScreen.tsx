@@ -1,5 +1,14 @@
-import React, { useState } from "react";
-import { View, Text, Image, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import React, { useRef, useState } from "react";
+import {
+  View,
+  Text,
+  Image,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  TextInput,
+} from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
@@ -7,113 +16,139 @@ import { CampoTexto } from "@/components/CampoTexto";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { TextoEnlace } from "@/components/TextoEnlace";
+import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
+import { accionDeResultadoLogin } from "./accionDeResultadoLogin";
+import { RootStackNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
-import { RootStackNavigationProp } from "@/navigation/types";
 
 export default function LoginScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { t } = useTranslation();
   const { iniciarSesion } = useAuth();
-  const [numeroEmpleado, setNumeroEmpleado] = useState("");
+  // Paso 2c-1 (parte B): renombrado desde numeroEmpleado -- el campo ahora es "correo o número de
+  // empleado" (identificadorACorreo(), dentro de iniciarSesionCore en authCore.ts, ya sabe
+  // distinguir los dos: sin "@" se sigue tratando como número de empleado sintético --
+  // TODO(barrido): retirar esa rama cuando chofer 01 tenga un correo real, ver authCore.ts).
+  const [identificador, setIdentificador] = useState("");
   const [contrasena, setContrasena] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const contrasenaRef = useRef<TextInput>(null);
 
-  const puedeEnviar = numeroEmpleado.trim().length > 0 && contrasena.length > 0;
+  const puedeEnviar = identificador.trim().length > 0 && contrasena.length > 0;
 
   async function manejarIngreso() {
-    if (!puedeEnviar) return;
+    if (!puedeEnviar || cargando) return;
     setError(null);
     setCargando(true);
-    // Observación 0.3 (cierre de 2c-0): iniciarSesion() del contexto ya no lanza por un fallo de
-    // credenciales/red (devuelve ResultadoLogin), pero SÍ puede rechazar la promesa si
-    // guardarValor()/SecureStore falla al persistir el Usuario dentro de establecerSesion() --
-    // try/finally asegura que `cargando` siempre vuelva a false, pase lo que pase.
     try {
-      const resultado = await iniciarSesion(numeroEmpleado.trim(), contrasena);
-      if (!resultado.ok) {
-        setError(t("login.errorCredenciales"));
+      const resultado = await iniciarSesion(identificador.trim(), contrasena);
+      const accion = accionDeResultadoLogin(resultado);
+      if (accion.tipo === "error") {
+        setError(t(accion.textoClave));
+      } else if (accion.tipo === "irACodigo") {
+        navigation.navigate("CodigoVerificacion", { correo: accion.correo, tipo: "signup", origen: "login" });
       }
+      // "entrar": RootNavigator.tsx cambia de stack solo (usuario deja de ser null) -- no se
+      // navega a mano.
     } finally {
       setCargando(false);
     }
   }
 
   return (
-    <KeyboardAvoidingView style={estilos.pantalla} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-      {/* spec_marca_agua_y_navegacion_day2day.md (Hallazgo #42): marca de agua, renderizada ANTES
-          del ScrollView (y no encima) para que este, al pintarse después, quede arriba sin
-          necesitar zIndex. pointerEvents="none" + accessible={false} +
-          importantForAccessibility/accessibilityElementsHidden: no intercepta toques ni lectores
-          de pantalla. position:"relative" de `pantalla` (default de RN) es lo que ancla este
-          absolute a la pantalla completa. */}
-      <Image
-        source={require("../../assets/isotipo-d2d.png")}
-        style={estilos.marcaAgua}
-        resizeMode="contain"
-        accessible={false}
-        importantForAccessibility="no-hide-descendants"
-        accessibilityElementsHidden
-      />
+    <ProveedorEnfoqueTeclado scrollRef={scrollRef}>
+      <KeyboardAvoidingView style={estilos.pantalla} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+        {/* spec_marca_agua_y_navegacion_day2day.md (Hallazgo #42): marca de agua, renderizada ANTES
+            del ScrollView (y no encima) para que este, al pintarse después, quede arriba sin
+            necesitar zIndex. pointerEvents="none" + accessible={false} +
+            importantForAccessibility/accessibilityElementsHidden: no intercepta toques ni lectores
+            de pantalla. position:"relative" de `pantalla` (default de RN) es lo que ancla este
+            absolute a la pantalla completa. */}
+        <Image
+          source={require("../../assets/isotipo-d2d.png")}
+          style={estilos.marcaAgua}
+          resizeMode="contain"
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
+        />
 
-      <ScrollView contentContainerStyle={estilos.contenido} keyboardShouldPersistTaps="handled">
-        {/* Fuera del bloque centrado (antes quedaba pegado encima del logo, en el medio de la
-            pantalla) — ahora es el primer elemento del scroll, arriba del todo. */}
-        <View style={estilos.filaIdioma}>
-          <LanguageSelector />
-        </View>
-
-        <View style={estilos.bloqueCentral}>
-          <View style={estilos.encabezado}>
-            <Image
-              source={require("../../assets/logo-negro.png")}
-              style={estilos.logo}
-              resizeMode="contain"
-              accessibilityLabel="Day2Day Solutions"
-            />
-            <Text style={estilos.subtitulo}>{t("login.subtitulo")}</Text>
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={estilos.contenido}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Fuera del bloque centrado (antes quedaba pegado encima del logo, en el medio de la
+              pantalla) — ahora es el primer elemento del scroll, arriba del todo. */}
+          <View style={estilos.filaIdioma}>
+            <LanguageSelector />
           </View>
 
-          <CampoTexto
-            etiqueta={t("login.numeroEmpleadoEtiqueta")}
-            placeholder={t("login.numeroEmpleadoPlaceholder")}
-            keyboardType="number-pad"
-            autoCapitalize="none"
-            value={numeroEmpleado}
-            onChangeText={setNumeroEmpleado}
-          />
+          <View style={estilos.bloqueCentral}>
+            <View style={estilos.encabezado}>
+              <Image
+                source={require("../../assets/logo-negro.png")}
+                style={estilos.logo}
+                resizeMode="contain"
+                accessibilityLabel="Day2Day Solutions"
+              />
+              <Text style={estilos.subtitulo}>{t("login.subtitulo")}</Text>
+            </View>
 
-          <CampoTexto
-            etiqueta={t("login.contrasenaEtiqueta")}
-            placeholder={t("login.contrasenaPlaceholder")}
-            secureTextEntry
-            alternarVisibilidad
-            autoCapitalize="none"
-            value={contrasena}
-            onChangeText={setContrasena}
-          />
-
-          {error ? <Text style={estilos.error}>{error}</Text> : null}
-
-          <BotonPrimario
-            titulo={t("login.botonIngresar")}
-            onPress={manejarIngreso}
-            cargando={cargando}
-            deshabilitado={!puedeEnviar}
-            estilo={estilos.boton}
-          />
-
-          <View style={estilos.contenedorEnlace}>
-            <TextoEnlace
-              texto={t("login.ayudaContrasena")}
-              onPress={() => navigation.navigate("CambiarContrasena")}
+            <CampoTexto
+              etiqueta={t("login.correoEtiqueta")}
+              placeholder={t("login.correoPlaceholder")}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              // "username" (no "emailAddress"): el campo también acepta un número de empleado sin
+              // "@" (TODO(barrido) arriba) -- "username" es el tipo que Apple recomienda para un
+              // identificador de acceso que no es SIEMPRE un correo real.
+              textContentType="username"
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={() => contrasenaRef.current?.focus()}
+              value={identificador}
+              onChangeText={setIdentificador}
             />
+
+            <CampoTexto
+              ref={contrasenaRef}
+              etiqueta={t("login.contrasenaEtiqueta")}
+              placeholder={t("login.contrasenaPlaceholder")}
+              secureTextEntry
+              alternarVisibilidad
+              autoCapitalize="none"
+              returnKeyType="go"
+              onSubmitEditing={manejarIngreso}
+              value={contrasena}
+              onChangeText={setContrasena}
+            />
+
+            {error ? <Text style={estilos.error}>{error}</Text> : null}
+
+            <BotonPrimario
+              titulo={t("login.botonIngresar")}
+              onPress={manejarIngreso}
+              cargando={cargando}
+              deshabilitado={!puedeEnviar}
+              estilo={estilos.boton}
+            />
+
+            <View style={estilos.contenedorEnlace}>
+              <TextoEnlace
+                texto={t("login.ayudaContrasena")}
+                onPress={() => navigation.navigate("CambiarContrasena")}
+              />
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </ProveedorEnfoqueTeclado>
   );
 }
 

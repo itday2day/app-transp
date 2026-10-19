@@ -24,11 +24,10 @@
   "login": {
     "titulo": "Control de Jornada",
     "subtitulo": "Inicia sesión con tu número de empleado",
-    "numeroEmpleadoEtiqueta": "Número de empleado",
-    "numeroEmpleadoPlaceholder": "Ej. 4821",
+    "correoEtiqueta": "Correo electrónico",
+    "correoPlaceholder": "tucorreo@ejemplo.com",
     "contrasenaEtiqueta": "Contraseña",
     "contrasenaPlaceholder": "Tu contraseña",
-    "errorCredenciales": "Número de empleado o contraseña incorrectos.",
     "errorConexion": "No pudimos conectar con el servidor. Verifica tu conexión e intenta de nuevo.",
     "botonIngresar": "Ingresar",
     "ayudaContrasena": "¿Olvidaste o querés cambiar tu contraseña?",
