@@ -1,5 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
+import {
+  Text,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  View,
+  ActivityIndicator,
+} from "react-native";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
@@ -37,11 +45,14 @@ export default function RegistroScreen() {
   const { params } = useRoute<RegistroRouteProp>();
   const tokenInicial = tokenValido(params?.token);
 
-  const [fase, setFase] = useState<"invitacion" | "formulario" | "confirmarCorreo">(
-    tokenInicial ? "invitacion" : "invitacion"
+  // M2 (corrección): con token, la fase arranca en "cargandoInvitacion" -- ni el formulario de
+  // código de 8 (fase "invitacion") ni "formulario" se muestran hasta que la carga completa, para
+  // no revelar un instante el campo del código con un enlace que no lo necesita.
+  const [fase, setFase] = useState<"cargandoInvitacion" | "invitacion" | "formulario" | "confirmarCorreo">(
+    tokenInicial ? "cargandoInvitacion" : "invitacion"
   );
   const [invitacion, setInvitacion] = useState(tokenInicial ?? "");
-  const [validandoInvitacion, setValidandoInvitacion] = useState(Boolean(tokenInicial));
+  const [validandoInvitacion, setValidandoInvitacion] = useState(false);
   const [errorInvitacion, setErrorInvitacion] = useState<string | null>(null);
   const [dniBloqueado, setDniBloqueado] = useState(false);
 
@@ -65,29 +76,48 @@ export default function RegistroScreen() {
 
   // Sin token: queda en fase "invitacion" esperando el código de 8 -- el efecto de abajo (precarga
   // + validarInvitacion) solo corre si HAY token.
+  //
+  // M2 (corrección): obtenerDatosInvitacion() y validarInvitacion() corrían en paralelo, cada una
+  // decidiendo su propio pedazo de estado por su cuenta. Si validarInvitacion() resolvía primero,
+  // setFase("formulario") montaba CampoTelefono/SelectorFecha ANTES de que
+  // obtenerDatosInvitacion() hubiera llamado a setTelefono()/setFechaNacimiento() -- los dos son
+  // componentes con estado interno propio que solo leen su prop `valor` AL MONTARSE (useState(()
+  // => separarTelefono(valor)) en CampoTelefono.tsx:29; dia/mes/año en SelectorFecha.tsx:45-47,
+  // ninguno sincronizado con `valor` después del montaje), así que un valor que llega tarde queda
+  // guardado en el padre pero invisible en el campo -- el chofer vería el campo vacío y podría
+  // enviar un teléfono/fecha que no ve. (SelectorBuscable.tsx NO tiene este problema: lee `valor`
+  // directo en cada render, sin estado propio que lo espejee -- confirmado leyendo su código,
+  // SelectorBuscable.tsx:89-91.) Un solo Promise.all() espera las DOS antes de aplicar cualquier
+  // estado y de decidir la fase -- CampoTelefono/SelectorFecha solo se montan (fase "formulario")
+  // con los valores ya finales, nunca a mitad de carga.
   useEffect(() => {
     if (!tokenInicial) return;
-    obtenerDatosInvitacion(tokenInicial, supabase).then((datos) => {
-      if (!datos) return;
-      // criterio 2: cada campo es string | null -- una invitación "abierta" compartida por enlace
-      // puede no traer ninguno de estos datos (schema.sql:490-495), igual que por código de 8.
-      setDni(datos.dni ?? "");
-      setNombre(datos.nombre ?? "");
-      setApellidos(datos.apellidos ?? "");
-      setTelefono(datos.telefono ?? "");
-      setFechaNacimiento(datos.fecha_nacimiento);
-      setCorreo(datos.email ?? "");
-      // El DNI solo se bloquea si la invitación realmente lo trae atado -- una invitación abierta
-      // sin DNI no puede bloquear un campo que el chofer todavía tiene que completar.
-      setDniBloqueado(datos.dni !== null);
+    Promise.all([
+      obtenerDatosInvitacion(tokenInicial, supabase),
+      validarInvitacion(tokenInicial, supabase),
+    ]).then(([datos, resultado]) => {
+      if (datos) {
+        // criterio 2: cada campo es string | null -- una invitación "abierta" compartida por
+        // enlace puede no traer ninguno de estos datos (schema.sql:490-495), igual que por
+        // código de 8.
+        setDni(datos.dni ?? "");
+        setNombre(datos.nombre ?? "");
+        setApellidos(datos.apellidos ?? "");
+        setTelefono(datos.telefono ?? "");
+        setFechaNacimiento(datos.fecha_nacimiento);
+        setCorreo(datos.email ?? "");
+        // El DNI solo se bloquea si la invitación realmente lo trae atado -- una invitación
+        // abierta sin DNI no puede bloquear un campo que el chofer todavía tiene que completar.
+        setDniBloqueado(datos.dni !== null);
+      }
+      const accion = accionDeResultadoValidarInvitacion(resultado);
+      if (accion.tipo === "valida") {
+        setFase("formulario");
+      } else {
+        setErrorInvitacion(t(accion.textoClave));
+        setFase("invitacion");
+      }
     });
-    validarInvitacion(tokenInicial, supabase)
-      .then((resultado) => {
-        const accion = accionDeResultadoValidarInvitacion(resultado);
-        if (accion.tipo === "valida") setFase("formulario");
-        else setErrorInvitacion(t(accion.textoClave));
-      })
-      .finally(() => setValidandoInvitacion(false));
     // Solo al montar -- el token no cambia durante la vida de la pantalla.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -181,6 +211,14 @@ export default function RegistroScreen() {
     } finally {
       setEnviando(false);
     }
+  }
+
+  if (fase === "cargandoInvitacion") {
+    return (
+      <View style={[estilos.pantalla, estilos.cargando]}>
+        <ActivityIndicator color={colores.primario} />
+      </View>
+    );
   }
 
   if (fase === "invitacion") {
@@ -278,7 +316,9 @@ export default function RegistroScreen() {
                   cargando={enviando}
                   estilo={estilos.boton}
                 />
-                <TextoEnlace texto={t("comun.cancelar")} onPress={() => setFase("formulario")} />
+                {/* Menor (ronda de revisión): esto no cancela nada, vuelve al formulario con los
+                    datos intactos para corregirlos -- "Cancelar" prometía descartar. */}
+                <TextoEnlace texto={t("registro.corregirMisDatos")} onPress={() => setFase("formulario")} />
               </>
             )}
           </ScrollView>
@@ -338,10 +378,8 @@ export default function RegistroScreen() {
           <CampoTelefono
             etiqueta={t("registro.telefonoEtiqueta")}
             valor={telefono}
-            onCambiar={(v) => {
-              setTelefono(v);
-              marcarTocado("telefono");
-            }}
+            onCambiar={setTelefono}
+            onBlur={() => marcarTocado("telefono")}
             error={errorDeCampo("telefono", "telefono")}
           />
 
@@ -355,7 +393,11 @@ export default function RegistroScreen() {
             value={correo}
             onChangeText={setCorreo}
             onBlur={() => marcarTocado("correo")}
-            error={(tocado.correo || intentoEnvio) && !correoValido ? t("comun.campoObligatorio") : undefined}
+            error={
+              (tocado.correo || intentoEnvio) && !correoValido
+                ? t(correo.trim().length === 0 ? "comun.campoObligatorio" : "registro.correoInvalido")
+                : undefined
+            }
           />
 
           <CampoTexto
@@ -382,8 +424,18 @@ export default function RegistroScreen() {
             onChangeText={setConfirmarContrasena}
             onBlur={() => marcarTocado("confirmarContrasena")}
             error={
-              (tocado.confirmarContrasena || intentoEnvio) && !contrasenasCoinciden
-                ? t("cambiarContrasena.contrasenasNoCoinciden")
+              // Menor (ronda de revisión): contrasenasCoinciden es TRUE a propósito cuando el
+              // campo está vacío (para no mostrar "no coinciden" mientras el chofer todavía no
+              // escribió nada) -- pero eso también lo dejaba sin ningún error visible si tocaba
+              // "Continuar" con el campo vacío: puedeContinuar ya exige length>0, así que
+              // "Continuar" no hacía nada que el chofer pudiera ver. Acá se distinguen los dos
+              // casos explícitamente.
+              tocado.confirmarContrasena || intentoEnvio
+                ? confirmarContrasena.length === 0
+                  ? t("comun.campoObligatorio")
+                  : !contrasenasCoinciden
+                    ? t("cambiarContrasena.contrasenasNoCoinciden")
+                    : undefined
                 : undefined
             }
           />
@@ -403,6 +455,10 @@ const estilos = StyleSheet.create({
   pantalla: {
     flex: 1,
     backgroundColor: colores.fondo,
+  },
+  cargando: {
+    alignItems: "center",
+    justifyContent: "center",
   },
   contenido: {
     flexGrow: 1,

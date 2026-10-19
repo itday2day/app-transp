@@ -11,6 +11,11 @@ interface Props {
   etiqueta: string;
   valor: string; // E.164 completo ("" si vacío)
   onCambiar: (e164: string) => void;
+  // R4 (menor, ronda de revisión): antes el llamador marcaba "tocado" desde onCambiar, mostrando
+  // el error de formato apenas se escribía el primer dígito. onBlur separa el "cambió" (siempre,
+  // para que el padre tenga el E.164 al día) del "el chofer ya terminó de tocar este campo" (solo
+  // al salir), igual que CampoTexto.
+  onBlur?: () => void;
   error?: string;
 }
 
@@ -18,7 +23,7 @@ interface Props {
 // existente) + número suelto -- NO SelectorPais.tsx (ese devuelve el nombre del país, no el
 // código de marcación que necesita este campo). libphonenumber-js/min YA está instalado y
 // aprobado (decisión 3, Fase 1c) -- sin módulo nativo nuevo.
-export function CampoTelefono({ etiqueta, valor, onCambiar, error }: Props) {
+export function CampoTelefono({ etiqueta, valor, onCambiar, onBlur, error }: Props) {
   const { t } = useTranslation();
   const [inicial] = useState(() => separarTelefono(valor));
   const [pais, setPais] = useState(inicial.pais);
@@ -54,6 +59,7 @@ export function CampoTelefono({ etiqueta, valor, onCambiar, error }: Props) {
         keyboardType="phone-pad"
         value={numero}
         onChangeText={actualizarNumero}
+        onBlur={onBlur}
         error={error}
       />
     </View>

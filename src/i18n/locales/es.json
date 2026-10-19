@@ -44,6 +44,8 @@
     "edadMinima": "Debes tener 18 años o más para registrarte.",
     "telefonoInvalido": "El teléfono debe incluir el código de país (por ejemplo, +34600000000).",
     "correoYaRegistrado": "Ya tienes una cuenta con este correo. Inicia sesión o recupera tu contraseña.",
+    "correoInvalido": "El correo no parece válido.",
+    "corregirMisDatos": "Corregir mis datos",
     "botonIniciarSesion": "Iniciar sesión",
     "botonRecuperarContrasena": "Recuperar contraseña",
     "genericoConPista": "No pudimos crear la cuenta. Revisa que el DNI sea el que te dio Administración y que no tengas ya una cuenta con otro correo. Si el problema sigue, contacta con Administración.",

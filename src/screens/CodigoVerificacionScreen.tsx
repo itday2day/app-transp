@@ -88,14 +88,28 @@ export default function CodigoVerificacionScreen() {
   // DOS salidas -- "Enviar un código nuevo" (manejarReenviar, abajo) y "Olvidé mi contraseña".
   // Esta reemplaza, no apila: el correo ya se conoce, no hace falta volver a pedirlo en
   // RecuperarContrasenaScreen.
+  //
+  // M1 (corrección): pedirRecuperacion() puede fallar (sin red, 429, error del servidor) -- antes
+  // esta función navegaba SIEMPRE a la pantalla de código, como si el correo hubiera salido. Pasa
+  // el resultado por accionDeResultadoReenvio() (mismo árbol que manejarReenviar) y solo navega si
+  // la clave es "reenviado". origen:"recuperacion" (NO "login"): ya se mandó un correo real, la
+  // cuenta regresiva de la pantalla destino debe arrancar en 60s, no en 0 (ver el comentario de
+  // `cuenta` más arriba).
   const [enviandoOlvide, setEnviandoOlvide] = useState(false);
   async function manejarOlvideContrasena() {
     if (enviandoOlvide) return;
     setError(null);
     setEnviandoOlvide(true);
     try {
-      await pedirRecuperacion(correo, supabase);
-      navigation.replace("CodigoVerificacion", { correo, tipo: "recovery", origen: "login" });
+      const resultado = await pedirRecuperacion(correo, supabase);
+      const accion = accionDeResultadoReenvio(resultado);
+      if (accion.tipo === "reenviado") {
+        navigation.replace("CodigoVerificacion", { correo, tipo: "recovery", origen: "recuperacion" });
+      } else if (accion.tipo === "esperar") {
+        setError(t(accion.textoClave, { segundos: accion.segundos }));
+      } else {
+        setError(t(accion.textoClave));
+      }
     } finally {
       setEnviandoOlvide(false);
     }

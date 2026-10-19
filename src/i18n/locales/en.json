@@ -44,6 +44,8 @@
     "edadMinima": "You must be at least 18 to register.",
     "telefonoInvalido": "The phone number must include the country code (for example, +34600000000).",
     "correoYaRegistrado": "You already have an account with this email. Log in or recover your password.",
+    "correoInvalido": "That email doesn't look valid.",
+    "corregirMisDatos": "Edit my details",
     "botonIniciarSesion": "Log in",
     "botonRecuperarContrasena": "Recover password",
     "genericoConPista": "We couldn't create the account. Check that the ID number is the one Administration gave you and that you don't already have an account with another email. If the problem continues, contact Administration.",
