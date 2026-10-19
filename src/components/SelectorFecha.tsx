@@ -77,11 +77,16 @@ export function SelectorFecha({ etiqueta, valor, onCambiar, edadMinima = 18 }: P
     setMes(nuevoMes);
     setAnio(nuevoAnio);
 
+    // R2 (spec_app_registro_paso5.md, paso 2c-3): este aviso es SOLO un adelanto -- usa
+    // calcularEdad() con la hora LOCAL del dispositivo (no Europe/Madrid), a diferencia de
+    // validarDatosRegistro()/fechaHoyEnMadrid(), que es la única fuente de verdad real. Antes,
+    // un `return` acá bloqueaba onCambiar() por completo: la fecha elegida nunca llegaba al
+    // formulario, y validarDatosRegistro() ni se enteraba de que existía -- un chofer cerca del
+    // límite de 18 años, con el reloj del dispositivo corrido, podía quedar con la fecha
+    // atascada sin ningún error real que leer. onCambiar() se llama SIEMPRE, el aviso de acá
+    // nunca decide si se puede enviar el formulario.
     const edad = calcularEdad(numeroAnio, indiceMes, numeroDia);
-    if (edad < edadMinima) {
-      setError(t("selectorFecha.errorEdadMinima", { edad: edadMinima }));
-      return;
-    }
+    setError(edad < edadMinima ? t("selectorFecha.errorEdadMinima", { edad: edadMinima }) : null);
 
     const fechaIso = `${numeroAnio}-${String(indiceMes + 1).padStart(2, "0")}-${String(numeroDia).padStart(2, "0")}`;
     onCambiar(fechaIso);

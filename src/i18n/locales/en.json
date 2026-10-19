@@ -32,6 +32,7 @@
     "botonIngresar": "Log in",
     "olvideContrasena": "Forgot your password?",
     "cambiarContrasenaEnlace": "Change my password",
+    "tengoInvitacion": "Have an invitation code? Sign up",
     "credencialesIncorrectas": "Incorrect email or password.",
     "cuentaDadaDeBaja": "Your account has been deactivated. Contact Administration."
   },
@@ -47,7 +48,25 @@
     "invitacionNoExiste": "We couldn't find that invitation code. Check it or ask Administration for a new one.",
     "invitacionRevocada": "That invitation was cancelled. Ask Administration for a new one.",
     "invitacionVencida": "That invitation expired. Ask Administration for a new one.",
-    "invitacionUsada": "That invitation was already used. If you started your registration and didn't finish it, log in with your email and password to confirm the code."
+    "invitacionUsada": "That invitation was already used. If you started your registration and didn't finish it, log in with your email and password to confirm the code.",
+    "invitacionEtiqueta": "Invitation code",
+    "invitacionPlaceholder": "8-character code",
+    "botonValidarInvitacion": "Continue",
+    "dniEtiqueta": "ID number",
+    "dniPlaceholder": "12345678A",
+    "dniBloqueadoAviso": "This ID number comes from your invitation and can't be changed here.",
+    "nombreEtiqueta": "First name",
+    "nombrePlaceholder": "Your first name",
+    "apellidosEtiqueta": "Last name",
+    "apellidosPlaceholder": "Your last name",
+    "fechaNacimientoEtiqueta": "Date of birth",
+    "telefonoEtiqueta": "Phone",
+    "botonContinuar": "Continue",
+    "avisoRevisaCorreo": "Check your email carefully: you won't be able to change it from the app afterwards.",
+    "sugerenciaCorreoPregunta": "Did you mean {{sugerido}}?",
+    "botonUsarSugerido": "Yes, use that one",
+    "botonCorreoEstaBien": "No, it's fine as is",
+    "botonCrearCuenta": "Confirm and create my account"
   },
   "codigo": {
     "codigoIncorrectoOVencido": "The code is incorrect or expired. Request a new one.",
@@ -67,7 +86,8 @@
     "salir": "Log out",
     "tituloDetalleJornada": "Shift details",
     "tituloNuevoCheckIn": "New route",
-    "tituloCambiarContrasena": "Change password"
+    "tituloCambiarContrasena": "Change password",
+    "tituloRegistro": "Create account"
   },
   "jornadasRecuperadas": {
     "titulo": "Shift recovered",
@@ -257,6 +277,11 @@
   "selectorBuscable": {
     "buscarPlaceholder": "Search...",
     "sinResultados": "No results found."
+  },
+  "campoTelefono": {
+    "paisPlaceholder": "Select your country",
+    "numeroEtiqueta": "Phone number",
+    "numeroPlaceholder": "Your number, without the country code"
   },
   "selectorDesplegable": {
     "sinOpciones": "No options available for this selection."

@@ -32,6 +32,7 @@
     "botonIngresar": "Ingresar",
     "olvideContrasena": "¿Olvidaste tu contraseña?",
     "cambiarContrasenaEnlace": "Cambiar mi contraseña",
+    "tengoInvitacion": "¿Tienes un código de invitación? Regístrate",
     "credencialesIncorrectas": "Correo o contraseña incorrectos.",
     "cuentaDadaDeBaja": "Tu cuenta está dada de baja. Contacta con Administración."
   },
@@ -47,7 +48,25 @@
     "invitacionNoExiste": "No encontramos ese código de invitación. Revísalo o pide uno nuevo a Administración.",
     "invitacionRevocada": "Esa invitación fue cancelada. Pide una nueva a Administración.",
     "invitacionVencida": "Esa invitación venció. Pide una nueva a Administración.",
-    "invitacionUsada": "Esa invitación ya se usó. Si empezaste tu registro y no lo terminaste, inicia sesión con tu correo y tu contraseña para confirmar el código."
+    "invitacionUsada": "Esa invitación ya se usó. Si empezaste tu registro y no lo terminaste, inicia sesión con tu correo y tu contraseña para confirmar el código.",
+    "invitacionEtiqueta": "Código de invitación",
+    "invitacionPlaceholder": "Código de 8 caracteres",
+    "botonValidarInvitacion": "Continuar",
+    "dniEtiqueta": "DNI",
+    "dniPlaceholder": "12345678A",
+    "dniBloqueadoAviso": "Este DNI viene de tu invitación y no se puede cambiar acá.",
+    "nombreEtiqueta": "Nombre",
+    "nombrePlaceholder": "Tu nombre",
+    "apellidosEtiqueta": "Apellidos",
+    "apellidosPlaceholder": "Tus apellidos",
+    "fechaNacimientoEtiqueta": "Fecha de nacimiento",
+    "telefonoEtiqueta": "Teléfono",
+    "botonContinuar": "Continuar",
+    "avisoRevisaCorreo": "Revisa bien tu correo: después no podrás cambiarlo desde la app.",
+    "sugerenciaCorreoPregunta": "¿Quisiste decir {{sugerido}}?",
+    "botonUsarSugerido": "Sí, usar ese",
+    "botonCorreoEstaBien": "No, está bien así",
+    "botonCrearCuenta": "Confirmar y crear mi cuenta"
   },
   "codigo": {
     "codigoIncorrectoOVencido": "El código es incorrecto o venció. Pide uno nuevo.",
@@ -67,7 +86,8 @@
     "salir": "Cerrar sesión",
     "tituloDetalleJornada": "Detalle de jornada",
     "tituloNuevoCheckIn": "Nueva ruta",
-    "tituloCambiarContrasena": "Cambiar contraseña"
+    "tituloCambiarContrasena": "Cambiar contraseña",
+    "tituloRegistro": "Crear cuenta"
   },
   "jornadasRecuperadas": {
     "titulo": "Jornada recuperada",
@@ -257,6 +277,11 @@
   "selectorBuscable": {
     "buscarPlaceholder": "Buscar...",
     "sinResultados": "No se encontraron resultados."
+  },
+  "campoTelefono": {
+    "paisPlaceholder": "Selecciona tu país",
+    "numeroEtiqueta": "Número de teléfono",
+    "numeroPlaceholder": "Tu número, sin el código de país"
   },
   "selectorDesplegable": {
     "sinOpciones": "No hay opciones cargadas para esta selección."

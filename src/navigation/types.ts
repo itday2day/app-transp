@@ -4,6 +4,13 @@ import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 
 export type RootStackParamList = {
   Login: undefined;
+  // spec_app_registro_paso5.md, paso 2c-3: reintroduce el registro propio (Hallazgo #51) -- NO es
+  // la vieja RegistroScreen.tsx (eliminada por spec_cambio_contrasena_login.md), es un camino
+  // nuevo por invitación. `token` opcional (32 hex, del deep link `apptransp://invitacion/:token`,
+  // 2c-3 último commit) -- si falta, la pantalla pide el código de 8 a mano. NUNCA un código de
+  // invitación de 8 caracteres en route.params persistentes -- ese lo tipea el chofer dentro de la
+  // pantalla misma, nunca viaja por navegación.
+  Registro: { token?: string } | undefined;
   // spec_cambio_contrasena_login.md: única ruta de cambio voluntario de contraseña, alcanzable
   // sin sesión desde Login — reemplaza al enlace "Crear cuenta nueva" (RegistroScreen.tsx,
   // eliminada) y al botón "Contraseña" que antes vivía en el header de PrincipalTabs (dos caminos

@@ -13,6 +13,7 @@ import { espaciado } from "@/theme/spacing";
 import { RootStackParamList, TabsParamList } from "./types";
 
 import LoginScreen from "@/screens/LoginScreen";
+import RegistroScreen from "@/screens/RegistroScreen";
 import CambiarContrasenaObligatorioScreen from "@/screens/CambiarContrasenaObligatorioScreen";
 import CambiarContrasenaScreen from "@/screens/CambiarContrasenaScreen";
 import CodigoVerificacionScreen from "@/screens/CodigoVerificacionScreen";
@@ -111,6 +112,13 @@ export function RootNavigator() {
         ) : (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
+            {/* spec_app_registro_paso5.md, paso 2c-3: sin sesión antes de este punto -- back por
+                defecto. */}
+            <Stack.Screen
+              name="Registro"
+              component={RegistroScreen}
+              options={{ headerShown: true, title: t("navegacion.tituloRegistro") }}
+            />
             {/* spec_cambio_contrasena_login.md: reemplaza a "Registro" (RegistroScreen.tsx,
                 eliminada) — el cambio voluntario de contraseña ahora se alcanza sin sesión desde
                 acá, en vez de solo después de haber iniciado sesión. */}

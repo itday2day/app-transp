@@ -154,6 +154,12 @@ export default function LoginScreen() {
                 onPress={() => navigation.navigate("CambiarContrasena")}
               />
             </View>
+            <View style={estilos.contenedorEnlace}>
+              <TextoEnlace
+                texto={t("login.tengoInvitacion")}
+                onPress={() => navigation.navigate("Registro", undefined)}
+              />
+            </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
