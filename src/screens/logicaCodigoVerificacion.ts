@@ -56,6 +56,32 @@ export function accionDeResultadoCodigo(resultado: ResultadoVerificarCodigo): Ac
   }
 }
 
+export type ResultadoConfirmarConSesion = { tipo: "confirmado" } | { tipo: "confirmadoSinSesion" };
+
+/**
+ * E1 (ronda post-2c-1): tras un verifyOtp(signup) exitoso, el código YA se consumió -- no hay
+ * vuelta atrás, pedir otro no tiene sentido. Si `establecerSesion()` (guardarValor()/SecureStore,
+ * ver AuthContext.tsx y el hallazgo de la observación 0.3) rechaza en ESTE punto puntual, NO se
+ * reintenta el código: se avisa con `codigo.confirmadoSinSesion` y el chofer entra a mano desde
+ * Login con el correo que ya confirmó.
+ *
+ * `establecerSesion` llega INYECTADO (no importa AuthContext.tsx acá) para poder probar las dos
+ * ramas con un fake que resuelve y uno que rechaza, sin React ni SecureStore reales -- mismo
+ * criterio que toda la familia restaurarSesion.ts/programarRecargaUsuario.ts. El error real NUNCA
+ * se captura en una variable ni se loguea (R7): el `catch {}` lo descarta por completo.
+ */
+export async function confirmarConSesion(
+  usuario: Usuario,
+  establecerSesion: (usuario: Usuario) => Promise<void>
+): Promise<ResultadoConfirmarConSesion> {
+  try {
+    await establecerSesion(usuario);
+    return { tipo: "confirmado" };
+  } catch {
+    return { tipo: "confirmadoSinSesion" };
+  }
+}
+
 export type AccionResultadoReenvio =
   | { tipo: "reenviado"; textoClave: ClaveTraduccion; segundosReinicio: number }
   | { tipo: "error"; textoClave: ClaveTraduccion }

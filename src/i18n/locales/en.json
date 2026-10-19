@@ -56,7 +56,8 @@
     "confirmar": "Confirm",
     "reenviar": "Resend code",
     "reenviarEn": "Resend in {{segundos}} s",
-    "reenviado": "We sent you a new code."
+    "reenviado": "We sent you a new code.",
+    "confirmadoSinSesion": "Your email is confirmed, but we couldn't open your session. Please log in with your email and password."
   },
   "navegacion": {
     "tabCheckIn": "Check-in",

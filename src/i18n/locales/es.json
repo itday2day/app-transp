@@ -56,7 +56,8 @@
     "confirmar": "Confirmar",
     "reenviar": "Reenviar código",
     "reenviarEn": "Reenviar en {{segundos}} s",
-    "reenviado": "Te enviamos un código nuevo."
+    "reenviado": "Te enviamos un código nuevo.",
+    "confirmadoSinSesion": "Tu correo quedó confirmado, pero no pudimos abrir la sesión. Inicia sesión con tu correo y tu contraseña."
   },
   "navegacion": {
     "tabCheckIn": "Check-in",

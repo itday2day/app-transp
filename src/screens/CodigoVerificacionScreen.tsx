@@ -14,6 +14,7 @@ import {
   codigoCompleto,
   accionDeResultadoCodigo,
   accionDeResultadoReenvio,
+  confirmarConSesion,
 } from "./logicaCodigoVerificacion";
 import { RootStackParamList } from "@/navigation/types";
 import { colores } from "@/theme/colors";
@@ -61,8 +62,14 @@ export default function CodigoVerificacionScreen() {
       const resultado = await verificarCodigo(correo, normalizarCodigo(codigo), "signup", supabase);
       const accion = accionDeResultadoCodigo(resultado);
       if (accion.tipo === "confirmado") {
-        // RootNavigator.tsx cambia de stack solo (usuario deja de ser null) -- no se navega a mano.
-        await establecerSesion(accion.usuario);
+        // El código YA se consumió (verifyOtp tuvo éxito) -- si establecerSesion() rechaza
+        // (E1: guardarValor()/SecureStore puede fallar), no hay código que reintentar: se avisa y
+        // el chofer entra a mano. RootNavigator.tsx cambia de stack solo si sí hay sesión -- no se
+        // navega a mano en ningún caso.
+        const resultadoSesion = await confirmarConSesion(accion.usuario, establecerSesion);
+        if (resultadoSesion.tipo === "confirmadoSinSesion") {
+          setError(t("codigo.confirmadoSinSesion"));
+        }
       } else if (accion.tipo === "esperar") {
         setError(t(accion.textoClave, { segundos: accion.segundos }));
         cuenta.reiniciar(accion.segundos);
