@@ -24,6 +24,10 @@ export default function RecuperarContrasenaScreen() {
   const [correo, setCorreo] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // criterio 12: resetPasswordForEmail responde IDÉNTICO para un correo registrado y uno
+  // inexistente -- la pantalla nunca puede saltar directo al código sin mostrar antes el mensaje
+  // neutral ("Si el correo está registrado..."), o el silencio mismo delataría cuál es cuál.
+  const [enviado, setEnviado] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   const puedeEnviar = correo.trim().length > 0;
@@ -36,11 +40,7 @@ export default function RecuperarContrasenaScreen() {
       const resultado = await pedirRecuperacion(correo.trim(), supabase);
       const accion = accionDeResultadoReenvio(resultado);
       if (accion.tipo === "reenviado") {
-        navigation.navigate("CodigoVerificacion", {
-          correo: correo.trim(),
-          tipo: "recovery",
-          origen: "recuperacion",
-        });
+        setEnviado(true);
       } else if (accion.tipo === "esperar") {
         setError(t(accion.textoClave, { segundos: accion.segundos }));
       } else {
@@ -51,6 +51,14 @@ export default function RecuperarContrasenaScreen() {
     }
   }
 
+  function manejarContinuar() {
+    navigation.navigate("CodigoVerificacion", {
+      correo: correo.trim(),
+      tipo: "recovery",
+      origen: "recuperacion",
+    });
+  }
+
   return (
     <ProveedorEnfoqueTeclado scrollRef={scrollRef}>
       <KeyboardAvoidingView style={estilos.pantalla} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -59,30 +67,43 @@ export default function RecuperarContrasenaScreen() {
           contentContainerStyle={estilos.contenido}
           keyboardShouldPersistTaps="handled"
         >
-          <Text style={estilos.instruccion}>{t("recuperarContrasena.instruccion")}</Text>
+          {enviado ? (
+            <>
+              <Text style={estilos.instruccion}>{t("recuperarContrasena.mensajeEnviado")}</Text>
+              <BotonPrimario
+                titulo={t("recuperarContrasena.botonContinuar")}
+                onPress={manejarContinuar}
+                estilo={estilos.boton}
+              />
+            </>
+          ) : (
+            <>
+              <Text style={estilos.instruccion}>{t("recuperarContrasena.instruccion")}</Text>
 
-          <CampoTexto
-            etiqueta={t("login.correoEtiqueta")}
-            placeholder={t("login.correoPlaceholder")}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            textContentType="username"
-            returnKeyType="go"
-            onSubmitEditing={manejarEnviar}
-            value={correo}
-            onChangeText={setCorreo}
-          />
+              <CampoTexto
+                etiqueta={t("login.correoEtiqueta")}
+                placeholder={t("login.correoPlaceholder")}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="username"
+                returnKeyType="go"
+                onSubmitEditing={manejarEnviar}
+                value={correo}
+                onChangeText={setCorreo}
+              />
 
-          {error ? <Text style={estilos.error}>{error}</Text> : null}
+              {error ? <Text style={estilos.error}>{error}</Text> : null}
 
-          <BotonPrimario
-            titulo={t("recuperarContrasena.boton")}
-            onPress={manejarEnviar}
-            cargando={enviando}
-            deshabilitado={!puedeEnviar}
-            estilo={estilos.boton}
-          />
+              <BotonPrimario
+                titulo={t("recuperarContrasena.boton")}
+                onPress={manejarEnviar}
+                cargando={enviando}
+                deshabilitado={!puedeEnviar}
+                estilo={estilos.boton}
+              />
+            </>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </ProveedorEnfoqueTeclado>

@@ -37,6 +37,10 @@ export function accionDeResultadoValidarInvitacion(
 
 export type AccionResultadoRegistro =
   | { tipo: "pantallaCodigo" }
+  // criterio 5: identities:[] -- ya existe una cuenta CONFIRMADA con ese correo. Tipo propio (no
+  // "error" genérico) porque la spec pide DOS botones acá ("Iniciar sesión" y "Recuperar
+  // contraseña"), no solo un texto -- la pantalla decide qué pintar según el tipo.
+  | { tipo: "correoYaRegistrado" }
   | { tipo: "error"; textoClave: ClaveTraduccion }
   | { tipo: "esperar"; segundos: number; textoClave: ClaveTraduccion };
 
@@ -47,7 +51,7 @@ export function accionDeResultadoRegistro(resultado: ResultadoRegistro): AccionR
     case "pantallaCodigo":
       return { tipo: "pantallaCodigo" };
     case "correoYaRegistrado":
-      return { tipo: "error", textoClave: "registro.correoYaRegistrado" };
+      return { tipo: "correoYaRegistrado" };
     case "esperar":
       return { tipo: "esperar", segundos: resultado.segundos, textoClave: "comun.esperarCodigo" };
     case "sinConexion":

@@ -44,6 +44,8 @@
     "edadMinima": "You must be at least 18 to register.",
     "telefonoInvalido": "The phone number must include the country code (for example, +34600000000).",
     "correoYaRegistrado": "You already have an account with this email. Log in or recover your password.",
+    "botonIniciarSesion": "Log in",
+    "botonRecuperarContrasena": "Recover password",
     "genericoConPista": "We couldn't create the account. Check that the ID number is the one Administration gave you and that you don't already have an account with another email. If the problem continues, contact Administration.",
     "invitacionNoExiste": "We couldn't find that invitation code. Check it or ask Administration for a new one.",
     "invitacionRevocada": "That invitation was cancelled. Ask Administration for a new one.",
@@ -76,8 +78,9 @@
     "confirmar": "Confirm",
     "reenviar": "Resend code",
     "reenviarEn": "Resend in {{segundos}} s",
-    "reenviado": "We sent you a new code.",
-    "confirmadoSinSesion": "Your email is confirmed, but we couldn't open your session. Please log in with your email and password."
+    "reenviado": "We sent you a new code. The previous one no longer works.",
+    "confirmadoSinSesion": "Your email is confirmed, but we couldn't open your session. Please log in with your email and password.",
+    "correoNoEsElTuyo": "Is this not your email? Let Administration know."
   },
   "navegacion": {
     "tabCheckIn": "Check-in",
@@ -320,7 +323,9 @@
   "recuperarContrasena": {
     "titulo": "Recover password",
     "instruccion": "Enter your email and we'll send you a code to choose a new password.",
-    "boton": "Send code"
+    "boton": "Send code",
+    "mensajeEnviado": "If the email is registered, we sent you a 6-digit code.",
+    "botonContinuar": "Continue"
   },
   "nuevaContrasena": {
     "titulo": "New password",

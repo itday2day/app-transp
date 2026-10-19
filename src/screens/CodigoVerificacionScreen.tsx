@@ -84,6 +84,23 @@ export default function CodigoVerificacionScreen() {
     }
   }
 
+  // criterio 8: en la pantalla de código llegada desde el login (correoSinConfirmar) se ofrecen
+  // DOS salidas -- "Enviar un código nuevo" (manejarReenviar, abajo) y "Olvidé mi contraseña".
+  // Esta reemplaza, no apila: el correo ya se conoce, no hace falta volver a pedirlo en
+  // RecuperarContrasenaScreen.
+  const [enviandoOlvide, setEnviandoOlvide] = useState(false);
+  async function manejarOlvideContrasena() {
+    if (enviandoOlvide) return;
+    setError(null);
+    setEnviandoOlvide(true);
+    try {
+      await pedirRecuperacion(correo, supabase);
+      navigation.replace("CodigoVerificacion", { correo, tipo: "recovery", origen: "login" });
+    } finally {
+      setEnviandoOlvide(false);
+    }
+  }
+
   async function manejarReenviar() {
     if (!cuenta.terminada || reenviando) return;
     setError(null);
@@ -154,6 +171,19 @@ export default function CodigoVerificacionScreen() {
             variante="secundario"
             estilo={estilos.botonReenviar}
           />
+
+          {tipo === "signup" && origen === "login" ? (
+            <>
+              <BotonPrimario
+                titulo={t("login.olvideContrasena")}
+                onPress={manejarOlvideContrasena}
+                cargando={enviandoOlvide}
+                variante="secundario"
+                estilo={estilos.botonReenviar}
+              />
+              <Text style={estilos.ayuda}>{t("codigo.correoNoEsElTuyo")}</Text>
+            </>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </ProveedorEnfoqueTeclado>
@@ -190,6 +220,12 @@ const estilos = StyleSheet.create({
   },
   mensaje: {
     ...tipografia.cuerpo,
+    color: colores.textoSecundario,
+    marginTop: espaciado.sm,
+    textAlign: "center",
+  },
+  ayuda: {
+    ...tipografia.ayuda,
     color: colores.textoSecundario,
     marginTop: espaciado.sm,
     textAlign: "center",

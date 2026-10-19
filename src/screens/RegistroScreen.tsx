@@ -57,6 +57,9 @@ export default function RegistroScreen() {
   const [sugerenciaCorreo, setSugerenciaCorreo] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
+  // criterio 5: ya existe una cuenta CONFIRMADA con ese correo -- reemplaza el botón normal de
+  // "confirmarCorreo" por las DOS salidas que pide la spec (Iniciar sesión / Recuperar contraseña).
+  const [correoYaRegistrado, setCorreoYaRegistrado] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   // Sin token: queda en fase "invitacion" esperando el código de 8 -- el efecto de abajo (precarga
@@ -161,6 +164,10 @@ export default function RegistroScreen() {
           tipo: "signup",
           origen: "registro",
         });
+      } else if (accion.tipo === "correoYaRegistrado") {
+        // criterio 5: ya existe una cuenta CONFIRMADA con ese correo -- NO se abre la pantalla de
+        // código, dos salidas en vez de un error simple.
+        setCorreoYaRegistrado(true);
       } else if (accion.tipo === "esperar") {
         setErrorEnvio(t(accion.textoClave, { segundos: accion.segundos }));
       } else {
@@ -236,6 +243,23 @@ export default function RegistroScreen() {
                 <BotonPrimario
                   titulo={t("registro.botonCorreoEstaBien")}
                   onPress={() => setSugerenciaCorreo(null)}
+                  variante="secundario"
+                  estilo={estilos.boton}
+                />
+              </>
+            ) : correoYaRegistrado ? (
+              // criterio 5: identities:[] -- ya existe una cuenta CONFIRMADA con este correo. Dos
+              // salidas, NUNCA la pantalla de código.
+              <>
+                <Text style={estilos.error}>{t("registro.correoYaRegistrado")}</Text>
+                <BotonPrimario
+                  titulo={t("registro.botonIniciarSesion")}
+                  onPress={() => navigation.navigate("Login")}
+                  estilo={estilos.boton}
+                />
+                <BotonPrimario
+                  titulo={t("registro.botonRecuperarContrasena")}
+                  onPress={() => navigation.navigate("RecuperarContrasena")}
                   variante="secundario"
                   estilo={estilos.boton}
                 />
