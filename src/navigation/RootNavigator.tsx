@@ -28,6 +28,25 @@ import NuevoCheckInScreen from "@/screens/NuevoCheckInScreen";
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabsParamList>();
 
+// spec_app_registro_paso5.md, paso 2c-3, último commit: deep link de invitación
+// (apptransp://invitacion/<token>) -- `prefixes` usa el `Linking` que reexporta
+// @react-navigation/native desde "react-native" directamente (confirmado en la Fase 1c: sin
+// expo-linking instalado, @react-navigation/native no lo necesita para esto). `Registro` solo
+// existe en la rama SIN usuario de este mismo archivo -- si el link llega con una sesión activa
+// (chofer ya logueado), React Navigation no encuentra esa ruta en el árbol montado y descarta el
+// link sin lanzar nada (comportamiento documentado de linking: una ruta de la config que no está
+// en el estado actual del navegador no rompe nada, solo no navega) -- mismo patrón estructural que
+// ya tienen CambiarContrasena/CodigoVerificacion, nunca antes causó un crash; queda para
+// confirmar en el dispositivo real (Fase 3) junto con el resto de A9.
+const linking = {
+  prefixes: ["apptransp://"],
+  config: {
+    screens: {
+      Registro: "invitacion/:token",
+    },
+  },
+};
+
 const ICONOS_TAB: Record<keyof TabsParamList, keyof typeof Ionicons.glyphMap> = {
   CheckIn: "log-in-outline",
   CheckOut: "log-out-outline",
@@ -87,7 +106,7 @@ export function RootNavigator() {
   if (cargando) return null;
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {usuario?.debeCambiarContrasena ? (
           // Única pantalla del stack mientras esto sea true — ni el resto de rutas autenticadas

@@ -3,6 +3,7 @@
     "name": "Control de Jornada",
     "slug": "control-de-jornada",
     "version": "1.0.0",
+    "scheme": "apptransp",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": ["**/*"],
