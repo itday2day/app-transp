@@ -263,7 +263,6 @@
     "mes": "Mes",
     "anio": "Año",
     "fechaSeleccionada": "Fecha seleccionada: {{fecha}}",
-    "errorEdadMinima": "Debes ser mayor de edad ({{edad}} años) para registrarte.",
     "meses": [
       "Enero",
       "Febrero",

@@ -263,7 +263,6 @@
     "mes": "Month",
     "anio": "Year",
     "fechaSeleccionada": "Selected date: {{fecha}}",
-    "errorEdadMinima": "You must be at least {{edad}} years old to register.",
     "meses": [
       "January",
       "February",

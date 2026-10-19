@@ -369,7 +369,13 @@ export default function RegistroScreen() {
           <SelectorFecha
             etiqueta={t("registro.fechaNacimientoEtiqueta")}
             valor={fechaNacimiento}
-            onCambiar={setFechaNacimiento}
+            onCambiar={(fecha) => {
+              setFechaNacimiento(fecha);
+              // Ajuste a 1: SelectorFecha ya no marca su propio aviso de edad -- para que el
+              // único mensaje que queda (registro.edadMinima) salga de inmediato al elegir la
+              // fecha, en vez de recién tras pulsar "Continuar", se marca "tocado" acá mismo.
+              marcarTocado("fechaNacimiento");
+            }}
           />
           {(tocado.fechaNacimiento || intentoEnvio) && erroresCampo.fechaNacimiento ? (
             <Text style={estilos.error}>{t(claveErrorCampo(erroresCampo.fechaNacimiento))}</Text>

@@ -18,15 +18,6 @@ function diasEnMes(mesIndice: number, anio: number): number {
   return new Date(anio, mesIndice + 1, 0).getDate();
 }
 
-function calcularEdad(anio: number, mesIndice: number, dia: number): number {
-  const hoy = new Date();
-  let edad = hoy.getFullYear() - anio;
-  const aunNoCumpleEsteAnio =
-    hoy.getMonth() < mesIndice || (hoy.getMonth() === mesIndice && hoy.getDate() < dia);
-  if (aunNoCumpleEsteAnio) edad -= 1;
-  return edad;
-}
-
 export function SelectorFecha({ etiqueta, valor, onCambiar, edadMinima = 18 }: Props) {
   const { t } = useTranslation();
   const MESES = t("selectorFecha.meses", { returnObjects: true }) as string[];
@@ -45,7 +36,6 @@ export function SelectorFecha({ etiqueta, valor, onCambiar, edadMinima = 18 }: P
   const [dia, setDia] = useState<string | null>(null);
   const [mes, setMes] = useState<string | null>(null);
   const [anio, setAnio] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const mesIndice = mes ? MESES.indexOf(mes) : null;
   const diasDisponibles = useMemo(() => {
@@ -54,8 +44,6 @@ export function SelectorFecha({ etiqueta, valor, onCambiar, edadMinima = 18 }: P
   }, [mesIndice, anio]);
 
   function manejarSeleccion(nuevoDia: string | null, nuevoMes: string | null, nuevoAnio: string | null) {
-    setError(null);
-
     if (!nuevoDia || !nuevoMes || !nuevoAnio) {
       setDia(nuevoDia);
       setMes(nuevoMes);
@@ -77,17 +65,12 @@ export function SelectorFecha({ etiqueta, valor, onCambiar, edadMinima = 18 }: P
     setMes(nuevoMes);
     setAnio(nuevoAnio);
 
-    // R2 (spec_app_registro_paso5.md, paso 2c-3): este aviso es SOLO un adelanto -- usa
-    // calcularEdad() con la hora LOCAL del dispositivo (no Europe/Madrid), a diferencia de
-    // validarDatosRegistro()/fechaHoyEnMadrid(), que es la única fuente de verdad real. Antes,
-    // un `return` acá bloqueaba onCambiar() por completo: la fecha elegida nunca llegaba al
-    // formulario, y validarDatosRegistro() ni se enteraba de que existía -- un chofer cerca del
-    // límite de 18 años, con el reloj del dispositivo corrido, podía quedar con la fecha
-    // atascada sin ningún error real que leer. onCambiar() se llama SIEMPRE, el aviso de acá
-    // nunca decide si se puede enviar el formulario.
-    const edad = calcularEdad(numeroAnio, indiceMes, numeroDia);
-    setError(edad < edadMinima ? t("selectorFecha.errorEdadMinima", { edad: edadMinima }) : null);
-
+    // Ajuste a 1 (spec_ajustes_pantalla_registro_limites_campos.md, 2026-10-20): este componente
+    // YA NO calcula ni muestra su propio aviso de edad -- antes duplicaba, con la hora LOCAL del
+    // dispositivo, el mismo chequeo que validarDatosRegistro() hace con la hora de Madrid (la
+    // única fuente de verdad real). Queda un solo mensaje, el de RegistroScreen.tsx
+    // (registro.edadMinima). onCambiar() se llama SIEMPRE, sin que ningún aviso de acá decida si
+    // se puede enviar el formulario.
     const fechaIso = `${numeroAnio}-${String(indiceMes + 1).padStart(2, "0")}-${String(numeroDia).padStart(2, "0")}`;
     onCambiar(fechaIso);
   }
@@ -138,8 +121,6 @@ export function SelectorFecha({ etiqueta, valor, onCambiar, edadMinima = 18 }: P
           })}
         </Text>
       ) : null}
-
-      {error ? <Text style={estilos.textoError}>{error}</Text> : null}
     </View>
   );
 }
@@ -169,11 +150,6 @@ const estilos = StyleSheet.create({
   textoConfirmacion: {
     ...tipografia.ayuda,
     color: colores.exito,
-    marginTop: -espaciado.xs,
-  },
-  textoError: {
-    ...tipografia.ayuda,
-    color: colores.peligro,
     marginTop: -espaciado.xs,
   },
 });
