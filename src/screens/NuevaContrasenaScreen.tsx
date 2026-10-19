@@ -40,10 +40,11 @@ type NuevaContrasenaRouteProp = RouteProp<RootStackParamList, "NuevaContrasena">
 //     está "prevented" -- confirma que el gesto de iOS también queda cubierto, no solo el botón de
 //     Android.
 //
-// El guard `completada` (ref, no state -- no hace falta re-renderizar por esto) es la salvedad que
-// pidió la ronda: si por cualquier motivo el componente siguiera montado un instante después de un
-// `terminarRecuperacion()` exitoso (ej. una doble pulsación en vuelo), `usePreventRemove(false, ...)`
-// deja de interceptar nada, en vez de cancelar una sesión que la propia pantalla ya estableció.
+// El guard `completada` es la salvedad que pidió la ronda: si por cualquier motivo el componente
+// siguiera montado un instante después de un `terminarRecuperacion()` exitoso (ej. una doble
+// pulsación en vuelo), `usePreventRemove(false, ...)` deja de interceptar nada, en vez de
+// cancelar una sesión que la propia pantalla ya estableció. Es `useState`, no `useRef` -- ver el
+// comentario junto a su declaración más abajo (react-hooks/refs).
 export default function NuevaContrasenaScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<RootStackNavigationProp>();
