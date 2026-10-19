@@ -4,6 +4,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { BotonPrimario } from "@/components/BotonPrimario";
+import { TextoEnlace } from "@/components/TextoEnlace";
 import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
 import { pedirRecuperacion } from "@/services/authCore";
 import { supabase } from "@/lib/supabase";
@@ -132,6 +133,12 @@ export default function RecuperarContrasenaScreen() {
                 cargando={enviando}
                 variante="secundario"
                 estilo={estilos.boton}
+              />
+              {/* Parte C (cierre de 2c): volver al campo sin decidir nada -- solo descarta la
+                  sugerencia en pantalla, no toca correoDecidido ni envía nada. */}
+              <TextoEnlace
+                texto={t("recuperarContrasena.editarCorreo")}
+                onPress={() => setSugerencia(null)}
               />
             </>
           ) : (

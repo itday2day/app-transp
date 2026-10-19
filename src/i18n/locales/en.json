@@ -329,7 +329,8 @@
     "mensajeEnviado": "If {{correo}} is registered, we've sent you a 6-digit code. If you don't get it, check that the email is spelled correctly and look in your spam folder.",
     "botonContinuar": "Continue",
     "botonUsarSugerencia": "Use {{sugerido}}",
-    "botonMantenerEscrito": "Keep what I typed"
+    "botonMantenerEscrito": "Keep what I typed",
+    "editarCorreo": "Edit email"
   },
   "nuevaContrasena": {
     "titulo": "New password",

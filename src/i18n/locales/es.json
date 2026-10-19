@@ -329,7 +329,8 @@
     "mensajeEnviado": "Si {{correo}} está registrado, te hemos enviado un código de 6 dígitos. Si no lo recibes, revisa que el correo esté bien escrito y la carpeta de spam.",
     "botonContinuar": "Continuar",
     "botonUsarSugerencia": "Usar {{sugerido}}",
-    "botonMantenerEscrito": "Mantener el que escribí"
+    "botonMantenerEscrito": "Mantener el que escribí",
+    "editarCorreo": "Editar correo"
   },
   "nuevaContrasena": {
     "titulo": "Nueva contraseña",
