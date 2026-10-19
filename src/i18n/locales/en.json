@@ -326,8 +326,10 @@
     "titulo": "Recover password",
     "instruccion": "Enter your email and we'll send you a code to choose a new password.",
     "boton": "Send code",
-    "mensajeEnviado": "If the email is registered, we sent you a 6-digit code.",
-    "botonContinuar": "Continue"
+    "mensajeEnviado": "If {{correo}} is registered, we've sent you a 6-digit code. If you don't get it, check that the email is spelled correctly and look in your spam folder.",
+    "botonContinuar": "Continue",
+    "botonUsarSugerencia": "Use {{sugerido}}",
+    "botonMantenerEscrito": "Keep what I typed"
   },
   "nuevaContrasena": {
     "titulo": "New password",

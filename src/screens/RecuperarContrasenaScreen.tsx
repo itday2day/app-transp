@@ -8,6 +8,7 @@ import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
 import { pedirRecuperacion } from "@/services/authCore";
 import { supabase } from "@/lib/supabase";
 import { accionDeResultadoReenvio } from "./logicaCodigoVerificacion";
+import { accionAlEnviarRecuperacion } from "./logicaRecuperarContrasena";
 import { RootStackNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
@@ -26,18 +27,22 @@ export default function RecuperarContrasenaScreen() {
   const [error, setError] = useState<string | null>(null);
   // criterio 12: resetPasswordForEmail responde IDÉNTICO para un correo registrado y uno
   // inexistente -- la pantalla nunca puede saltar directo al código sin mostrar antes el mensaje
-  // neutral ("Si el correo está registrado..."), o el silencio mismo delataría cuál es cuál.
+  // neutral ("Si {{correo}} está registrado..."), o el silencio mismo delataría cuál es cuál.
   const [enviado, setEnviado] = useState(false);
+  // Parte 2 (cierre de 2c): sugerencia de dominio pendiente de decidir, o null si no hay ninguna
+  // (o ya se decidió). `correoDecidido` guarda el correo (recortado) para el que YA se contestó
+  // la pregunta -- "solo se pregunta una vez por valor de correo" (accionAlEnviarRecuperacion()).
+  const [sugerencia, setSugerencia] = useState<string | null>(null);
+  const [correoDecidido, setCorreoDecidido] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
   const puedeEnviar = correo.trim().length > 0;
 
-  async function manejarEnviar() {
-    if (!puedeEnviar || enviando) return;
+  async function enviarRecuperacion(destino: string) {
     setError(null);
     setEnviando(true);
     try {
-      const resultado = await pedirRecuperacion(correo.trim(), supabase);
+      const resultado = await pedirRecuperacion(destino, supabase);
       const accion = accionDeResultadoReenvio(resultado);
       if (accion.tipo === "reenviado") {
         setEnviado(true);
@@ -49,6 +54,38 @@ export default function RecuperarContrasenaScreen() {
     } finally {
       setEnviando(false);
     }
+  }
+
+  function manejarEnviar() {
+    if (!puedeEnviar || enviando) return;
+    const accion = accionAlEnviarRecuperacion(correo, correoDecidido);
+    if (accion.tipo === "preguntarSugerencia") {
+      setSugerencia(accion.sugerencia);
+      return;
+    }
+    void enviarRecuperacion(correo.trim());
+  }
+
+  function manejarUsarSugerencia() {
+    if (!sugerencia) return;
+    const destino = sugerencia;
+    setCorreo(destino);
+    setCorreoDecidido(destino);
+    setSugerencia(null);
+    void enviarRecuperacion(destino);
+  }
+
+  function manejarMantenerEscrito() {
+    const destino = correo.trim();
+    setCorreoDecidido(destino);
+    setSugerencia(null);
+    void enviarRecuperacion(destino);
+  }
+
+  function manejarCambiarCorreo(texto: string) {
+    setCorreo(texto);
+    // El correo cambió -- una sugerencia pendiente ya no corresponde a lo que hay en el campo.
+    setSugerencia(null);
   }
 
   function manejarContinuar() {
@@ -69,10 +106,31 @@ export default function RecuperarContrasenaScreen() {
         >
           {enviado ? (
             <>
-              <Text style={estilos.instruccion}>{t("recuperarContrasena.mensajeEnviado")}</Text>
+              <Text style={estilos.instruccion}>
+                {t("recuperarContrasena.mensajeEnviado", { correo: correo.trim() })}
+              </Text>
               <BotonPrimario
                 titulo={t("recuperarContrasena.botonContinuar")}
                 onPress={manejarContinuar}
+                estilo={estilos.boton}
+              />
+            </>
+          ) : sugerencia ? (
+            <>
+              <Text style={estilos.instruccion}>
+                {t("registro.sugerenciaCorreoPregunta", { sugerido: sugerencia })}
+              </Text>
+              <BotonPrimario
+                titulo={t("recuperarContrasena.botonUsarSugerencia", { sugerido: sugerencia })}
+                onPress={manejarUsarSugerencia}
+                cargando={enviando}
+                estilo={estilos.boton}
+              />
+              <BotonPrimario
+                titulo={t("recuperarContrasena.botonMantenerEscrito")}
+                onPress={manejarMantenerEscrito}
+                cargando={enviando}
+                variante="secundario"
                 estilo={estilos.boton}
               />
             </>
@@ -90,7 +148,7 @@ export default function RecuperarContrasenaScreen() {
                 returnKeyType="go"
                 onSubmitEditing={manejarEnviar}
                 value={correo}
-                onChangeText={setCorreo}
+                onChangeText={manejarCambiarCorreo}
               />
 
               {error ? <Text style={estilos.error}>{error}</Text> : null}

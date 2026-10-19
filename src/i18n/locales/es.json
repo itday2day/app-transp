@@ -326,8 +326,10 @@
     "titulo": "Recuperar contraseña",
     "instruccion": "Escribe tu correo y te vamos a mandar un código para elegir una contraseña nueva.",
     "boton": "Enviar código",
-    "mensajeEnviado": "Si el correo está registrado, te enviamos un código de 6 dígitos.",
-    "botonContinuar": "Continuar"
+    "mensajeEnviado": "Si {{correo}} está registrado, te hemos enviado un código de 6 dígitos. Si no lo recibes, revisa que el correo esté bien escrito y la carpeta de spam.",
+    "botonContinuar": "Continuar",
+    "botonUsarSugerencia": "Usar {{sugerido}}",
+    "botonMantenerEscrito": "Mantener el que escribí"
   },
   "nuevaContrasena": {
     "titulo": "Nueva contraseña",
