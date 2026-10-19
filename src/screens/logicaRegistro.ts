@@ -16,6 +16,16 @@ const CLAVE_INVITACION_INVALIDA: Record<Exclude<EstadoInvitacion, "valida">, Cla
   usada: "registro.invitacionUsada",
 };
 
+// criterio 1: "Un token que no sean 32 hexadecimales se ignora (la pantalla pide el código a
+// mano)" -- el deep link (apptransp://invitacion/:token, RootNavigator.tsx) entrega CUALQUIER
+// string como param, sin validar formato; el filtro es esta función, llamada antes de pedir nada
+// al servidor.
+const TOKEN_VALIDO_REGEX = /^[0-9a-f]{32}$/i;
+
+export function tokenValido(token: string | undefined): string | undefined {
+  return token && TOKEN_VALIDO_REGEX.test(token) ? token : undefined;
+}
+
 export type AccionValidarInvitacion = { tipo: "valida" } | { tipo: "error"; textoClave: ClaveTraduccion };
 
 /** R3: un fallo de red/servidor (`motivo: "sinConexion"|"error"`) NUNCA se traduce como "la

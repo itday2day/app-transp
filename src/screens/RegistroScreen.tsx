@@ -17,6 +17,7 @@ import {
   accionDeResultadoValidarInvitacion,
   accionDeResultadoRegistro,
   claveErrorCampo,
+  tokenValido,
 } from "./logicaRegistro";
 import { RootStackParamList, RootStackNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
@@ -34,7 +35,7 @@ export default function RegistroScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<RootStackNavigationProp>();
   const { params } = useRoute<RegistroRouteProp>();
-  const tokenInicial = params?.token;
+  const tokenInicial = tokenValido(params?.token);
 
   const [fase, setFase] = useState<"invitacion" | "formulario" | "confirmarCorreo">(
     tokenInicial ? "invitacion" : "invitacion"
