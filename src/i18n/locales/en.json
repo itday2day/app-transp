@@ -23,7 +23,7 @@
   },
   "login": {
     "titulo": "Shift Control",
-    "subtitulo": "Sign in with your employee number",
+    "subtitulo": "Sign in with your email",
     "correoEtiqueta": "Email",
     "correoPlaceholder": "you@example.com",
     "contrasenaEtiqueta": "Password",

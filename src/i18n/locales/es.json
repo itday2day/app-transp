@@ -23,7 +23,7 @@
   },
   "login": {
     "titulo": "Control de Jornada",
-    "subtitulo": "Inicia sesión con tu número de empleado",
+    "subtitulo": "Inicia sesión con tu correo electrónico",
     "correoEtiqueta": "Correo electrónico",
     "correoPlaceholder": "tucorreo@ejemplo.com",
     "contrasenaEtiqueta": "Contraseña",

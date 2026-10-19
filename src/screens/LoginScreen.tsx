@@ -110,7 +110,10 @@ export default function LoginScreen() {
               // identificador de acceso que no es SIEMPRE un correo real.
               textContentType="username"
               returnKeyType="next"
-              blurOnSubmit={false}
+              // submitBehavior="submit" (no blurOnSubmit={false}, @deprecated en TextInput.d.ts
+              // de la versión instalada): manda el submit sin blurear el campo, dejando el foco
+              // pasar a contraseña sin que el teclado parpadee cerrándose y reabriéndose.
+              submitBehavior="submit"
               onSubmitEditing={() => contrasenaRef.current?.focus()}
               value={identificador}
               onChangeText={setIdentificador}
