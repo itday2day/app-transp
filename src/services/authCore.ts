@@ -305,14 +305,17 @@ export async function validarInvitacion(
   return { ok: true, fila: data[0] as FilaValidarInvitacion };
 }
 
-/** Shape literal de obtener_datos_invitacion (schema.sql:573-610). */
+/** Shape literal de obtener_datos_invitacion (schema.sql:573-610) -- criterio 2: "cada campo
+ * devuelto es string | null". Las 6 columnas de invitaciones (schema.sql:490-495) son NULLABLE a
+ * propósito: una invitación "abierta" (compartida por enlace, no solo por código) las deja en
+ * NULL y el chofer completa todo él mismo -- no es solo el camino del código de 8. */
 export interface DatosInvitacion {
-  dni: string;
-  nombre: string;
-  apellidos: string;
-  telefono: string;
-  email: string;
-  fecha_nacimiento: string;
+  dni: string | null;
+  nombre: string | null;
+  apellidos: string | null;
+  telefono: string | null;
+  email: string | null;
+  fecha_nacimiento: string | null;
 }
 
 /** RPC `obtener_datos_invitacion` -- SOLO acepta el token de 32 hex (no el código de 8), sin

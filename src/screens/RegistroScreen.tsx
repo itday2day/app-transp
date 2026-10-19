@@ -69,13 +69,17 @@ export default function RegistroScreen() {
     if (!tokenInicial) return;
     obtenerDatosInvitacion(tokenInicial, supabase).then((datos) => {
       if (!datos) return;
-      setDni(datos.dni);
-      setNombre(datos.nombre);
-      setApellidos(datos.apellidos);
-      setTelefono(datos.telefono);
+      // criterio 2: cada campo es string | null -- una invitación "abierta" compartida por enlace
+      // puede no traer ninguno de estos datos (schema.sql:490-495), igual que por código de 8.
+      setDni(datos.dni ?? "");
+      setNombre(datos.nombre ?? "");
+      setApellidos(datos.apellidos ?? "");
+      setTelefono(datos.telefono ?? "");
       setFechaNacimiento(datos.fecha_nacimiento);
-      setCorreo(datos.email);
-      setDniBloqueado(true);
+      setCorreo(datos.email ?? "");
+      // El DNI solo se bloquea si la invitación realmente lo trae atado -- una invitación abierta
+      // sin DNI no puede bloquear un campo que el chofer todavía tiene que completar.
+      setDniBloqueado(datos.dni !== null);
     });
     validarInvitacion(tokenInicial, supabase)
       .then((resultado) => {
