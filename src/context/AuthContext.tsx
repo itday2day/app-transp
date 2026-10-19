@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { Usuario } from "@/types";
 import { cerrarSesion as cerrarSesionApi } from "@/services/authService";
 import { iniciarSesionCore, type ResultadoLogin } from "@/services/authCore";
-import { restaurarSesion } from "./restaurarSesion";
+import { restaurarSesion, resultadoGetSessionTrasRechazo } from "./restaurarSesion";
 import { manejarEventoAuth } from "./manejarEventoAuth";
 import { programarRecargaUsuario } from "./programarRecargaUsuario";
 
@@ -110,7 +110,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // falta) la sesión persistida en SecureStore antes de dar por lista la
       // carga — si no, las primeras consultas RLS del árbol de pantallas
       // podrían dispararse todavía sin sesión activa.
-      supabase.auth.getSession(),
+      //
+      // E4: .catch() propio -- si getSession() alguna vez RECHAZA (nunca medido así, ver
+      // restaurarSesion.ts), este Promise.all() no debe propagar ese rechazo sin atrapar: sin
+      // esto, el .then() de abajo (donde se llama a restaurarSesion()) nunca correría, y el
+      // Usuario guardado quedaría sin aplicar para siempre (hallazgo de la observación 0.2).
+      // resultadoGetSessionTrasRechazo() lo convierte en el MISMO shape que un
+      // AuthRetryableFetchError real -- restaurarSesion() ya sabe decidir con eso.
+      supabase.auth.getSession().catch(() => resultadoGetSessionTrasRechazo()),
     ])
       .then(async ([guardado, resultadoGetSession]) => {
         // restaurarSesion() es la función pura de restaurarSesion.ts (paso 2b, punto 4b) --

@@ -76,6 +76,33 @@ export type ResultadoRestaurarSesion =
   | { resultado: "caducada" }
   | { resultado: "indeterminada"; usuario: Usuario };
 
+/**
+ * E4 (ronda post-2c-1): `supabase.auth.getSession()` nunca RECHAZÓ en las 6 corridas medidas (ver
+ * la tabla de arriba) -- siempre resolvió con `{data, error}`, incluso ante un corte de red real.
+ * Pero `restaurarSesion()` no puede asumir que eso sea una garantía del lenguaje/librería para
+ * siempre -- si alguna vez rechazara (un bug de auth-js, una promesa envenenada por código de
+ * terceros, etc.), el único punto que la llama (`Promise.all(...).then(...)`, AuthContext.tsx) NO
+ * tiene ningún `.catch()` hoy: el rechazo se propaga, `restaurarSesion()` ni se LLEGA a invocar, y
+ * el Usuario guardado nunca se aplica -- login indefinido sin error visible (el mismo hallazgo que
+ * ya documentó la observación 0.2 de la ronda anterior).
+ *
+ * Esta función da el valor que hay que pasarle a `restaurarSesion()` cuando ese rechazo SÍ se
+ * atrapa (AuthContext.tsx hace `supabase.auth.getSession().catch(() => resultadoGetSessionTrasRechazo())`
+ * antes del `Promise.all`) -- un rechazo de red/infraestructura real (`fetch` que lanza) ya se ve,
+ * medido, como `AuthRetryableFetchError` con `error.name` (nunca con `status` a secas) -- tratar un
+ * rechazo de la PROMESA como el mismo tipo de error, en vez de inventar un cuarto resultado, es
+ * coherente con esa tabla: los dos casos significan lo mismo ("no se pudo confirmar nada, puede ser
+ * de red") y `restaurarSesion()` YA sabe qué hacer con `AuthRetryableFetchError` -- con guardado
+ * válido, "indeterminada" (se conserva el Usuario); sin guardado, "caducada" (nunca hubo nada que
+ * conservar). No se declara un nuevo campo de unión ni se duplica el árbol de decisión.
+ *
+ * NUNCA recibe el error real de la promesa rechazada (ni como parámetro ni por closure) -- no hay
+ * nada que loguear (R7) porque no hay nada que capturar más allá de "rechazó".
+ */
+export function resultadoGetSessionTrasRechazo(): ResultadoGetSession {
+  return { data: { session: null }, error: { name: "AuthRetryableFetchError" } };
+}
+
 /** Lee el JSON guardado bajo `app_transp_usuario` sin asumir que tiene la forma actual de
  * `Usuario` -- un guardado VIEJO (de antes del paso 2b punto 1) tenía `numeroEmpleado` y no tenía
  * `empresaDefecto`/`rutaDefecto`. Lo que falte queda en `null`; `numeroEmpleado`, si estaba, se
