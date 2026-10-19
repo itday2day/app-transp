@@ -21,26 +21,25 @@ export function codigoCompleto(texto: string): boolean {
 
 export type AccionResultadoCodigo =
   | { tipo: "confirmado"; usuario: Usuario }
+  // 2c-2: verifyOtp(recovery) exitoso -- SIN Usuario (authCore.ts, verificarCodigo(): la sesión de
+  // recovery queda abierta, pero el chofer todavía no eligió contraseña nueva). La pantalla
+  // reemplaza (navigation.replace) a NuevaContrasenaScreen -- el código YA se consumió, volver a
+  // esta pantalla no tendría sentido.
+  | { tipo: "confirmadoRecovery" }
   | { tipo: "error"; textoClave: ClaveTraduccion }
   | { tipo: "esperar"; segundos: number; textoClave: ClaveTraduccion };
 
-/** 2c-1 solo llama a verificarCodigo() con tipo:'signup' -- la clave "ok" (éxito de tipo
- * 'recovery', sin Usuario) nunca debería llegar por este camino en esta ronda; se mapea a
- * "generico" en vez de a un `never` (a diferencia de accionDeResultadoLogin.ts) porque el propio
- * tipo `ResultadoVerificarCodigo` es compartido con 'recovery' y SÍ es real para 2c-2 -- esta
- * función no puede exigir que nunca ocurra, solo que hoy (2c-1) no la ejerce ninguna pantalla.
- *
- * Las claves de texto reusan lo que YA existe (todo sin usar hasta esta ronda, confirmado por
- * grep antes de escribir esto): codigo.codigoIncorrectoOVencido, comun.sinConexion,
- * comun.errorGenerico, comun.esperarCodigo (con {{segundos}} ya incluido en su texto) -- ninguna
- * clave nueva de error, solo las de interfaz (codigo.titulo/instruccion/etiquetaCodigo/
- * confirmar/reenviar/reenviarEn/reenviado) son nuevas. */
+/** Las claves de texto reusan lo que YA existe (confirmado por grep antes de escribir esto):
+ * codigo.codigoIncorrectoOVencido, comun.sinConexion, comun.errorGenerico, comun.esperarCodigo
+ * (con {{segundos}} ya incluido en su texto) -- ninguna clave nueva de error, solo las de
+ * interfaz (codigo.titulo/instruccion/etiquetaCodigo/confirmar/reenviar/reenviarEn/reenviado) son
+ * nuevas. */
 export function accionDeResultadoCodigo(resultado: ResultadoVerificarCodigo): AccionResultadoCodigo {
   switch (resultado.clave) {
     case "confirmado":
       return { tipo: "confirmado", usuario: resultado.usuario };
     case "ok":
-      return { tipo: "error", textoClave: "comun.errorGenerico" };
+      return { tipo: "confirmadoRecovery" };
     case "codigoIncorrectoOVencido":
       return { tipo: "error", textoClave: "codigo.codigoIncorrectoOVencido" };
     case "esperar":

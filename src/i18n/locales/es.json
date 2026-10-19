@@ -30,7 +30,8 @@
     "contrasenaPlaceholder": "Tu contraseña",
     "errorConexion": "No pudimos conectar con el servidor. Verifica tu conexión e intenta de nuevo.",
     "botonIngresar": "Ingresar",
-    "ayudaContrasena": "¿Olvidaste o querés cambiar tu contraseña?",
+    "olvideContrasena": "¿Olvidaste tu contraseña?",
+    "cambiarContrasenaEnlace": "Cambiar mi contraseña",
     "credencialesIncorrectas": "Correo o contraseña incorrectos.",
     "cuentaDadaDeBaja": "Tu cuenta está dada de baja. Contacta con Administración."
   },
@@ -290,5 +291,16 @@
     "exitoTitulo": "Contraseña actualizada",
     "exitoMensaje": "La próxima vez que inicies sesión, usá la contraseña nueva.",
     "botonVolver": "Volver"
+  },
+  "recuperarContrasena": {
+    "titulo": "Recuperar contraseña",
+    "instruccion": "Escribe tu correo y te vamos a mandar un código para elegir una contraseña nueva.",
+    "boton": "Enviar código"
+  },
+  "nuevaContrasena": {
+    "titulo": "Nueva contraseña",
+    "instruccion": "Elige una contraseña nueva para {{correo}}.",
+    "boton": "Guardar",
+    "confirmadaSinSesion": "Tu contraseña se actualizó, pero no pudimos abrir la sesión. Inicia sesión con tu correo y tu contraseña nueva."
   }
 }

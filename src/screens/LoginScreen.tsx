@@ -144,7 +144,13 @@ export default function LoginScreen() {
 
             <View style={estilos.contenedorEnlace}>
               <TextoEnlace
-                texto={t("login.ayudaContrasena")}
+                texto={t("login.olvideContrasena")}
+                onPress={() => navigation.navigate("RecuperarContrasena")}
+              />
+            </View>
+            <View style={estilos.contenedorEnlace}>
+              <TextoEnlace
+                texto={t("login.cambiarContrasenaEnlace")}
                 onPress={() => navigation.navigate("CambiarContrasena")}
               />
             </View>

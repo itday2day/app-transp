@@ -30,7 +30,8 @@
     "contrasenaPlaceholder": "Your password",
     "errorConexion": "We couldn't connect to the server. Check your connection and try again.",
     "botonIngresar": "Log in",
-    "ayudaContrasena": "Forgot or want to change your password?",
+    "olvideContrasena": "Forgot your password?",
+    "cambiarContrasenaEnlace": "Change my password",
     "credencialesIncorrectas": "Incorrect email or password.",
     "cuentaDadaDeBaja": "Your account has been deactivated. Contact Administration."
   },
@@ -290,5 +291,16 @@
     "exitoTitulo": "Password updated",
     "exitoMensaje": "Next time you sign in, use the new password.",
     "botonVolver": "Back"
+  },
+  "recuperarContrasena": {
+    "titulo": "Recover password",
+    "instruccion": "Enter your email and we'll send you a code to choose a new password.",
+    "boton": "Send code"
+  },
+  "nuevaContrasena": {
+    "titulo": "New password",
+    "instruccion": "Choose a new password for {{correo}}.",
+    "boton": "Save",
+    "confirmadaSinSesion": "Your password was updated, but we couldn't open your session. Please log in with your email and your new password."
   }
 }

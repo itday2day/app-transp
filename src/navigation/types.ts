@@ -22,6 +22,15 @@ export type RootStackParamList = {
     tipo: "signup" | "recovery";
     origen: "registro" | "login" | "recuperacion";
   };
+  // spec_app_registro_paso5.md, paso 2c-2: pide el correo (resetPasswordForEmail/pedirRecuperacion)
+  // y navega a CodigoVerificacion({correo, tipo:"recovery", origen:"login"}) -- sin params.
+  RecuperarContrasena: undefined;
+  // paso 2c-2: `correo` es solo para mostrarlo en pantalla ("nueva contraseña para {{correo}}") --
+  // terminarRecuperacion() opera sobre la sesión YA activa (verifyOtp(recovery) la deja abierta),
+  // no necesita el correo para nada funcional. R1: esta pantalla SÍ tiene una sesión de Supabase
+  // viva sin Usuario establecido -- usePreventRemove() cancela esa sesión si el chofer vuelve
+  // atrás por gesto/hardware antes de terminar (ver NuevaContrasenaScreen.tsx).
+  NuevaContrasena: { correo: string };
   // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): NuevoCheckInScreen navega acá con
   // `{ screen: "CheckOut" }` tras un check-in exitoso, para dejar al chofer en esa pestaña en vez
   // de volver a Check-in (patrón oficial de React Navigation para enfocar una pestaña puntual de

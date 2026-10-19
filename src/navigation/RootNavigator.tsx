@@ -16,6 +16,8 @@ import LoginScreen from "@/screens/LoginScreen";
 import CambiarContrasenaObligatorioScreen from "@/screens/CambiarContrasenaObligatorioScreen";
 import CambiarContrasenaScreen from "@/screens/CambiarContrasenaScreen";
 import CodigoVerificacionScreen from "@/screens/CodigoVerificacionScreen";
+import RecuperarContrasenaScreen from "@/screens/RecuperarContrasenaScreen";
+import NuevaContrasenaScreen from "@/screens/NuevaContrasenaScreen";
 import CheckInScreen from "@/screens/CheckInScreen";
 import CheckOutScreen from "@/screens/CheckOutScreen";
 import HistorialScreen from "@/screens/HistorialScreen";
@@ -126,6 +128,21 @@ export function RootNavigator() {
               name="CodigoVerificacion"
               component={CodigoVerificacionScreen}
               options={{ headerShown: true, title: t("codigo.titulo") }}
+            />
+            {/* paso 2c-2: sin sesión antes de este punto -- comportamiento de back por defecto. */}
+            <Stack.Screen
+              name="RecuperarContrasena"
+              component={RecuperarContrasenaScreen}
+              options={{ headerShown: true, title: t("recuperarContrasena.titulo") }}
+            />
+            {/* paso 2c-2 (R1): NO headerShown:false -- el botón de atrás del header sigue
+                disponible, y usePreventRemove() (NuevaContrasenaScreen.tsx) intercepta tanto esa
+                flecha como el gesto/físico, cancelando la sesión de recuperación pendiente antes
+                de dejar pasar la navegación. */}
+            <Stack.Screen
+              name="NuevaContrasena"
+              component={NuevaContrasenaScreen}
+              options={{ headerShown: true, title: t("nuevaContrasena.titulo") }}
             />
           </>
         )}

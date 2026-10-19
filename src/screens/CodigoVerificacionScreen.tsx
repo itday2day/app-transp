@@ -1,13 +1,13 @@
 import React, { useRef, useState } from "react";
 import { Text, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from "react-native";
-import { useRoute, type RouteProp } from "@react-navigation/native";
+import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
 import { useAuth } from "@/context/AuthContext";
 import { useCuentaRegresiva } from "@/hooks/useCuentaRegresiva";
-import { verificarCodigo, reenviarCodigo } from "@/services/authCore";
+import { verificarCodigo, reenviarCodigo, pedirRecuperacion } from "@/services/authCore";
 import { supabase } from "@/lib/supabase";
 import {
   normalizarCodigo,
@@ -16,30 +16,28 @@ import {
   accionDeResultadoReenvio,
   confirmarConSesion,
 } from "./logicaCodigoVerificacion";
-import { RootStackParamList } from "@/navigation/types";
+import { RootStackParamList, RootStackNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
 
 type CodigoVerificacionRouteProp = RouteProp<RootStackParamList, "CodigoVerificacion">;
 
-// spec_app_registro_paso5.md, paso 2c-1: esta ronda SOLO implementa `tipo: "signup"` -- el
-// comportamiento de `tipo: "recovery"` (verifyOtp sin construir Usuario, ver verificarCodigo() en
-// authCore.ts) lo completa 2c-2, cuando exista NuevaContrasenaScreen para recibirlo. No hay ningún
-// camino en este archivo que lea `route.params.tipo` todavía -- se agrega en 2c-2, no acá, para no
-// dejar una rama "recovery" a medio escribir.
+// spec_app_registro_paso5.md: implementa los dos tipos.
 //
-// Back por gesto/hardware: comportamiento por defecto del stack (sin lógica propia). Es seguro
-// porque, en el camino "signup", NO hay ninguna sesión de Supabase pendiente que cancelar al
-// volver atrás -- el signUp (authCore.ts, registrarChofer()) no deja sesión abierta hasta que
+// Back por gesto/hardware: comportamiento por defecto del stack, sin lógica propia -- en NINGUNO
+// de los dos tipos hay, en ESTA pantalla, una sesión de Supabase abierta que cancelar al volver
+// atrás. "signup": el signUp (authCore.ts, registrarChofer()) no deja sesión abierta hasta que
 // verifyOtp() tiene éxito (confirmado leyendo verificarCodigo(): `data.user` solo existe tras un
-// verifyOtp exitoso, nunca antes) -- a diferencia del camino "recovery" (2c-2), donde
-// verifyOtp() SÍ deja una sesión abierta como efecto colateral y por eso ESE camino necesita
-// cancelarRecuperacionPendiente() en el back (ver R1, pendiente de evidencia aparte).
+// verifyOtp exitoso, nunca antes). "recovery": verifyOtp() SÍ deja una sesión abierta como efecto
+// colateral, pero recién DESPUÉS de un código correcto -- en ese instante esta pantalla ya
+// reemplaza (navigation.replace) a NuevaContrasenaScreen, que es la que de verdad necesita la
+// protección (ver R1 ahí). Volver atrás ANTES de acertar el código nunca deja nada abierto.
 export default function CodigoVerificacionScreen() {
   const { t } = useTranslation();
+  const navigation = useNavigation<RootStackNavigationProp>();
   const { params } = useRoute<CodigoVerificacionRouteProp>();
-  const { correo, origen } = params;
+  const { correo, tipo, origen } = params;
   const { establecerSesion } = useAuth();
 
   const [codigo, setCodigo] = useState("");
@@ -49,17 +47,18 @@ export default function CodigoVerificacionScreen() {
   const [mensaje, setMensaje] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
-  // origen "registro": el signUp que acaba de pasar YA cuenta como un envío (criterio 6) -> 60s.
-  // origen "login" (correoSinConfirmar): NO se envía nada automático al entrar (criterio 8) -> 0s,
-  // el botón de reenviar queda disponible de entrada.
-  const cuenta = useCuentaRegresiva(origen === "registro" ? 60 : 0);
+  // origen "registro" (signUp) y "recuperacion" (pedirRecuperacion, RecuperarContrasenaScreen) YA
+  // mandaron un correo real para llegar a esta pantalla (criterio 6) -> arrancan en 60s. origen
+  // "login" (correoSinConfirmar): NO se envía nada automático al entrar (criterio 8) -> 0s, el
+  // botón de reenviar queda disponible de entrada.
+  const cuenta = useCuentaRegresiva(origen === "login" ? 0 : 60);
 
   async function manejarConfirmar() {
     if (!codigoCompleto(codigo) || enviando) return;
     setError(null);
     setEnviando(true);
     try {
-      const resultado = await verificarCodigo(correo, normalizarCodigo(codigo), "signup", supabase);
+      const resultado = await verificarCodigo(correo, normalizarCodigo(codigo), tipo, supabase);
       const accion = accionDeResultadoCodigo(resultado);
       if (accion.tipo === "confirmado") {
         // El código YA se consumió (verifyOtp tuvo éxito) -- si establecerSesion() rechaza
@@ -70,6 +69,10 @@ export default function CodigoVerificacionScreen() {
         if (resultadoSesion.tipo === "confirmadoSinSesion") {
           setError(t("codigo.confirmadoSinSesion"));
         }
+      } else if (accion.tipo === "confirmadoRecovery") {
+        // El código YA se consumió -- reemplaza, no apila, así que volver atrás desde
+        // NuevaContrasenaScreen no regresa a un código ya gastado.
+        navigation.replace("NuevaContrasena", { correo });
       } else if (accion.tipo === "esperar") {
         setError(t(accion.textoClave, { segundos: accion.segundos }));
         cuenta.reiniciar(accion.segundos);
@@ -87,7 +90,12 @@ export default function CodigoVerificacionScreen() {
     setMensaje(null);
     setReenviando(true);
     try {
-      const resultado = await reenviarCodigo(correo, supabase);
+      // Mismo ResultadoEnvioCodigo para los dos -- reenviarCodigo() (resend signup) y
+      // pedirRecuperacion() (resetPasswordForEmail) comparten accionDeResultadoReenvio().
+      const resultado =
+        tipo === "signup"
+          ? await reenviarCodigo(correo, supabase)
+          : await pedirRecuperacion(correo, supabase);
       const accion = accionDeResultadoReenvio(resultado);
       if (accion.tipo === "reenviado") {
         setMensaje(t(accion.textoClave));
