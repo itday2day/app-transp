@@ -174,6 +174,13 @@ export default function RegistroScreen() {
     setFase("confirmarCorreo");
   }
 
+  // Criterio 4: único camino de vuelta al formulario desde "confirmarCorreo" -- limpia el error
+  // del intento anterior para que no se vea junto a datos nuevos.
+  function manejarCorregirDatos() {
+    setErrorEnvio(null);
+    setFase("formulario");
+  }
+
   async function manejarRegistrar() {
     if (enviando) return;
     setErrorEnvio(null);
@@ -318,7 +325,7 @@ export default function RegistroScreen() {
                 />
                 {/* Menor (ronda de revisión): esto no cancela nada, vuelve al formulario con los
                     datos intactos para corregirlos -- "Cancelar" prometía descartar. */}
-                <TextoEnlace texto={t("registro.corregirMisDatos")} onPress={() => setFase("formulario")} />
+                <TextoEnlace texto={t("registro.corregirMisDatos")} onPress={manejarCorregirDatos} />
               </>
             )}
           </ScrollView>
