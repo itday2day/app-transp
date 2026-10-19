@@ -50,7 +50,14 @@
     "invitacionUsada": "That invitation was already used. If you started your registration and didn't finish it, log in with your email and password to confirm the code."
   },
   "codigo": {
-    "codigoIncorrectoOVencido": "The code is incorrect or expired. Request a new one."
+    "codigoIncorrectoOVencido": "The code is incorrect or expired. Request a new one.",
+    "titulo": "Check your email",
+    "instruccion": "We sent a 6-digit code to {{correo}}. Enter it here to continue.",
+    "etiquetaCodigo": "6-digit code",
+    "confirmar": "Confirm",
+    "reenviar": "Resend code",
+    "reenviarEn": "Resend in {{segundos}} s",
+    "reenviado": "We sent you a new code."
   },
   "navegacion": {
     "tabCheckIn": "Check-in",

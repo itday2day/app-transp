@@ -15,6 +15,7 @@ import { RootStackParamList, TabsParamList } from "./types";
 import LoginScreen from "@/screens/LoginScreen";
 import CambiarContrasenaObligatorioScreen from "@/screens/CambiarContrasenaObligatorioScreen";
 import CambiarContrasenaScreen from "@/screens/CambiarContrasenaScreen";
+import CodigoVerificacionScreen from "@/screens/CodigoVerificacionScreen";
 import CheckInScreen from "@/screens/CheckInScreen";
 import CheckOutScreen from "@/screens/CheckOutScreen";
 import HistorialScreen from "@/screens/HistorialScreen";
@@ -115,6 +116,16 @@ export function RootNavigator() {
               name="CambiarContrasena"
               component={CambiarContrasenaScreen}
               options={{ headerShown: true, title: t("navegacion.tituloCambiarContrasena") }}
+            />
+            {/* spec_app_registro_paso5.md, paso 2c-1: headerShown:true (no false, como Login) a
+                propósito -- el botón/gesto de volver atrás del sistema es el comportamiento que se
+                quiere acá (sin ninguna sesión de Supabase pendiente que cancelar en el camino
+                "signup", ver CodigoVerificacionScreen.tsx), así que no hace falta headerShown:false
+                ni ningún manejo propio de back. */}
+            <Stack.Screen
+              name="CodigoVerificacion"
+              component={CodigoVerificacionScreen}
+              options={{ headerShown: true, title: t("codigo.titulo") }}
             />
           </>
         )}

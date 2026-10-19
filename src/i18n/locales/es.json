@@ -50,7 +50,14 @@
     "invitacionUsada": "Esa invitación ya se usó. Si empezaste tu registro y no lo terminaste, inicia sesión con tu correo y tu contraseña para confirmar el código."
   },
   "codigo": {
-    "codigoIncorrectoOVencido": "El código es incorrecto o venció. Pide uno nuevo."
+    "codigoIncorrectoOVencido": "El código es incorrecto o venció. Pide uno nuevo.",
+    "titulo": "Revisa tu correo",
+    "instruccion": "Te enviamos un código de 6 dígitos a {{correo}}. Escríbelo aquí para continuar.",
+    "etiquetaCodigo": "Código de 6 dígitos",
+    "confirmar": "Confirmar",
+    "reenviar": "Reenviar código",
+    "reenviarEn": "Reenviar en {{segundos}} s",
+    "reenviado": "Te enviamos un código nuevo."
   },
   "navegacion": {
     "tabCheckIn": "Check-in",

@@ -10,6 +10,18 @@ export type RootStackParamList = {
   // para la misma acción era el patrón del Hallazgo #21).
   CambiarContrasena: undefined;
   CambiarContrasenaObligatorio: undefined;
+  // spec_app_registro_paso5.md, paso 2c-1: `correo` es el ÚNICO dato no sensible que necesita esta
+  // pantalla (se muestra en pantalla: "te enviamos un código a {{correo}}") -- NUNCA una
+  // contraseña ni un código acá (criterio 10, nada sensible en route.params persistentes).
+  // `tipo` decide qué llama verificarCodigo()/reenviarCodigo() ("recovery" lo completa 2c-2, esta
+  // ronda solo implementa "signup"). `origen` es solo para matizar el arranque de la cuenta
+  // regresiva (ver CodigoVerificacionScreen.tsx) y, en 2c-2, para el botón "Olvidé mi contraseña"
+  // que solo aplica si origen:"login" -- no cambia ninguna llamada a authCore.ts.
+  CodigoVerificacion: {
+    correo: string;
+    tipo: "signup" | "recovery";
+    origen: "registro" | "login" | "recuperacion";
+  };
   // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): NuevoCheckInScreen navega acá con
   // `{ screen: "CheckOut" }` tras un check-in exitoso, para dejar al chofer en esa pestaña en vez
   // de volver a Check-in (patrón oficial de React Navigation para enfocar una pestaña puntual de

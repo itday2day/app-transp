@@ -6,6 +6,7 @@
 
 import type { Usuario } from "@/types";
 import type { ResultadoVerificarCodigo, ResultadoEnvioCodigo } from "@/services/authCore";
+import type { ClaveTraduccion } from "@/i18n";
 
 /** Solo dígitos, máximo 6 -- tolera que el chofer pegue el código con espacios, guiones o letras
  * de por medio (ej. un copia/pega desde el correo con el texto "Tu código: 123 456"). */
@@ -20,28 +21,34 @@ export function codigoCompleto(texto: string): boolean {
 
 export type AccionResultadoCodigo =
   | { tipo: "confirmado"; usuario: Usuario }
-  | { tipo: "error"; textoClave: string }
-  | { tipo: "esperar"; segundos: number; textoClave: string };
+  | { tipo: "error"; textoClave: ClaveTraduccion }
+  | { tipo: "esperar"; segundos: number; textoClave: ClaveTraduccion };
 
 /** 2c-1 solo llama a verificarCodigo() con tipo:'signup' -- la clave "ok" (éxito de tipo
  * 'recovery', sin Usuario) nunca debería llegar por este camino en esta ronda; se mapea a
  * "generico" en vez de a un `never` (a diferencia de accionDeResultadoLogin.ts) porque el propio
  * tipo `ResultadoVerificarCodigo` es compartido con 'recovery' y SÍ es real para 2c-2 -- esta
- * función no puede exigir que nunca ocurra, solo que hoy (2c-1) no la ejerce ninguna pantalla. */
+ * función no puede exigir que nunca ocurra, solo que hoy (2c-1) no la ejerce ninguna pantalla.
+ *
+ * Las claves de texto reusan lo que YA existe (todo sin usar hasta esta ronda, confirmado por
+ * grep antes de escribir esto): codigo.codigoIncorrectoOVencido, comun.sinConexion,
+ * comun.errorGenerico, comun.esperarCodigo (con {{segundos}} ya incluido en su texto) -- ninguna
+ * clave nueva de error, solo las de interfaz (codigo.titulo/instruccion/etiquetaCodigo/
+ * confirmar/reenviar/reenviarEn/reenviado) son nuevas. */
 export function accionDeResultadoCodigo(resultado: ResultadoVerificarCodigo): AccionResultadoCodigo {
   switch (resultado.clave) {
     case "confirmado":
       return { tipo: "confirmado", usuario: resultado.usuario };
     case "ok":
-      return { tipo: "error", textoClave: "codigoVerificacion.errorGenerico" };
+      return { tipo: "error", textoClave: "comun.errorGenerico" };
     case "codigoIncorrectoOVencido":
-      return { tipo: "error", textoClave: "codigoVerificacion.errorCodigo" };
+      return { tipo: "error", textoClave: "codigo.codigoIncorrectoOVencido" };
     case "esperar":
-      return { tipo: "esperar", segundos: resultado.segundos, textoClave: "codigoVerificacion.errorEsperar" };
+      return { tipo: "esperar", segundos: resultado.segundos, textoClave: "comun.esperarCodigo" };
     case "sinConexion":
-      return { tipo: "error", textoClave: "codigoVerificacion.errorConexion" };
+      return { tipo: "error", textoClave: "comun.sinConexion" };
     case "generico":
-      return { tipo: "error", textoClave: "codigoVerificacion.errorGenerico" };
+      return { tipo: "error", textoClave: "comun.errorGenerico" };
     default: {
       const _nunca: never = resultado;
       return _nunca;
@@ -50,9 +57,9 @@ export function accionDeResultadoCodigo(resultado: ResultadoVerificarCodigo): Ac
 }
 
 export type AccionResultadoReenvio =
-  | { tipo: "reenviado"; textoClave: string; segundosReinicio: number }
-  | { tipo: "error"; textoClave: string }
-  | { tipo: "esperar"; segundos: number; textoClave: string };
+  | { tipo: "reenviado"; textoClave: ClaveTraduccion; segundosReinicio: number }
+  | { tipo: "error"; textoClave: ClaveTraduccion }
+  | { tipo: "esperar"; segundos: number; textoClave: ClaveTraduccion };
 
 const SEGUNDOS_POR_DEFECTO = 60;
 
@@ -61,15 +68,15 @@ export function accionDeResultadoReenvio(resultado: ResultadoEnvioCodigo): Accio
     case "ok":
       return {
         tipo: "reenviado",
-        textoClave: "codigoVerificacion.reenviado",
+        textoClave: "codigo.reenviado",
         segundosReinicio: SEGUNDOS_POR_DEFECTO,
       };
     case "esperar":
-      return { tipo: "esperar", segundos: resultado.segundos, textoClave: "codigoVerificacion.errorEsperar" };
+      return { tipo: "esperar", segundos: resultado.segundos, textoClave: "comun.esperarCodigo" };
     case "sinConexion":
-      return { tipo: "error", textoClave: "codigoVerificacion.errorConexion" };
+      return { tipo: "error", textoClave: "comun.sinConexion" };
     case "generico":
-      return { tipo: "error", textoClave: "codigoVerificacion.errorGenerico" };
+      return { tipo: "error", textoClave: "comun.errorGenerico" };
     default: {
       const _nunca: never = resultado;
       return _nunca;
