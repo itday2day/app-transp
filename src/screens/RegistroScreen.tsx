@@ -154,8 +154,15 @@ export default function RegistroScreen() {
   const contrasenasCoinciden = confirmarContrasena.length === 0 || confirmarContrasena === contrasena;
   const correoValido = CORREO_VALIDO_REGEX.test(correo.trim());
 
+  // Corrección de la revisión: validarDatosRegistro() (capa 1, erroresCampo.telefono) usa el
+  // regex SUELTO que sigue siendo el filtro previo al signUp -- no basta para bloquear
+  // "Continuar", porque un número con la cantidad de dígitos del regex (7 a 14) puede no ser
+  // POSIBLE para el país elegido (ej. España con 8 dígitos: pasa el regex, pero isPossible() es
+  // false). telefonoEsValido() es la misma función que ya decide el aviso inline (P3) -- acá se
+  // reusa para que "Continuar" nunca avance con un teléfono que ese mismo aviso ya marca inválido.
   const puedeContinuar =
     Object.keys(erroresCampo).length === 0 &&
+    telefonoEsValido(telefono) &&
     !errorContrasena &&
     confirmarContrasena.length > 0 &&
     contrasenasCoinciden &&
