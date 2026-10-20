@@ -21,6 +21,7 @@ import { supabase } from "@/lib/supabase";
 import { validarDatosRegistro, type DatosRegistro } from "@/utils/validarDatosRegistro";
 import { validarContrasena } from "@/utils/validarContrasena";
 import { sugerirCorreccionCorreo, CORREO_VALIDO_REGEX } from "@/utils/correo";
+import { telefonoEsValido, separarTelefono } from "@/utils/telefonoPais";
 import {
   accionDeResultadoValidarInvitacion,
   accionDeResultadoRegistro,
@@ -393,7 +394,17 @@ export default function RegistroScreen() {
             valor={telefono}
             onCambiar={setTelefono}
             onBlur={() => marcarTocado("telefono")}
-            error={errorDeCampo("telefono", "telefono")}
+            error={
+              // P3 + Ajuste a 13: isPossible() del E.164 (no el regex de validarDatosRegistro.ts,
+              // que sigue siendo el filtro previo de la capa 1) -- el país del mensaje sale de
+              // separarTelefono() (nunca de parsePhoneNumberFromString(telefono).country, ver el
+              // comentario de telefonoPais.ts sobre la ambigüedad +44/Guernsey).
+              (tocado.telefono || intentoEnvio) && !telefonoEsValido(telefono)
+                ? telefono.trim().length === 0
+                  ? t("comun.campoObligatorio")
+                  : t("registro.telefonoInvalido", { pais: separarTelefono(telefono).pais })
+                : undefined
+            }
           />
 
           <CampoTexto

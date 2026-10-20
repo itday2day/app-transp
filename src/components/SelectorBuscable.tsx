@@ -41,12 +41,26 @@ interface Props<T> {
   valor: T | null;
   opciones: T[];
   obtenerEtiqueta: (item: T) => string;
+  /** P2 (spec_ajustes_pantalla_registro_limites_campos.md): texto del botón CERRADO, si es
+   * distinto del texto de cada fila de la lista abierta (ej. CampoTelefono: cerrado muestra solo
+   * "+34", la lista sigue mostrando "España (+34)"). Por defecto, el mismo `obtenerEtiqueta` —
+   * ningún llamador existente cambia de comportamiento. */
+  obtenerEtiquetaCompacta?: (item: T) => string;
   /** Clave única por opción, para `keyExtractor` y para saber cuál está
    * seleccionada. Por defecto, la misma etiqueta — alcanza cuando `T` ya es
    * un string simple (como la lista de empresas). */
   obtenerClave?: (item: T) => string;
   onSeleccionar: (item: T) => void;
   error?: string;
+  /** Para lectores de pantalla cuando el título visible está oculto (`ocultarEtiquetaVisible`) o
+   * cuando `etiqueta=""` -- por defecto, `etiqueta` (el texto visible del botón, cuando lo hay,
+   * ya sirve de nombre accesible, como ya hacían SelectorFecha.tsx día/mes/año). */
+  accessibilityLabel?: string;
+  /** Criterio 10 (spec_ajustes_pantalla_registro_limites_campos.md): un solo título visible para
+   * varios controles de una misma fila (ej. "Número de teléfono" cubre el prefijo Y el número) --
+   * oculta el `<Text>{etiqueta}</Text>` de arriba del botón sin perder `etiqueta` como título de
+   * la hoja modal ni como accessibilityLabel por defecto. */
+  ocultarEtiquetaVisible?: boolean;
 }
 
 export function SelectorBuscable<T>({
@@ -55,9 +69,12 @@ export function SelectorBuscable<T>({
   valor,
   opciones,
   obtenerEtiqueta,
+  obtenerEtiquetaCompacta = obtenerEtiqueta,
   obtenerClave = obtenerEtiqueta,
   onSeleccionar,
   error,
+  accessibilityLabel = etiqueta || undefined,
+  ocultarEtiquetaVisible = false,
 }: Props<T>) {
   const { t } = useTranslation();
   const [abierto, setAbierto] = useState(false);
@@ -78,16 +95,17 @@ export function SelectorBuscable<T>({
 
   return (
     <View style={estilos.contenedor}>
-      <Text style={estilos.etiqueta}>{etiqueta}</Text>
+      {ocultarEtiquetaVisible ? null : <Text style={estilos.etiqueta}>{etiqueta}</Text>}
 
       <TouchableOpacity
         accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
         onPress={() => setAbierto(true)}
         activeOpacity={0.7}
         style={[estilos.selector, Boolean(error) && estilos.selectorConError]}
       >
         <Text style={valor != null ? estilos.textoSeleccionado : estilos.textoPlaceholder}>
-          {valor != null ? obtenerEtiqueta(valor) : placeholder}
+          {valor != null ? obtenerEtiquetaCompacta(valor) : placeholder}
         </Text>
         <Ionicons name="chevron-down" size={20} color={colores.textoSecundario} />
       </TouchableOpacity>

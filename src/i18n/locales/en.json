@@ -42,7 +42,7 @@
     "apellidosVacio": "Enter your last name.",
     "fechaInvalida": "Check your date of birth.",
     "edadMinima": "You must be at least 18 to register.",
-    "telefonoInvalido": "The phone number must include the country code (for example, +34600000000).",
+    "telefonoInvalido": "That number doesn't look valid for {{pais}}. Check the number of digits.",
     "correoYaRegistrado": "You already have an account with this email. Log in or recover your password.",
     "correoInvalido": "That email doesn't look valid.",
     "corregirMisDatos": "Edit my details",
@@ -64,7 +64,7 @@
     "apellidosEtiqueta": "Last name",
     "apellidosPlaceholder": "Your last name",
     "fechaNacimientoEtiqueta": "Date of birth",
-    "telefonoEtiqueta": "Phone",
+    "telefonoEtiqueta": "Phone number",
     "botonContinuar": "Continue",
     "avisoRevisaCorreo": "Check your email carefully: you won't be able to change it from the app afterwards.",
     "sugerenciaCorreoPregunta": "Did you mean {{sugerido}}?",
@@ -284,6 +284,7 @@
   },
   "campoTelefono": {
     "paisPlaceholder": "Select your country",
+    "prefijoEtiquetaAccesible": "Country prefix",
     "numeroEtiqueta": "Phone number",
     "numeroPlaceholder": "Your number, without the country code"
   },

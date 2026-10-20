@@ -42,7 +42,7 @@
     "apellidosVacio": "Escribe tus apellidos.",
     "fechaInvalida": "Revisa la fecha de nacimiento.",
     "edadMinima": "Debes tener 18 años o más para registrarte.",
-    "telefonoInvalido": "El teléfono debe incluir el código de país (por ejemplo, +34600000000).",
+    "telefonoInvalido": "El número no parece válido para {{pais}}. Revisa la cantidad de dígitos.",
     "correoYaRegistrado": "Ya tienes una cuenta con este correo. Inicia sesión o recupera tu contraseña.",
     "correoInvalido": "El correo no parece válido.",
     "corregirMisDatos": "Corregir mis datos",
@@ -64,7 +64,7 @@
     "apellidosEtiqueta": "Apellidos",
     "apellidosPlaceholder": "Tus apellidos",
     "fechaNacimientoEtiqueta": "Fecha de nacimiento",
-    "telefonoEtiqueta": "Teléfono",
+    "telefonoEtiqueta": "Número de teléfono",
     "botonContinuar": "Continuar",
     "avisoRevisaCorreo": "Revisa bien tu correo: después no podrás cambiarlo desde la app.",
     "sugerenciaCorreoPregunta": "¿Quisiste decir {{sugerido}}?",
@@ -284,6 +284,7 @@
   },
   "campoTelefono": {
     "paisPlaceholder": "Selecciona tu país",
+    "prefijoEtiquetaAccesible": "Prefijo del país",
     "numeroEtiqueta": "Número de teléfono",
     "numeroPlaceholder": "Tu número, sin el código de país"
   },

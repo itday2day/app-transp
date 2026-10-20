@@ -14,10 +14,15 @@ interface Props extends TextInputProps {
    * teclado, `keyboardType` no se toca). No es el comportamiento por defecto de todo campo de
    * contraseña del proyecto — cada pantalla lo pide explícitamente. */
   alternarVisibilidad?: boolean;
+  /** Criterio 10 (spec_ajustes_pantalla_registro_limites_campos.md): un solo título visible para
+   * varios controles de una misma fila (ej. "Número de teléfono" cubre el prefijo Y el número) --
+   * oculta el `<Text>{etiqueta}</Text>` de arriba del campo. `accessibilityLabel` (ya heredado de
+   * `TextInputProps`) es quien le da nombre al lector de pantalla en ese caso. */
+  ocultarEtiquetaVisible?: boolean;
 }
 
 export const CampoTexto = forwardRef<TextInput, Props>(function CampoTexto(
-  { etiqueta, error, style, secureTextEntry, alternarVisibilidad, onFocus, ...resto },
+  { etiqueta, error, style, secureTextEntry, alternarVisibilidad, ocultarEtiquetaVisible, onFocus, ...resto },
   ref
 ) {
   const [visible, setVisible] = useState(false);
@@ -30,7 +35,7 @@ export const CampoTexto = forwardRef<TextInput, Props>(function CampoTexto(
 
   return (
     <View style={estilos.contenedor}>
-      <Text style={estilos.etiqueta}>{etiqueta}</Text>
+      {ocultarEtiquetaVisible ? null : <Text style={estilos.etiqueta}>{etiqueta}</Text>}
       <View style={alternarVisibilidad ? estilos.filaInput : undefined}>
         <TextInput
           ref={(nodo) => {
