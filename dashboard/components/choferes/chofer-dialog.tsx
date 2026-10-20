@@ -17,7 +17,7 @@ import {
   TELEFONO_VALIDO_REGEX,
 } from "@/lib/choferes";
 import { PAISES } from "@/lib/paises";
-import { codigoMarcacion, separarTelefono } from "@/lib/telefono-pais";
+import { combinarTelefono, limiteDigitosDelPais, separarTelefono } from "@/lib/telefono-pais";
 import { formatFecha } from "@/lib/utils";
 import type {
   ChoferDuplicadoResponse,
@@ -214,9 +214,7 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     // -- un chofer ya cargado sin teléfono se puede seguir guardando sin teléfono, pero si hay
     // algo tipeado tiene que ser válido. Se arma acá, no en el input: el selector de país ya
     // garantiza el "+" + código correctos, el campo numérico ya solo deja tipear dígitos.
-    const telefono = numeroTelefono.trim()
-      ? `+${codigoMarcacion(paisTelefono)}${numeroTelefono.trim()}`
-      : null;
+    const telefono = numeroTelefono.trim() ? combinarTelefono(paisTelefono, numeroTelefono) : null;
     if (telefono && !TELEFONO_VALIDO_REGEX.test(telefono)) {
       return setError("El teléfono debe tener formato internacional, por ejemplo +34612345678.");
     }
@@ -510,9 +508,10 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
           <Label htmlFor="chf-telefono-numero">Teléfono (opcional)</Label>
           {/* spec_telefono_pais_selector.md: el "+" + código de marcación ya no se tipean — los
               da el selector de país, elegido por nombre (filtrable), mostrado como ISO alpha-2 +
-              código. El campo numérico solo acepta dígitos; se concatenan los dos recién al
-              guardar (ver onSubmit). maxLength dinámico: E.164 admite hasta 15 dígitos en total
-              después del "+", de los que el código de marcación ya ocupa los suyos. */}
+              código. El campo numérico solo acepta dígitos; se componen los dos recién al
+              guardar (ver onSubmit, combinarTelefono()). Ajuste a 16: maxLength es el máximo real
+              de dígitos nacionales del país elegido (limiteDigitosDelPais(), telefono-pais.ts),
+              no "15 − código" -- ese cálculo deja pasar o corta de más según el país. */}
           <div className="flex gap-2">
             <SelectorCodigoPais
               value={paisTelefono}
@@ -523,7 +522,7 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
               id="chf-telefono-numero"
               value={numeroTelefono}
               onChange={(e) => setNumeroTelefono(e.target.value.replace(/\D/g, ""))}
-              maxLength={15 - codigoMarcacion(paisTelefono).length}
+              maxLength={limiteDigitosDelPais(paisTelefono) ?? 15}
               placeholder="612345678"
               className="flex-1"
               disabled={deshabilitarCampos}

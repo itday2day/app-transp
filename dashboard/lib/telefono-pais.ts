@@ -1,4 +1,9 @@
-import { getCountryCallingCode, type CountryCode } from "libphonenumber-js/min";
+import {
+  getCountryCallingCode,
+  parsePhoneNumberFromString,
+  Metadata,
+  type CountryCode,
+} from "libphonenumber-js/min";
 import { ISO_POR_PAIS, PAISES } from "@/lib/paises";
 
 // spec_telefono_pais_selector.md: España es donde opera la empresa — arranca acá cuando no hay
@@ -14,6 +19,39 @@ export const PAIS_TELEFONO_DEFECTO = "España";
 export function codigoMarcacion(pais: string): string {
   const iso = ISO_POR_PAIS[pais];
   return iso ? getCountryCallingCode(iso as CountryCode) : "";
+}
+
+// Ajuste a 16 de spec_ajustes_pantalla_registro_limites_campos.md: el máximo real por país NO es
+// «15 − código» (eso deja pasar números que ningún país tiene, y de paso corta de menos a países
+// con un código corto) -- es el mismo possibleLengths() por país que usa la app
+// (src/utils/telefonoPais.ts), con el mismo techo absoluto de 15. Mismo motivo que ahí: las
+// longitudes de la librería no cuentan el prefijo nacional (GB: "07911123456" son 11 dígitos
+// crudos, el máximo real es 10).
+const TOPE_ABSOLUTO_DIGITOS = 15;
+const metadata = new Metadata(); // build "/min": sin argumento, la metadata ya viene incluida
+
+export function limiteDigitosDelPais(pais: string): number | null {
+  const iso = ISO_POR_PAIS[pais];
+  if (!iso) return null;
+  metadata.selectNumberingPlan(iso as CountryCode);
+  const plan = metadata.numberingPlan;
+  if (!plan) return null;
+  return Math.min(TOPE_ABSOLUTO_DIGITOS, Math.max(...plan.possibleLengths()));
+}
+
+// Mismo ajuste: componer "a pelo" (`+codigo+numero`) deja el prefijo nacional («0») pegado al
+// código de marcación -- un número que no se puede marcar (GB: +4407911123456 en vez de
+// +447911123456). parsePhoneNumberFromString(dígitos, país) lo quita igual que en la app.
+export function combinarTelefono(pais: string, numero: string): string {
+  const digitos = numero.replace(/\D/g, "");
+  if (!digitos) return "";
+  const iso = ISO_POR_PAIS[pais];
+  if (iso) {
+    const resultado = parsePhoneNumberFromString(digitos, iso as CountryCode);
+    if (resultado) return resultado.number;
+  }
+  const codigo = codigoMarcacion(pais);
+  return codigo ? `+${codigo}${digitos}` : "";
 }
 
 // Códigos de marcación únicos entre los 193 países, del más largo al más corto — un código NUNCA

@@ -13,7 +13,7 @@ import { sugerirCorreccionCorreo } from "@/lib/correo";
 import { useEmpresas } from "@/lib/hooks/use-empresas";
 import { useRutas } from "@/lib/hooks/use-rutas";
 import { validarDatosInvitacion } from "@/lib/invitaciones";
-import { codigoMarcacion, PAIS_TELEFONO_DEFECTO } from "@/lib/telefono-pais";
+import { combinarTelefono, limiteDigitosDelPais, PAIS_TELEFONO_DEFECTO } from "@/lib/telefono-pais";
 import type {
   CrearInvitacionRequest,
   CrearInvitacionResponse,
@@ -110,9 +110,7 @@ export function InvitarChoferDialog({ onClose, onCreada }: InvitarChoferDialogPr
   const [mensajeParaCopiar, setMensajeParaCopiar] = useState<string | null>(null);
 
   const bloqueado = !!mensajeParaCopiar;
-  const telefono = numeroTelefono.trim()
-    ? `+${codigoMarcacion(paisTelefono)}${numeroTelefono.trim()}`
-    : "";
+  const telefono = numeroTelefono.trim() ? combinarTelefono(paisTelefono, numeroTelefono) : "";
 
   function manejarCambioEmpresa(nuevaEmpresaId: string) {
     setEmpresaId(nuevaEmpresaId);
@@ -328,6 +326,9 @@ export function InvitarChoferDialog({ onClose, onCreada }: InvitarChoferDialogPr
             </div>
             <div>
               <Label htmlFor="inv-telefono-numero">Teléfono (opcional)</Label>
+              {/* Ajuste a 16 (spec_ajustes_pantalla_registro_limites_campos.md): maxLength es el
+                  máximo real de dígitos nacionales del país elegido
+                  (limiteDigitosDelPais(), telefono-pais.ts), no "15 − código". */}
               <div className="flex gap-2">
                 <SelectorCodigoPais
                   value={paisTelefono}
@@ -338,7 +339,7 @@ export function InvitarChoferDialog({ onClose, onCreada }: InvitarChoferDialogPr
                   id="inv-telefono-numero"
                   value={numeroTelefono}
                   onChange={(e) => setNumeroTelefono(e.target.value.replace(/\D/g, ""))}
-                  maxLength={15 - codigoMarcacion(paisTelefono).length}
+                  maxLength={limiteDigitosDelPais(paisTelefono) ?? 15}
                   placeholder="612345678"
                   className="flex-1"
                   disabled={bloqueado}
