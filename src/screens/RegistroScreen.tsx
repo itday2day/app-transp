@@ -297,6 +297,9 @@ export default function RegistroScreen() {
                 <BotonPrimario
                   titulo={t("registro.botonUsarSugerido")}
                   onPress={() => {
+                    // Revisión: limpia el error del intento anterior -- mismo criterio 4 que
+                    // manejarCorregirDatos (nunca un error viejo junto a un correo nuevo).
+                    setErrorEnvio(null);
                     setCorreo(sugerenciaCorreo);
                     setSugerenciaCorreo(null);
                   }}
