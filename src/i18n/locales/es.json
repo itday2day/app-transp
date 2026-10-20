@@ -31,7 +31,6 @@
     "errorConexion": "No pudimos conectar con el servidor. Verifica tu conexión e intenta de nuevo.",
     "botonIngresar": "Ingresar",
     "olvideContrasena": "¿Olvidaste tu contraseña?",
-    "cambiarContrasenaEnlace": "Cambiar mi contraseña",
     "tengoInvitacion": "¿Tienes un código de invitación? Regístrate",
     "credencialesIncorrectas": "Correo o contraseña incorrectos.",
     "cuentaDadaDeBaja": "Tu cuenta está dada de baja. Contacta con Administración."
@@ -91,7 +90,6 @@
     "salir": "Cerrar sesión",
     "tituloDetalleJornada": "Detalle de jornada",
     "tituloNuevoCheckIn": "Nueva ruta",
-    "tituloCambiarContrasena": "Cambiar contraseña",
     "tituloRegistro": "Crear cuenta"
   },
   "jornadasRecuperadas": {
@@ -303,24 +301,11 @@
     "errorGenerico": "No pudimos cambiar la contraseña. Verifica tu conexión e intenta de nuevo."
   },
   "cambiarContrasena": {
-    "titulo": "Cambiar contraseña",
-    "subtitulo": "Vas a necesitar tu contraseña actual.",
-    "avisoSinRecuperacion": "Si tu cuenta tiene correo propio, podrás recuperar la contraseña por correo si la olvidas. Si entras solo con tu número de empleado, tendrás que pedirle a tu administrador que la restablezca.",
-    "identificadorEtiqueta": "Correo o número de empleado",
-    "identificadorPlaceholder": "Tu correo o tu número de empleado",
-    "contrasenaActualEtiqueta": "Contraseña actual",
-    "contrasenaActualPlaceholder": "Tu contraseña actual",
     "contrasenaNuevaEtiqueta": "Contraseña nueva",
     "contrasenaNuevaPlaceholder": "Mínimo 6 caracteres",
     "confirmarContrasenaNuevaEtiqueta": "Confirmar contraseña nueva",
     "confirmarContrasenaNuevaPlaceholder": "Repite la contraseña nueva",
-    "contrasenasNoCoinciden": "Las contraseñas nuevas no coinciden.",
-    "errorContrasenaActual": "La contraseña actual no es correcta.",
-    "botonCambiar": "Cambiar contraseña",
-    "errorGenerico": "No pudimos cambiar la contraseña. Verifica tu conexión e intenta de nuevo.",
-    "exitoTitulo": "Contraseña actualizada",
-    "exitoMensaje": "La próxima vez que inicies sesión, usá la contraseña nueva.",
-    "botonVolver": "Volver"
+    "contrasenasNoCoinciden": "Las contraseñas nuevas no coinciden."
   },
   "recuperarContrasena": {
     "titulo": "Recuperar contraseña",

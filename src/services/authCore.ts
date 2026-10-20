@@ -523,9 +523,9 @@ export type ResultadoCambiarContrasena =
   { ok: true } | { ok: false; clave: "sinConexion" | "generico" | "contrasenaDebil" | "contrasenaIgual" };
 
 /** `updateUser({ password })` -- requiere sesión ya activa (llegó acá vía verifyOtp de recovery,
- * que ya deja sesión abierta como efecto colateral, medido en la Fase 1b). A diferencia de
- * cambiarContrasenaVoluntaria() (authService.ts), acá NO reautentica primero: no hay "contraseña
- * actual" que verificar, la sesión de recovery ya ES la prueba de identidad. */
+ * que ya deja sesión abierta como efecto colateral, medido en la Fase 1b). No reautentica
+ * primero: no hay "contraseña actual" que verificar, la sesión de recovery ya ES la prueba de
+ * identidad. */
 export async function cambiarContrasena(
   nueva: string,
   cliente: ClienteAuthCore

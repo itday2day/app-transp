@@ -15,7 +15,6 @@ import { RootStackParamList, TabsParamList } from "./types";
 import LoginScreen from "@/screens/LoginScreen";
 import RegistroScreen from "@/screens/RegistroScreen";
 import CambiarContrasenaObligatorioScreen from "@/screens/CambiarContrasenaObligatorioScreen";
-import CambiarContrasenaScreen from "@/screens/CambiarContrasenaScreen";
 import CodigoVerificacionScreen from "@/screens/CodigoVerificacionScreen";
 import RecuperarContrasenaScreen from "@/screens/RecuperarContrasenaScreen";
 import NuevaContrasenaScreen from "@/screens/NuevaContrasenaScreen";
@@ -36,8 +35,8 @@ const Tab = createBottomTabNavigator<TabsParamList>();
 // (chofer ya logueado), React Navigation no encuentra esa ruta en el árbol montado y descarta el
 // link sin lanzar nada (comportamiento documentado de linking: una ruta de la config que no está
 // en el estado actual del navegador no rompe nada, solo no navega) -- mismo patrón estructural que
-// ya tienen CambiarContrasena/CodigoVerificacion, nunca antes causó un crash; queda para
-// confirmar en el dispositivo real (Fase 3) junto con el resto de A9.
+// ya tiene CodigoVerificacion, nunca antes causó un crash; queda para confirmar en el dispositivo
+// real (Fase 3) junto con el resto de A9.
 const linking = {
   prefixes: ["apptransp://"],
   config: {
@@ -110,8 +109,8 @@ export function RootNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {usuario?.debeCambiarContrasena ? (
           // Única pantalla del stack mientras esto sea true — ni el resto de rutas autenticadas
-          // ni Login/CambiarContrasena están montadas, así que no hay forma de "volver atrás"
-          // hacia ellas ni de llegar a ninguna pantalla que cargue datos (Fase 2, Parte B de
+          // ni Login están montadas, así que no hay forma de "volver atrás" hacia ellas ni de
+          // llegar a ninguna pantalla que cargue datos (Fase 2, Parte B de
           // spec_alta_choferes_dashboard.md).
           <Stack.Screen name="CambiarContrasenaObligatorio" component={CambiarContrasenaObligatorioScreen} />
         ) : usuario ? (
@@ -137,14 +136,6 @@ export function RootNavigator() {
               name="Registro"
               component={RegistroScreen}
               options={{ headerShown: true, title: t("navegacion.tituloRegistro") }}
-            />
-            {/* spec_cambio_contrasena_login.md: reemplaza a "Registro" (RegistroScreen.tsx,
-                eliminada) — el cambio voluntario de contraseña ahora se alcanza sin sesión desde
-                acá, en vez de solo después de haber iniciado sesión. */}
-            <Stack.Screen
-              name="CambiarContrasena"
-              component={CambiarContrasenaScreen}
-              options={{ headerShown: true, title: t("navegacion.tituloCambiarContrasena") }}
             />
             {/* spec_app_registro_paso5.md, paso 2c-1: headerShown:true (no false, como Login) a
                 propósito -- el botón/gesto de volver atrás del sistema es el comportamiento que se

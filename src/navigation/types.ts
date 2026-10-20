@@ -11,11 +11,6 @@ export type RootStackParamList = {
   // invitación de 8 caracteres en route.params persistentes -- ese lo tipea el chofer dentro de la
   // pantalla misma, nunca viaja por navegación.
   Registro: { token?: string } | undefined;
-  // spec_cambio_contrasena_login.md: única ruta de cambio voluntario de contraseña, alcanzable
-  // sin sesión desde Login — reemplaza al enlace "Crear cuenta nueva" (RegistroScreen.tsx,
-  // eliminada) y al botón "Contraseña" que antes vivía en el header de PrincipalTabs (dos caminos
-  // para la misma acción era el patrón del Hallazgo #21).
-  CambiarContrasena: undefined;
   CambiarContrasenaObligatorio: undefined;
   // spec_app_registro_paso5.md, pasos 2c-1/2c-2: `correo` es el ÚNICO dato no sensible que
   // necesita esta pantalla (se muestra en pantalla: "te enviamos un código a {{correo}}") --

@@ -31,7 +31,6 @@
     "errorConexion": "We couldn't connect to the server. Check your connection and try again.",
     "botonIngresar": "Log in",
     "olvideContrasena": "Forgot your password?",
-    "cambiarContrasenaEnlace": "Change my password",
     "tengoInvitacion": "Have an invitation code? Sign up",
     "credencialesIncorrectas": "Incorrect email or password.",
     "cuentaDadaDeBaja": "Your account has been deactivated. Contact Administration."
@@ -91,7 +90,6 @@
     "salir": "Log out",
     "tituloDetalleJornada": "Shift details",
     "tituloNuevoCheckIn": "New route",
-    "tituloCambiarContrasena": "Change password",
     "tituloRegistro": "Create account"
   },
   "jornadasRecuperadas": {
@@ -303,24 +301,11 @@
     "errorGenerico": "We couldn't change the password. Check your connection and try again."
   },
   "cambiarContrasena": {
-    "titulo": "Change password",
-    "subtitulo": "You'll need your current password.",
-    "avisoSinRecuperacion": "If your account has its own email, you'll be able to recover your password by email if you forget it. If you sign in only with your employee number, you'll need to ask your administrator to reset it.",
-    "identificadorEtiqueta": "Email or employee number",
-    "identificadorPlaceholder": "Your email or your employee number",
-    "contrasenaActualEtiqueta": "Current password",
-    "contrasenaActualPlaceholder": "Your current password",
     "contrasenaNuevaEtiqueta": "New password",
     "contrasenaNuevaPlaceholder": "Minimum 6 characters",
     "confirmarContrasenaNuevaEtiqueta": "Confirm new password",
     "confirmarContrasenaNuevaPlaceholder": "Repeat the new password",
-    "contrasenasNoCoinciden": "The new passwords don't match.",
-    "errorContrasenaActual": "The current password is not correct.",
-    "botonCambiar": "Change password",
-    "errorGenerico": "We couldn't change the password. Check your connection and try again.",
-    "exitoTitulo": "Password updated",
-    "exitoMensaje": "Next time you sign in, use the new password.",
-    "botonVolver": "Back"
+    "contrasenasNoCoinciden": "The new passwords don't match."
   },
   "recuperarContrasena": {
     "titulo": "Recover password",
