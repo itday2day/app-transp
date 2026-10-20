@@ -13,7 +13,11 @@ import { sugerirCorreccionCorreo } from "@/lib/correo";
 import { useEmpresas } from "@/lib/hooks/use-empresas";
 import { useRutas } from "@/lib/hooks/use-rutas";
 import { validarDatosInvitacion } from "@/lib/invitaciones";
-import { combinarTelefono, limiteDigitosDelPais, PAIS_TELEFONO_DEFECTO } from "@/lib/telefono-pais";
+import {
+  combinarTelefono,
+  siguienteNumeroTelefono,
+  PAIS_TELEFONO_DEFECTO,
+} from "@/lib/telefono-pais";
 import type {
   CrearInvitacionRequest,
   CrearInvitacionResponse,
@@ -326,9 +330,10 @@ export function InvitarChoferDialog({ onClose, onCreada }: InvitarChoferDialogPr
             </div>
             <div>
               <Label htmlFor="inv-telefono-numero">Teléfono (opcional)</Label>
-              {/* Ajuste a 16 (spec_ajustes_pantalla_registro_limites_campos.md): maxLength es el
-                  máximo real de dígitos nacionales del país elegido
-                  (limiteDigitosDelPais(), telefono-pais.ts), no "15 − código". */}
+              {/* Corrección de la revisión (2026-10-20): SIN maxLength -- recorta los dígitos
+                  CRUDOS a ciegas y sigue sin contar el prefijo nacional. El tope real es "al
+                  teclear" (siguienteNumeroTelefono(), telefono-pais.ts): nunca recorta, solo
+                  rechaza el dígito que haría superar el máximo nacional del país elegido. */}
               <div className="flex gap-2">
                 <SelectorCodigoPais
                   value={paisTelefono}
@@ -338,8 +343,11 @@ export function InvitarChoferDialog({ onClose, onCreada }: InvitarChoferDialogPr
                 <Input
                   id="inv-telefono-numero"
                   value={numeroTelefono}
-                  onChange={(e) => setNumeroTelefono(e.target.value.replace(/\D/g, ""))}
-                  maxLength={limiteDigitosDelPais(paisTelefono) ?? 15}
+                  onChange={(e) =>
+                    setNumeroTelefono(
+                      siguienteNumeroTelefono(paisTelefono, numeroTelefono, e.target.value)
+                    )
+                  }
                   placeholder="612345678"
                   className="flex-1"
                   disabled={bloqueado}

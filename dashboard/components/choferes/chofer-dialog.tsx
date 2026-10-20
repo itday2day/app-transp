@@ -17,7 +17,7 @@ import {
   TELEFONO_VALIDO_REGEX,
 } from "@/lib/choferes";
 import { PAISES } from "@/lib/paises";
-import { combinarTelefono, limiteDigitosDelPais, separarTelefono } from "@/lib/telefono-pais";
+import { combinarTelefono, siguienteNumeroTelefono, separarTelefono } from "@/lib/telefono-pais";
 import { formatFecha } from "@/lib/utils";
 import type {
   ChoferDuplicadoResponse,
@@ -509,9 +509,11 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
           {/* spec_telefono_pais_selector.md: el "+" + código de marcación ya no se tipean — los
               da el selector de país, elegido por nombre (filtrable), mostrado como ISO alpha-2 +
               código. El campo numérico solo acepta dígitos; se componen los dos recién al
-              guardar (ver onSubmit, combinarTelefono()). Ajuste a 16: maxLength es el máximo real
-              de dígitos nacionales del país elegido (limiteDigitosDelPais(), telefono-pais.ts),
-              no "15 − código" -- ese cálculo deja pasar o corta de más según el país. */}
+              guardar (ver onSubmit, combinarTelefono()). Corrección de la revisión: SIN
+              maxLength -- un maxLength recorta los dígitos CRUDOS a ciegas y sigue sin contar el
+              prefijo nacional (GB: "0" + 10 dígitos). El tope real es "al teclear"
+              (siguienteNumeroTelefono(), telefono-pais.ts): nunca recorta, solo rechaza el
+              dígito que haría superar el máximo nacional del país elegido. */}
           <div className="flex gap-2">
             <SelectorCodigoPais
               value={paisTelefono}
@@ -521,8 +523,11 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
             <Input
               id="chf-telefono-numero"
               value={numeroTelefono}
-              onChange={(e) => setNumeroTelefono(e.target.value.replace(/\D/g, ""))}
-              maxLength={limiteDigitosDelPais(paisTelefono) ?? 15}
+              onChange={(e) =>
+                setNumeroTelefono(
+                  siguienteNumeroTelefono(paisTelefono, numeroTelefono, e.target.value)
+                )
+              }
               placeholder="612345678"
               className="flex-1"
               disabled={deshabilitarCampos}

@@ -39,6 +39,37 @@ export function limiteDigitosDelPais(pais: string): number | null {
   return Math.min(TOPE_ABSOLUTO_DIGITOS, Math.max(...plan.possibleLengths()));
 }
 
+// Corrección de la revisión (2026-10-20): un `maxLength` sobre el input recorta los dígitos
+// CRUDOS a ciegas -- igual de equivocado que el "15 − código" que esto mismo reemplazó, porque
+// sigue sin contar el prefijo nacional (GB: "07911123456" son 11 dígitos crudos, el máximo real
+// es 10 -- un maxLength de 10 le impediría escribir el "0" inicial). Mismo criterio "tope al
+// teclear" que siguienteNumeroTelefono() de src/utils/telefonoPais.ts: nunca RECORTA -- o acepta
+// `numeroPropuesto` completo, o devuelve `numeroActual` sin cambios (el dígito de más no entra).
+// Si el parseo todavía no devuelve nada (número muy corto para que la librería decida), se acepta.
+export function siguienteNumeroTelefono(
+  pais: string,
+  numeroActual: string,
+  numeroPropuesto: string
+): string {
+  const digitosPropuestos = numeroPropuesto.replace(/\D/g, "");
+  if (digitosPropuestos.length <= numeroActual.replace(/\D/g, "").length) {
+    // Se está borrando (o no cambió la cantidad de dígitos) -- nunca hay nada que rechazar al
+    // borrar, solo al agregar.
+    return digitosPropuestos;
+  }
+
+  const iso = ISO_POR_PAIS[pais];
+  const resultado = iso
+    ? parsePhoneNumberFromString(digitosPropuestos, iso as CountryCode)
+    : undefined;
+  if (!resultado) return digitosPropuestos;
+
+  const limite = limiteDigitosDelPais(pais);
+  if (limite === null) return digitosPropuestos;
+
+  return resultado.nationalNumber.length <= limite ? digitosPropuestos : numeroActual;
+}
+
 // Mismo ajuste: componer "a pelo" (`+codigo+numero`) deja el prefijo nacional («0») pegado al
 // código de marcación -- un número que no se puede marcar (GB: +4407911123456 en vez de
 // +447911123456). parsePhoneNumberFromString(dígitos, país) lo quita igual que en la app.
