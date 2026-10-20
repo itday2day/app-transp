@@ -313,7 +313,7 @@ export default function RegistroScreen() {
               // criterio 5: identities:[] -- ya existe una cuenta CONFIRMADA con este correo. Dos
               // salidas, NUNCA la pantalla de código.
               <>
-                <Text style={estilos.error}>{t("registro.correoYaRegistrado")}</Text>
+                <Text style={estilos.informativo}>{t("registro.correoYaRegistrado")}</Text>
                 <BotonPrimario
                   titulo={t("registro.botonIniciarSesion")}
                   onPress={() => navigation.navigate("Login")}
@@ -455,7 +455,11 @@ export default function RegistroScreen() {
           />
 
           <CampoTexto
-            etiqueta={t("cambiarContrasena.confirmarContrasenaNuevaEtiqueta")}
+            // Ajuste a 6 / criterio 6 (P5): "Confirmar contraseña", sin "nueva" -- clave propia del
+            // registro (registro.confirmarContrasenaEtiqueta), no se edita
+            // cambiarContrasena.confirmarContrasenaNuevaEtiqueta porque la comparte la pantalla de
+            // contraseña nueva de la recuperación, donde "nueva" sí es correcto.
+            etiqueta={t("registro.confirmarContrasenaEtiqueta")}
             placeholder={t("cambiarContrasena.confirmarContrasenaNuevaPlaceholder")}
             secureTextEntry
             alternarVisibilidad
@@ -510,6 +514,16 @@ const estilos = StyleSheet.create({
   error: {
     ...tipografia.cuerpo,
     color: colores.peligro,
+    marginBottom: espaciado.md,
+    textAlign: "center",
+  },
+  // P4 (criterio 7): "Ya tienes una cuenta con este correo..." no es un error -- no hay nada mal
+  // tipeado, es información (el correo YA tiene una cuenta confirmada) con dos salidas válidas.
+  // colores.link es el único azul del design system (TextoEnlace.tsx) -- se reusa acá para el
+  // mismo matiz "informativo, no alarmante".
+  informativo: {
+    ...tipografia.cuerpo,
+    color: colores.link,
     marginBottom: espaciado.md,
     textAlign: "center",
   },

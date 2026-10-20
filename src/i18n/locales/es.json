@@ -64,6 +64,7 @@
     "apellidosPlaceholder": "Tus apellidos",
     "fechaNacimientoEtiqueta": "Fecha de nacimiento",
     "telefonoEtiqueta": "Número de teléfono",
+    "confirmarContrasenaEtiqueta": "Confirmar contraseña",
     "botonContinuar": "Continuar",
     "avisoRevisaCorreo": "Revisa bien tu correo: después no podrás cambiarlo desde la app.",
     "sugerenciaCorreoPregunta": "¿Quisiste decir {{sugerido}}?",

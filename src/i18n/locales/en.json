@@ -64,6 +64,7 @@
     "apellidosPlaceholder": "Your last name",
     "fechaNacimientoEtiqueta": "Date of birth",
     "telefonoEtiqueta": "Phone number",
+    "confirmarContrasenaEtiqueta": "Confirm password",
     "botonContinuar": "Continue",
     "avisoRevisaCorreo": "Check your email carefully: you won't be able to change it from the app afterwards.",
     "sugerenciaCorreoPregunta": "Did you mean {{sugerido}}?",
