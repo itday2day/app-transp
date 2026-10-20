@@ -18,7 +18,7 @@ import { TextoEnlace } from "@/components/TextoEnlace";
 import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
 import { validarInvitacion, obtenerDatosInvitacion, registrarChofer } from "@/services/authCore";
 import { supabase } from "@/lib/supabase";
-import { validarDatosRegistro, type DatosRegistro } from "@/utils/validarDatosRegistro";
+import { validarDatosRegistro, normalizarDni, type DatosRegistro } from "@/utils/validarDatosRegistro";
 import { validarContrasena } from "@/utils/validarContrasena";
 import { sugerirCorreccionCorreo, CORREO_VALIDO_REGEX } from "@/utils/correo";
 import { telefonoEsValido, separarTelefono } from "@/utils/telefonoPais";
@@ -27,6 +27,8 @@ import {
   accionDeResultadoRegistro,
   claveErrorCampo,
   tokenValido,
+  normalizarCodigoInvitacion,
+  codigoInvitacionCompleto,
 } from "./logicaRegistro";
 import { RootStackParamList, RootStackNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
@@ -124,11 +126,14 @@ export default function RegistroScreen() {
   }, []);
 
   async function manejarValidarInvitacionManual() {
-    if (invitacion.trim().length === 0 || validandoInvitacion) return;
+    // Criterio 15: "Continuar" no llama a validar_invitacion si no hay 8 -- `invitacion` ya
+    // viene normalizado por normalizarCodigoInvitacion() desde el propio onChangeText, así que
+    // esta comprobación es solo defensiva (longitud exacta).
+    if (!codigoInvitacionCompleto(invitacion) || validandoInvitacion) return;
     setErrorInvitacion(null);
     setValidandoInvitacion(true);
     try {
-      const resultado = await validarInvitacion(invitacion.trim(), supabase);
+      const resultado = await validarInvitacion(invitacion, supabase);
       const accion = accionDeResultadoValidarInvitacion(resultado);
       if (accion.tipo === "valida") setFase("formulario");
       else setErrorInvitacion(t(accion.textoClave));
@@ -246,15 +251,21 @@ export default function RegistroScreen() {
               placeholder={t("registro.invitacionPlaceholder")}
               autoCapitalize="characters"
               autoCorrect={false}
+              // SIN maxLength nativo a propósito -- un `maxLength` de la plataforma recorta el
+              // texto CRUDO antes de que onChangeText se entere (confirmado: así filtran tanto
+              // Android, InputFilter.LengthFilter, como iOS, shouldChangeCharactersInRange), lo
+              // que rompería "lo pegado con separadores se limpia antes de contar" (criterio 15)
+              // para un pegado más largo que 8 caracteres crudos (ej. "ab cd-12 34 56", 14
+              // caracteres). El único límite real es normalizarCodigoInvitacion().slice(0,8).
               value={invitacion}
-              onChangeText={setInvitacion}
+              onChangeText={(texto) => setInvitacion(normalizarCodigoInvitacion(texto))}
             />
             {errorInvitacion ? <Text style={estilos.error}>{errorInvitacion}</Text> : null}
             <BotonPrimario
               titulo={t("registro.botonValidarInvitacion")}
               onPress={manejarValidarInvitacionManual}
               cargando={validandoInvitacion}
-              deshabilitado={invitacion.trim().length === 0}
+              deshabilitado={!codigoInvitacionCompleto(invitacion)}
               estilo={estilos.boton}
             />
           </ScrollView>
@@ -348,9 +359,14 @@ export default function RegistroScreen() {
             placeholder={t("registro.dniPlaceholder")}
             autoCapitalize="characters"
             autoCorrect={false}
+            // SIN maxLength nativo a propósito -- recortaría el texto CRUDO antes de que
+            // onChangeText se entere (mismo motivo que registro.invitacionEtiqueta, abajo), y
+            // V5 pega "99 999.903-a" (12 caracteres crudos) esperando que normalizarDni() limpie
+            // ANTES de contar los 9, no después. El único límite real es
+            // normalizarDni(texto).slice(0,9).
             editable={!dniBloqueado}
             value={dni}
-            onChangeText={setDni}
+            onChangeText={(texto) => setDni(normalizarDni(texto).slice(0, 9))}
             onBlur={() => marcarTocado("dni")}
             error={errorDeCampo("dni", "dni")}
           />

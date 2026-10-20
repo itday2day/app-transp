@@ -155,7 +155,11 @@ export default function CodigoVerificacionScreen() {
           <CampoTexto
             etiqueta={t("codigo.etiquetaCodigo")}
             keyboardType="number-pad"
-            maxLength={6}
+            // Criterio 14 (ronda de ajustes): SIN maxLength nativo a propósito -- recortaría el
+            // texto CRUDO antes de que onChangeText se entere (Android InputFilter.LengthFilter
+            // / iOS shouldChangeCharactersInRange), y V6 pega "12 34 56 78" (11 caracteres
+            // crudos) esperando que normalizarCodigo() limpie los espacios ANTES de contar los
+            // 6, no después. El único límite real es normalizarCodigo().slice(0,6).
             autoComplete="one-time-code"
             textContentType="oneTimeCode"
             value={codigo}

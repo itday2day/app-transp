@@ -26,6 +26,28 @@ export function tokenValido(token: string | undefined): string | undefined {
   return token && TOKEN_VALIDO_REGEX.test(token) ? token : undefined;
 }
 
+// Criterio 15: el código de invitación ESCRITO A MANO (8 caracteres) es un alfabeto distinto del
+// token del deep link (32 hex) -- 32 símbolos, sin I/O/0/1 (schema.sql, generar_codigo_invitacion():
+// 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', medido en la Fase 1, punto 8). Mayúsculas automáticas, sin
+// espacios ni guiones (mismo criterio de limpieza que usa el propio `validar_invitacion` del
+// servidor, schema.sql: `upper(regexp_replace(..., '[\s-]', '', 'g'))`), y cualquier otro
+// carácter (incluida la Ñ, los 0/1, o una letra I/O) se descarta en vez de dejarlo pasar.
+const ALFABETO_CODIGO_INVITACION = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const LONGITUD_CODIGO_INVITACION = 8;
+
+export function normalizarCodigoInvitacion(texto: string): string {
+  const limpio = texto.toUpperCase().replace(/[\s-]/g, "");
+  let resultado = "";
+  for (const caracter of limpio) {
+    if (ALFABETO_CODIGO_INVITACION.includes(caracter)) resultado += caracter;
+  }
+  return resultado.slice(0, LONGITUD_CODIGO_INVITACION);
+}
+
+export function codigoInvitacionCompleto(texto: string): boolean {
+  return normalizarCodigoInvitacion(texto).length === LONGITUD_CODIGO_INVITACION;
+}
+
 export type AccionValidarInvitacion = { tipo: "valida" } | { tipo: "error"; textoClave: ClaveTraduccion };
 
 /** R3: un fallo de red/servidor (`motivo: "sinConexion"|"error"`) NUNCA se traduce como "la
