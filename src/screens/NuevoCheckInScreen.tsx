@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
 import { useUbicacion } from "@/hooks/useUbicacion";
 import { useMatriculasFrecuentes } from "@/hooks/useMatriculasFrecuentes";
+import { useOffsetSuperiorKAV } from "@/hooks/useOffsetSuperiorKAV";
 import { CheckInForm, ValoresCheckInForm } from "@/components/CheckInForm";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { crearCheckIn } from "@/db/jornadasRepo";
@@ -31,6 +32,8 @@ export default function NuevoCheckInScreen() {
   const { capturarUbicacion, obteniendo: obteniendoUbicacion } = useUbicacion();
   const [enviando, setEnviando] = useState(false);
   const refScroll = useRef<ScrollView>(null);
+  // [FIX64] diagnóstico #64 -- offset real del borde superior del KAV, medido sin teclado.
+  const { ref: refKAV, onLayout: onLayoutOffsetKAV, offset: offsetKAV } = useOffsetSuperiorKAV();
 
   async function manejarEnvioFormulario(valores: ValoresCheckInForm) {
     if (!usuario) return;
@@ -69,7 +72,13 @@ export default function NuevoCheckInScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={estilos.pantalla} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView
+      ref={refKAV as never}
+      style={estilos.pantalla}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : offsetKAV}
+      onLayout={onLayoutOffsetKAV}
+    >
       <ScrollView
         ref={refScroll}
         style={estilos.pantalla}

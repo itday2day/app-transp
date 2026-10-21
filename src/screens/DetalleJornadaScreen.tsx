@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { Ionicons } from "@expo/vector-icons";
 import { obtenerJornadaPorId, registrarCheckOut } from "@/db/jornadasRepo";
 import { useUbicacion } from "@/hooks/useUbicacion";
+import { useOffsetSuperiorKAV } from "@/hooks/useOffsetSuperiorKAV";
 import { useNetwork } from "@/context/NetworkContext";
 import { MAX_INTENTOS } from "@/services/syncService";
 import { abrirMapa } from "@/services/mapasService";
@@ -170,6 +171,8 @@ export default function DetalleJornadaScreen() {
   const refScroll = useRef<ScrollView>(null);
   const refKmFinal = useRef<TextInput>(null);
   const ySeccionCheckOut = useRef(0);
+  // [FIX64] diagnóstico #64 -- offset real del borde superior del KAV, medido sin teclado.
+  const { ref: refKAV, onLayout: onLayoutOffsetKAV, offset: offsetKAV } = useOffsetSuperiorKAV();
   // spec_bloque_a_pantallas_checkin_checkout.md (ampliación, E2/criterio 24): solo el botón
   // "Check-out" tocado a propósito deja el foco puesto -- llegar con `abrirCheckOut` desde la
   // pestaña Check-out hace scroll hasta la sección, pero NUNCA enfoca nada solo.
@@ -255,7 +258,13 @@ export default function DetalleJornadaScreen() {
   const fotosIncidencia = emparejarFotos(jornada.fotosIncidenciaUris, jornada.fotosIncidencia);
 
   return (
-    <KeyboardAvoidingView style={estilos.pantalla} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+    <KeyboardAvoidingView
+      ref={refKAV as never}
+      style={estilos.pantalla}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : offsetKAV}
+      onLayout={onLayoutOffsetKAV}
+    >
       <BannerConexion />
       <ScrollView
         ref={refScroll}

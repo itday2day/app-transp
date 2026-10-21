@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState, type RefObject } from "react";
-import { Keyboard, UIManager, findNodeHandle, type ScrollView } from "react-native";
+import { Keyboard, UIManager, findNodeHandle, Dimensions, Platform, type ScrollView } from "react-native";
 import { espaciado } from "@/theme/spacing";
 
 // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50, ampliación, E2/criterio 25): cuando
@@ -60,7 +60,13 @@ export function ProveedorEnfoqueTeclado({ scrollRef, children }: Props) {
 
   useEffect(() => {
     const mostrar = Keyboard.addListener("keyboardDidShow", (evento) => {
-      setAlturaTeclado(evento.endCoordinates.height);
+      // Hallazgo #64: en Android, `endCoordinates.height` no cuenta la barra de navegación
+      // (medido en el Samsung: height=310.4, pero el teclado real tapa 358.4 = window.height -
+      // screenY) -- `KeyboardAvoidingView` resta ese valor de su propio alto, así que usar el
+      // `height` crudo ahí dejaba el KAV más grande de lo real y tapaba el campo por la
+      // diferencia. En iOS no hay ese desfase -- se deja `endCoordinates.height` tal cual.
+      const alturaAndroid = Math.max(0, Dimensions.get("window").height - evento.endCoordinates.screenY);
+      setAlturaTeclado(Platform.OS === "android" ? alturaAndroid : evento.endCoordinates.height);
     });
     const ocultar = Keyboard.addListener("keyboardDidHide", () => setAlturaTeclado(0));
     return () => {
