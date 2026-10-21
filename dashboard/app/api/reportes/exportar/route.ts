@@ -47,7 +47,7 @@ interface JornadaReporte {
   matricula: string;
   kmInicial: number;
   kmFinal: number | null;
-  combustibleInicial: number;
+  combustibleInicial: number | null;
   combustibleFinal: number | null;
   // Texto libre histórico (jornadas creadas antes de spec_incidencia_en_checkin.md) — solo lectura,
   // ver §4 del spec: el mock server lo usa como respaldo cuando no hay incidencia de check-in

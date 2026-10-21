@@ -341,7 +341,7 @@ async function generarLibroExcel(jornadas, filtros) {
       kmInicial: jornada.kmInicial,
       kmFinal: jornada.kmFinal ?? "-",
       kmRecorrido: calcularKmRecorrido(jornada.kmInicial, jornada.kmFinal),
-      combustibleInicial: `${jornada.combustibleInicial}%`,
+      combustibleInicial: jornada.combustibleInicial != null ? `${jornada.combustibleInicial}%` : "N/A",
       combustibleFinal: jornada.combustibleFinal != null ? `${jornada.combustibleFinal}%` : "N/A",
       tieneIncidenciaCheckIn: incidenciaCheckIn?.estructurada ? "SÍ" : "NO",
       tipoIncidenciaCheckIn: incidenciaCheckIn ? (incidenciaCheckIn.tipo ?? "N/A") : "N/A",

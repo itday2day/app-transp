@@ -10,6 +10,7 @@ import {
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesInsert } from "@/lib/supabase/database.types";
 import type { JornadaRow, TipoIncidencia } from "@/lib/types";
+import { validarCombustibleInicial } from "@/lib/validar-combustible-inicial";
 import { MATRICULA_LONGITUD, normalizarMatricula } from "@/lib/vehiculos";
 
 // POST /api/jornadas/crear (spec_rutas_asignadas_admin.md)
@@ -92,21 +93,22 @@ export async function POST(request: Request) {
   const matricula = matriculaCruda ? normalizarMatricula(matriculaCruda) : undefined;
   const ruta = stringNoVacio(cuerpo.ruta);
   const kmInicial = numeroValido(cuerpo.kmInicial);
-  const combustibleInicial = numeroValido(cuerpo.combustibleInicial);
 
-  if (
-    !choferId ||
-    !empresa ||
-    !matricula ||
-    !ruta ||
-    kmInicial === undefined ||
-    combustibleInicial === undefined
-  ) {
+  // spec_ajustes_previos_apk.md, A6: combustibleInicial deja de ser obligatorio -- ausente o
+  // null -> NULL (nunca 0 por ausencia); si viene, debe ser un número 0-100 de verdad, o se
+  // rechaza con 400 (antes de este ajuste, un valor fuera de rango simplemente se colaba).
+  const resultadoCombustible = validarCombustibleInicial(cuerpo.combustibleInicial);
+  if (!resultadoCombustible.ok) {
     return NextResponse.json(
-      {
-        mensaje:
-          "Faltan datos obligatorios de check-in (chofer, empresa, matrícula, ruta, km y combustible).",
-      },
+      { mensaje: "El combustible inicial debe ser un número entero entre 0 y 100." },
+      { status: 400 }
+    );
+  }
+  const combustibleInicial = resultadoCombustible.valor;
+
+  if (!choferId || !empresa || !matricula || !ruta || kmInicial === undefined) {
+    return NextResponse.json(
+      { mensaje: "Faltan datos obligatorios de check-in (chofer, empresa, matrícula y ruta)." },
       { status: 400 }
     );
   }

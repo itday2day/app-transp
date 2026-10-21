@@ -16,6 +16,7 @@ import { useEmpresas } from "@/lib/hooks/use-empresas";
 import { useRutas } from "@/lib/hooks/use-rutas";
 import { useVehiculos } from "@/lib/hooks/use-vehiculos";
 import { instanteEnEspanaComoUtc } from "@/lib/hora-espana";
+import { numeroOpcional } from "@/lib/numero-opcional";
 import type {
   ChoferRow,
   CrearJornadaRequest,
@@ -150,7 +151,8 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
     empresa.trim() !== "" &&
     ruta.trim() !== "" &&
     kmInicial.trim() !== "" &&
-    combustibleInicial.trim() !== "" &&
+    // spec_ajustes_previos_apk.md, A6: el combustible inicial deja de ser requisito de
+    // "formulario completo" -- vacío ya no bloquea el guardado.
     (!cargarCierre || (kmFinal.trim() !== "" && combustibleFinal.trim() !== "")) &&
     !detalleIncidenciaFaltante;
 
@@ -167,7 +169,9 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
       matricula: vehiculo.matricula,
       ruta: ruta.trim(),
       kmInicial: Number(kmInicial),
-      combustibleInicial: Number(combustibleInicial),
+      // spec_ajustes_previos_apk.md, A6: vacío -> undefined -> no se envía -> queda NULL en
+      // Supabase (nunca 0, a diferencia de Number("")).
+      combustibleInicial: numeroOpcional(combustibleInicial),
       fechaCheckIn:
         checkInFecha && HORA_24H_REGEX.test(checkInHora)
           ? instanteEnEspanaComoUtc(checkInFecha, checkInHora)
@@ -295,7 +299,7 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
               />
             </div>
             <div>
-              <Label htmlFor="crear-combustible-inicial">Combustible inicial (%)</Label>
+              <Label htmlFor="crear-combustible-inicial">Combustible inicial (%) (opcional)</Label>
               <Input
                 id="crear-combustible-inicial"
                 type="number"

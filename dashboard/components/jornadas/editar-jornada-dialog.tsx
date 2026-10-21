@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { componentesEnEspana, instanteEnEspanaComoUtc } from "@/lib/hora-espana";
 import { useEmpresas } from "@/lib/hooks/use-empresas";
 import { useRutas } from "@/lib/hooks/use-rutas";
+import { numeroOpcional } from "@/lib/numero-opcional";
 import { MATRICULA_LONGITUD, normalizarMatricula } from "@/lib/vehiculos";
 import type {
   EditarJornadaRequest,
@@ -312,7 +313,11 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
   }
   const [kmInicial, setKmInicial] = useState(String(jornada.km_inicial));
   const [kmFinal, setKmFinal] = useState(jornada.km_final != null ? String(jornada.km_final) : "");
-  const [combustibleInicial, setCombustibleInicial] = useState(String(jornada.combustible_inicial));
+  // spec_ajustes_previos_apk.md, A6: nunca "null" como texto -- una jornada con el campo vacío
+  // (NULL) abre el input vacío, igual que combustibleFinal ya hacía con su propio null.
+  const [combustibleInicial, setCombustibleInicial] = useState(
+    jornada.combustible_inicial != null ? String(jornada.combustible_inicial) : ""
+  );
   const [combustibleFinal, setCombustibleFinal] = useState(
     jornada.combustible_final != null ? String(jornada.combustible_final) : ""
   );
@@ -404,7 +409,10 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
       matricula: matriculaNormalizada,
       ruta: ruta.trim(),
       kmInicial: Number(kmInicial),
-      combustibleInicial: Number(combustibleInicial),
+      // spec_ajustes_previos_apk.md, A6: vacío -> undefined -> el FormData de más abajo lo
+      // descarta -> editar/route.ts no lo incluye en la actualización -> no cambia, nunca escribe
+      // 0 (a diferencia de Number("")).
+      combustibleInicial: numeroOpcional(combustibleInicial),
       tuvoIncidencia,
       tipoIncidencia: tuvoIncidencia ? tipoIncidencia || null : null,
       detalleIncidencia: tuvoIncidencia ? detalleIncidencia.trim() : "",
@@ -525,7 +533,7 @@ export function EditarJornadaDialog({ jornada, onClose, onGuardado }: EditarJorn
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label htmlFor="edit-combustible-inicial">Combustible inicial (%)</Label>
+            <Label htmlFor="edit-combustible-inicial">Combustible inicial (%) (opcional)</Label>
             <Input
               id="edit-combustible-inicial"
               type="number"

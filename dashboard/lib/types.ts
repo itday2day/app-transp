@@ -38,7 +38,8 @@ export interface JornadaRow {
   incidencias: string | null;
 
   km_inicial: number;
-  combustible_inicial: NivelCombustible;
+  // opcional desde schema_v25_combustible_inicial_opcional.sql (spec_ajustes_previos_apk.md, A1)
+  combustible_inicial: NivelCombustible | null;
   foto_tacometro_inicial_url: string | null;
   foto_ruta_url: string | null;
   lat_inicial: number | null;
@@ -212,7 +213,8 @@ export interface CrearJornadaRequest {
   matricula: string;
   ruta: string;
   kmInicial: number;
-  combustibleInicial: number;
+  // spec_ajustes_previos_apk.md, A6: opcional -- si no viene, se guarda NULL (nunca 0).
+  combustibleInicial?: number;
   /** ISO 8601, opcional — por defecto la hora del servidor al crearla. */
   fechaCheckIn?: string;
   kmFinal?: number;
