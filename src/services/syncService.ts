@@ -18,6 +18,7 @@ import {
   obtenerJornadasAbiertas,
 } from "@/db/jornadasRepo";
 import { reemplazarCatalogo, type ParEmpresaRuta } from "@/db/catalogoRepo";
+import { esErrorDeAutenticacion, envolverErrorConCampos } from "./erroresSync";
 import { EstadoJornada, Jornada, NivelCombustible, TipoIncidencia, UrlsFotosJornada } from "@/types";
 
 // Exportado: TarjetaJornada.tsx lo usa para distinguir "todavía reintentando solo" de "ya se
@@ -154,7 +155,12 @@ async function subirJornada(jornada: Jornada): Promise<void> {
   };
 
   const { error } = await supabase.from("jornadas").upsert(fila);
-  if (error) throw new Error(`Fallo al sincronizar jornada ${jornada.id}: ${error.message}`);
+  // Criterio 4 (spec_sync_sin_sesion_no_agota_intentos.md): antes `new Error(...)` a secas perdía
+  // `code` del PostgrestError original -- sin él, esErrorDeAutenticacion() no podía clasificar
+  // este fallo en el catch de sincronizarPendientes (abajo). El mensaje que ve el usuario no
+  // cambia.
+  if (error)
+    throw envolverErrorConCampos(`Fallo al sincronizar jornada ${jornada.id}: ${error.message}`, error);
 }
 
 /**
@@ -206,6 +212,19 @@ export async function sincronizarPendientes(
         `sincronizarPendientes: falló la jornada ${jornada.id} (${jornada.matricula}, intento ${jornada.intentosSincronizacion + 1}/${MAX_INTENTOS}):`,
         err
       );
+      // Criterio 3 (spec_sync_sin_sesion_no_agota_intentos.md, Hallazgo #56): un error de
+      // autenticación/autorización (sin sesión, JWT inválido o vencido, RLS) tampoco puede contar
+      // intento -- el servidor SÍ respondió (hubo señal real), pero la causa no es que la jornada
+      // esté mal, es que la subida no tenía una sesión válida (ver sincronizarAhora, más abajo,
+      // criterio 1: sin usuario esto ni se llama, pero una sesión puede morir A MITAD de un ciclo
+      // ya en curso). Se comprueba ANTES del chequeo de red de abajo -- ese es para el caso
+      // contrario, sin señal en absoluto, nunca llegó ninguna respuesta del servidor.
+      if (esErrorDeAutenticacion(err)) {
+        await marcarPendienteSinContar(jornada.id);
+        fallidas += 1;
+        continue;
+      }
+
       // Hallazgo #29 (spec_sincronizacion_reintentable.md, Parte C): un intento que falló porque
       // la señal se cortó A MITAD de la subida (el caso real de un túnel o un sótano) no puede
       // contar para el tope de MAX_INTENTOS — si contara, un chofer quemaría los 5 intentos en

@@ -609,6 +609,29 @@ export async function marcarSincronizando(id: string): Promise<void> {
   await db.runAsync(`UPDATE jornadas SET sincronizacion = 'sincronizando' WHERE id = ?`, [id]);
 }
 
+/** Reinicia (Opción 1, spec_sync_sin_sesion_no_agota_intentos.md, criterio 5, Hallazgo #56) los
+ * intentos de las jornadas de `choferId` que quedaron atascadas por agotar `maxIntentos`: vuelven
+ * a `'pendiente'` con `intentosSincronizacion = 0`, como si el intento que agotó el tope nunca
+ * hubiera contado. El `WHERE` las acota por sí solo, sin necesidad de ninguna otra condición:
+ *   - Nunca toca una jornada de OTRO `choferId` (caso I5, fuera de alcance de esta spec).
+ *   - Nunca toca una jornada `'sincronizado'` ni `'sincronizando'` -- solo las que están en
+ *     `'error'` (una `'pendiente'` ya tiene vía libre para reintentarse sola, no necesita esto).
+ *   - Nunca toca una que no llegó a agotar `maxIntentos` todavía -- esas ya se reintentan solas en
+ *     el próximo ciclo de 15s, sin necesitar un reinicio.
+ * Idempotente: una segunda llamada no encuentra ninguna fila que siga cumpliendo el `WHERE` (ya
+ * quedaron en `intentosSincronizacion = 0`), así que no cambia nada. */
+export async function reiniciarIntentosAgotadosDeChofer(
+  choferId: string,
+  maxIntentos: number
+): Promise<void> {
+  const db = await obtenerBaseDeDatos();
+  await db.runAsync(
+    `UPDATE jornadas SET sincronizacion = 'pendiente', intentosSincronizacion = 0
+     WHERE choferId = ? AND sincronizacion = 'error' AND intentosSincronizacion >= ?`,
+    [choferId, maxIntentos]
+  );
+}
+
 /** Vuelve a 'pendiente' SIN sumar a `intentosSincronizacion` (Hallazgo #29,
  * spec_sincronizacion_reintentable.md, Parte C) — para cuando un intento falló porque la señal se
  * cortó a mitad de la subida, no porque la subida en sí esté mal. Un intento sin red no puede

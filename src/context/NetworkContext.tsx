@@ -8,7 +8,9 @@ import {
   sincronizarCambiosDelServidor,
   descargarCatalogo,
   JornadaCorregida,
+  MAX_INTENTOS,
 } from "@/services/syncService";
+import { reiniciarIntentosAgotadosDeChofer } from "@/db/jornadasRepo";
 import { Jornada } from "@/types";
 
 interface NetworkContextValor {
@@ -57,31 +59,67 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   const [jornadasCorregidas, setJornadasCorregidas] = useState<JornadaCorregida[]>([]);
   const sincronizandoRef = useRef(false);
 
-  const sincronizarAhora = useCallback(async (forzarReintento = false) => {
-    if (sincronizandoRef.current) return;
-    sincronizandoRef.current = true;
-    try {
-      const estado = await Network.getNetworkStateAsync();
-      if (!estado.isConnected || !estado.isInternetReachable) return;
-
-      // El chequeo corre cada 15s (ver INTERVALO_REVISION_MS) y la enorme
-      // mayoría de las veces no hay nada pendiente — sin este chequeo previo,
-      // el banner "Sincronizando…" de BannerConexion prendía y apagaba en
-      // cada corrida, así la app estuviera al día, dando un parpadeo visible
-      // cada 15s. Ahora solo se enciende cuando de verdad hay algo que subir.
-      if (!(await hayJornadasPendientes(forzarReintento))) return;
-
-      setSincronizando(true);
+  const sincronizarAhora = useCallback(
+    async (forzarReintento = false) => {
+      // Criterio 1 (spec_sync_sin_sesion_no_agota_intentos.md, Hallazgo #56): antes esta función
+      // no comprobaba `usuario` (a diferencia de sincronizarDescargaSiCorresponde/
+      // descargarCatalogoSiCorresponde, más abajo) y corría igual con el Login a la vista -- sin
+      // sesión, `auth.uid()` es NULL y la policy de `jornadas` rechaza el upsert, agotando los 5
+      // intentos de una jornada pendiente en ~75s (ver el comentario grande de MAX_INTENTOS en
+      // syncService.ts). Va antes que el guard de abajo: sin usuario, no hay nada que hacer, ni
+      // siquiera vale la pena tomar sincronizandoRef.
+      if (!usuario) return;
+      if (sincronizandoRef.current) return;
+      sincronizandoRef.current = true;
       try {
-        await sincronizarPendientes(forzarReintento);
-        setUltimaSincronizacion(new Date());
+        const estado = await Network.getNetworkStateAsync();
+        if (!estado.isConnected || !estado.isInternetReachable) return;
+
+        // El chequeo corre cada 15s (ver INTERVALO_REVISION_MS) y la enorme
+        // mayoría de las veces no hay nada pendiente — sin este chequeo previo,
+        // el banner "Sincronizando…" de BannerConexion prendía y apagaba en
+        // cada corrida, así la app estuviera al día, dando un parpadeo visible
+        // cada 15s. Ahora solo se enciende cuando de verdad hay algo que subir.
+        if (!(await hayJornadasPendientes(forzarReintento))) return;
+
+        setSincronizando(true);
+        try {
+          await sincronizarPendientes(forzarReintento);
+          setUltimaSincronizacion(new Date());
+        } finally {
+          setSincronizando(false);
+        }
       } finally {
-        setSincronizando(false);
+        sincronizandoRef.current = false;
       }
-    } finally {
-      sincronizandoRef.current = false;
+    },
+    [usuario]
+  );
+
+  // Criterio 5 (spec_sync_sin_sesion_no_agota_intentos.md, Opción 1 de §2): al pasar de "sin
+  // usuario" a "con usuario" (login, registro, restauración al abrir la app) se reinician los
+  // intentos de las jornadas DE ESE chofer que quedaron atascadas por agotar MAX_INTENTOS, y se
+  // fuerza una sincronización -- así una jornada ya atascada por una versión anterior, o por un
+  // error que esta misma versión clasificó mal, se rescata sola al volver a entrar. Engancha al
+  // `id` (`usuario?.id`), no a la referencia del objeto `usuario` (Fase 1, sección 3.1 punto 5:
+  // `programarRecargaUsuario` puede reaplicar un Usuario con el MISMO id pero otra referencia) --
+  // con `idAnteriorRef` como memoria de la última transición vista, esto corre UNA sola vez por
+  // transición real "ninguno -> un id", nunca una vez por cada `aplicarUsuario` repetido con el
+  // mismo id. El reinicio se espera (`await`) antes de llamar a `sincronizarAhora` para que
+  // `obtenerPendientesSincronizacion` ya vea las filas reseteadas; `sincronizarAhora` sin forzar
+  // alcanza (`intentosSincronizacion` ya quedó en 0) y de paso respeta su propio guard
+  // (`sincronizandoRef`, criterio 6) -- nunca una segunda vía de subida en paralelo.
+  const idAnteriorRef = useRef<string | null>(null);
+  useEffect(() => {
+    const idActual = usuario?.id ?? null;
+    const idAnterior = idAnteriorRef.current;
+    idAnteriorRef.current = idActual;
+    if (idAnterior === null && idActual !== null) {
+      reiniciarIntentosAgotadosDeChofer(idActual, MAX_INTENTOS)
+        .then(() => sincronizarAhora())
+        .catch((err) => console.error("reiniciarIntentosAgotadosDeChofer falló:", err));
     }
-  }, []);
+  }, [usuario?.id, sincronizarAhora]);
 
   // Descarga: baja de Supabase lo que cambió sin que la app estuviera mirando — un administrador
   // que cerró una jornada desde el Dashboard ("Corregir", Hallazgo #6), o una jornada abierta que
@@ -120,15 +158,25 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
   // antes de que haya un chofer logueado (ver el `if (!usuario)` de abajo) -- sin sesión, Supabase
   // ni se consulta.
   const catalogoUltimaDescargaRef = useRef<number | null>(null);
+  // Guard de concurrencia (Hallazgo #60; spec_transaccion_catalogo_sqlite.md) -- mismo patrón que
+  // sincronizandoRef más arriba. Sin esto, dos disparos seguidos de `usuario` cambiando justo
+  // después de login/registro (AuthContext.tsx + programarRecargaUsuario.ts) podían arrancar dos
+  // descargarCatalogo() en paralelo sobre la misma conexión SQLite compartida (src/db/database.ts
+  // cachea una sola conexión para toda la app).
+  const descargandoCatalogoRef = useRef(false);
   const descargarCatalogoSiCorresponde = useCallback(async () => {
     if (!usuario) return;
+    if (descargandoCatalogoRef.current) return;
     const ultima = catalogoUltimaDescargaRef.current;
     if (ultima != null && Date.now() - ultima < INTERVALO_CATALOGO_MS) return;
+    descargandoCatalogoRef.current = true;
     try {
       await descargarCatalogo();
       catalogoUltimaDescargaRef.current = Date.now();
     } catch (err) {
       console.error("descargarCatalogoSiCorresponde falló:", err);
+    } finally {
+      descargandoCatalogoRef.current = false;
     }
   }, [usuario]);
 

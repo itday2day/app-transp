@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { envolverErrorConCampos } from "./erroresSync";
 
 const BUCKET = "evidencias";
 
@@ -28,7 +29,11 @@ export async function subirEvidencia(uri: string, ruta: string): Promise<string>
     contentType: "image/jpeg",
     upsert: true,
   });
-  if (error) throw new Error(`No se pudo subir la evidencia (${ruta}): ${error.message}`);
+  // Criterio 4 (spec_sync_sin_sesion_no_agota_intentos.md): antes `new Error(...)` a secas perdía
+  // `code`/`status`/`statusCode` del StorageError original -- sin ellos, esErrorDeAutenticacion()
+  // no podía clasificar este fallo más adelante, en el catch de sincronizarPendientes. El mensaje
+  // que ve el usuario no cambia.
+  if (error) throw envolverErrorConCampos(`No se pudo subir la evidencia (${ruta}): ${error.message}`, error);
 
   return obtenerUrlPublicaEvidencia(ruta);
 }
