@@ -58,6 +58,7 @@
     "dniEtiqueta": "DNI",
     "dniPlaceholder": "12345678A",
     "dniBloqueadoAviso": "Este DNI viene de tu invitación y no se puede cambiar acá.",
+    "cargadoPorAdministracion": "Cargado por Administración",
     "nombreEtiqueta": "Nombre",
     "nombrePlaceholder": "Tu nombre",
     "apellidosEtiqueta": "Apellidos",
@@ -249,6 +250,11 @@
     "permisoTitulo": "Permiso de cámara requerido",
     "permisoMensaje": "Activa el acceso a la cámara en Ajustes para poder adjuntar la foto."
   },
+  "galeria": {
+    "avisoTitulo": "Guardar copia de tus fotos",
+    "avisoMensaje": "Las fotos que tomes en la app también se guardarán en la galería de este teléfono, como copia para ti. Si tu teléfono sube las fotos a Google Fotos o a iCloud, estas también se subirán allí. Puedes borrarlas de la galería cuando quieras; la copia que recibe la empresa no cambia.",
+    "avisoBoton": "Entendido"
+  },
   "historial": {
     "vacioTitulo": "Aún no tienes registros",
     "vacioTexto": "Cuando hagas tu primer check-in, aparecerá aquí."
@@ -261,7 +267,6 @@
     "dia": "Día",
     "mes": "Mes",
     "anio": "Año",
-    "fechaSeleccionada": "Fecha seleccionada: {{fecha}}",
     "meses": [
       "Enero",
       "Febrero",

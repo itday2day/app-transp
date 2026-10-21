@@ -318,16 +318,43 @@ export interface DatosInvitacion {
   fecha_nacimiento: string | null;
 }
 
-/** RPC `obtener_datos_invitacion` -- SOLO acepta el token de 32 hex (no el código de 8), sin
- * sesión. 0 filas = "no existe" o "ya usada" (medido en la Fase 1b: mismo shape para ambos casos,
- * indistinguibles acá -- usar validarInvitacion() si hace falta distinguir el estado). */
+/** RPC `obtener_datos_invitacion` -- acepta el token de 32 hex O el código de 8 caracteres
+ * (spec_precarga_con_codigo_8_caracteres.md, 2026-10-20, migración obtener_datos_por_codigo),
+ * sin sesión. 0 filas = "no existe", "ya usada", vencida, revocada o un valor mal formado (medido
+ * en la Fase 1b y en la Fase 1 de esa spec: mismo shape para todos los casos, indistinguibles
+ * acá -- usar validarInvitacion() si hace falta distinguir el estado). */
 export async function obtenerDatosInvitacion(
-  token: string,
+  valor: string,
   cliente: ClienteAuthCore
 ): Promise<DatosInvitacion | null> {
-  const { data } = await cliente.rpc("obtener_datos_invitacion", { p_token: token });
+  const { data } = await cliente.rpc("obtener_datos_invitacion", { p_token: valor });
   if (!data || !Array.isArray(data) || data.length === 0) return null;
   return data[0] as DatosInvitacion;
+}
+
+/** Criterio 15 (spec_precarga_con_codigo_8_caracteres.md): una sola rutina para las dos entradas
+ * (enlace con token, código de 8 escrito a mano) -- antes RegistroScreen.tsx tenía dos copias de
+ * este mismo Promise.all, una por entrada, y la del código ni siquiera llamaba a
+ * obtenerDatosInvitacion() (de ahí el síntoma que originó la spec: por código, formulario vacío
+ * siempre). `valor` ya viene normalizado por el llamador (tokenValido()/normalizarCodigoInvitacion()
+ * según la entrada) -- esta función no normaliza nada, solo orquesta las dos llamadas.
+ *
+ * ⚠️ Criterio 7: si `obtenerDatosInvitacion` falla o rechaza (red), `datos` resuelve a `null` y
+ * NO se propaga ningún error nuevo -- el formulario queda vacío, igual que hoy con el código; lo
+ * único que decide la pantalla sigue siendo `resultado` (validarInvitacion). `validarInvitacion`
+ * NO se envuelve en ningún try/catch acá -- se mantiene el comportamiento actual: si esa llamada
+ * rechaza (una falla de red ANTES de que supabase-js resuelva con {data,error,status}, distinta
+ * del caso ya cubierto por su propio `if (error)`), la promesa de esta función rechaza igual que
+ * hoy rechazaría el Promise.all() que tenía RegistroScreen.tsx -- sin ningún manejo nuevo. */
+export async function resolverInvitacion(
+  valor: string,
+  cliente: ClienteAuthCore
+): Promise<{ datos: DatosInvitacion | null; resultado: ResultadoValidarInvitacion }> {
+  const [datos, resultado] = await Promise.all([
+    obtenerDatosInvitacion(valor, cliente).catch(() => null),
+    validarInvitacion(valor, cliente),
+  ]);
+  return { datos, resultado };
 }
 
 type ClaveInvitacionInvalida =

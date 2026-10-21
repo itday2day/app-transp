@@ -1,6 +1,7 @@
 import React, { forwardRef, useRef, useState } from "react";
 import { View, Text, TextInput, Pressable, StyleSheet, TextInputProps } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "react-i18next";
 import { useEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
@@ -19,12 +20,33 @@ interface Props extends TextInputProps {
    * oculta el `<Text>{etiqueta}</Text>` de arriba del campo. `accessibilityLabel` (ya heredado de
    * `TextInputProps`) es quien le da nombre al lector de pantalla en ese caso. */
   ocultarEtiquetaVisible?: boolean;
+  /** Criterio 18 (spec_precarga_con_codigo_8_caracteres.md): fondo colores.advertenciaFondo y,
+   * debajo, la línea "Cargado por Administración" -- también se agrega al accessibilityLabel
+   * (criterio 10: la marca no depende solo del color). Sin esta prop (default `undefined`), el
+   * campo se ve EXACTAMENTE igual que siempre -- ningún otro llamador de CampoTexto la pasa
+   * (CheckInForm, CheckOutForm, IncidenciasForm, SelectorMatricula, LoginScreen,
+   * CambiarContrasenaObligatorioScreen, CodigoVerificacionScreen, NuevaContrasenaScreen,
+   * RecuperarContrasenaScreen -- confirmado por grep antes de escribir esto), así que ninguno
+   * cambia. */
+  precargado?: boolean;
 }
 
 export const CampoTexto = forwardRef<TextInput, Props>(function CampoTexto(
-  { etiqueta, error, style, secureTextEntry, alternarVisibilidad, ocultarEtiquetaVisible, onFocus, ...resto },
+  {
+    etiqueta,
+    error,
+    style,
+    secureTextEntry,
+    alternarVisibilidad,
+    ocultarEtiquetaVisible,
+    precargado,
+    accessibilityLabel,
+    onFocus,
+    ...resto
+  },
   ref
 ) {
+  const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const ocultarTexto = alternarVisibilidad ? secureTextEntry && !visible : secureTextEntry;
   const refInterno = useRef<TextInput>(null);
@@ -32,6 +54,18 @@ export const CampoTexto = forwardRef<TextInput, Props>(function CampoTexto(
   // pantalla que no envuelva su contenido en ProveedorEnfoqueTeclado (login, cambiar contraseña,
   // etc.) -- ahí este campo se comporta exactamente igual que siempre.
   const enfoqueTeclado = useEnfoqueTeclado();
+
+  // Corrección de la revisión: SIN `precargado`, el TextInput recibe EXACTAMENTE el
+  // `accessibilityLabel` que le pasó el llamador (o `undefined`, si no pasó nada) -- igual que
+  // antes de esta prop. El fallback a `etiqueta` (cuando la visible está oculta y nadie pasó un
+  // accessibilityLabel explícito) SOLO se calcula para componer el sufijo, y solo se usa cuando
+  // `precargado` es true -- nunca cambia lo que ya recibían las otras 9 pantallas que usan
+  // CampoTexto sin esta prop.
+  const etiquetaBase = accessibilityLabel ?? (ocultarEtiquetaVisible ? undefined : etiqueta);
+  const etiquetaAccesible =
+    precargado && etiquetaBase
+      ? `${etiquetaBase}, ${t("registro.cargadoPorAdministracion")}`
+      : accessibilityLabel;
 
   return (
     <View style={estilos.contenedor}>
@@ -47,10 +81,12 @@ export const CampoTexto = forwardRef<TextInput, Props>(function CampoTexto(
             estilos.input,
             alternarVisibilidad && estilos.inputConIcono,
             Boolean(error) && estilos.inputConError,
+            precargado && estilos.inputPrecargado,
             style,
           ]}
           placeholderTextColor={colores.textoSecundario}
           secureTextEntry={ocultarTexto}
+          accessibilityLabel={etiquetaAccesible}
           onFocus={(evento) => {
             enfoqueTeclado?.manejarFoco(refInterno);
             onFocus?.(evento);
@@ -73,6 +109,11 @@ export const CampoTexto = forwardRef<TextInput, Props>(function CampoTexto(
           </Pressable>
         )}
       </View>
+      {/* Criterio 10: la línea visible es la que de verdad hace accesible la marca -- el color
+          (estilos.inputPrecargado, arriba) nunca es la única señal. */}
+      {precargado ? (
+        <Text style={estilos.textoPrecargado}>{t("registro.cargadoPorAdministracion")}</Text>
+      ) : null}
       {error ? <Text style={estilos.textoError}>{error}</Text> : null}
     </View>
   );
@@ -99,6 +140,16 @@ const estilos = StyleSheet.create({
   },
   inputConError: {
     borderColor: colores.peligro,
+  },
+  // Decisión del usuario (2026-10-20): colores.advertenciaFondo, ya existente -- sin colores
+  // nuevos (el mismo tono que ya usa la insignia de "jornada abierta" en TarjetaJornada.tsx).
+  inputPrecargado: {
+    backgroundColor: colores.advertenciaFondo,
+  },
+  textoPrecargado: {
+    ...tipografia.ayuda,
+    color: colores.textoSecundario,
+    marginTop: espaciado.xs,
   },
   filaInput: {
     flexDirection: "row",

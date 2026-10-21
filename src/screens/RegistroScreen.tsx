@@ -16,7 +16,7 @@ import { SelectorFecha } from "@/components/SelectorFecha";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { TextoEnlace } from "@/components/TextoEnlace";
 import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
-import { validarInvitacion, obtenerDatosInvitacion, registrarChofer } from "@/services/authCore";
+import { resolverInvitacion, registrarChofer, type DatosInvitacion } from "@/services/authCore";
 import { supabase } from "@/lib/supabase";
 import { validarDatosRegistro, normalizarDni, type DatosRegistro } from "@/utils/validarDatosRegistro";
 import { validarContrasena } from "@/utils/validarContrasena";
@@ -29,6 +29,7 @@ import {
   tokenValido,
   normalizarCodigoInvitacion,
   codigoInvitacionCompleto,
+  marcasPrecargadas,
 } from "./logicaRegistro";
 import { RootStackParamList, RootStackNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
@@ -37,11 +38,14 @@ import { espaciado } from "@/theme/spacing";
 
 type RegistroRouteProp = RouteProp<RootStackParamList, "Registro">;
 
-// spec_app_registro_paso5.md, paso 2c-3. Dos caminos de entrada: por enlace con token (route.params.token,
-// 32 hex) -- precarga datos y bloquea el DNI -- o por código de 8 escrito a mano (DNI editable).
-// En los DOS, validar_invitacion corre ANTES de mostrar el formulario (criterio 2) -- nunca se
-// confía solo en obtener_datos_invitacion (0 filas ahí no distingue "no existe" de "ya usada",
-// medido en la Fase 1b).
+// spec_app_registro_paso5.md, paso 2c-3. Dos caminos de entrada: por enlace con token
+// (route.params.token, 32 hex) o por código de 8 escrito a mano -- spec_precarga_con_codigo_8_caracteres.md
+// (2026-10-20) igualó los dos: los DOS precargan los mismos datos y bloquean el DNI si la
+// invitación lo trae atado, vía resolverInvitacion() (authCore.ts), que corre
+// obtenerDatosInvitacion() y validarInvitacion() en paralelo. En los DOS, el resultado de
+// validarInvitacion es quien decide si se muestra el formulario (criterio 2) -- nunca se confía
+// solo en obtenerDatosInvitacion (0 filas ahí no distingue "no existe" de "ya usada", medido en
+// la Fase 1b).
 export default function RegistroScreen() {
   const { t } = useTranslation();
   const navigation = useNavigation<RootStackNavigationProp>();
@@ -75,46 +79,62 @@ export default function RegistroScreen() {
   // criterio 5: ya existe una cuenta CONFIRMADA con ese correo -- reemplaza el botón normal de
   // "confirmarCorreo" por las DOS salidas que pide la spec (Iniciar sesión / Recuperar contraseña).
   const [correoYaRegistrado, setCorreoYaRegistrado] = useState(false);
+  // Criterio 17/18: snapshot de los datos TAL CUAL llegaron de la invitación (nunca se vuelve a
+  // tocar después de aplicarDatosInvitacion) -- marcasPrecargadas() lo compara contra lo que el
+  // chofer tiene tecleado AHORA en cada render, para decidir qué campos llevan la marca "Cargado
+  // por Administración". `null` (nunca se aplicó nada, o invitación sin datos propios) -> ningún
+  // campo con marca.
+  const [precargado, setPrecargado] = useState<DatosInvitacion | null>(null);
   const scrollRef = useRef<ScrollView>(null);
 
-  // Sin token: queda en fase "invitacion" esperando el código de 8 -- el efecto de abajo (precarga
-  // + validarInvitacion) solo corre si HAY token.
+  // Criterio 15 (spec_precarga_con_codigo_8_caracteres.md): aplica los datos de la invitación al
+  // formulario -- la MISMA función para las dos entradas (enlace y código), para no duplicar esta
+  // lógica. Solo se llama cuando la invitación resultó "valida" (nunca con datos de una
+  // invitación usada/revocada/vencida/inexistente, aunque obtenerDatosInvitacion() hubiera
+  // devuelto algo -- ver el `if (accion.tipo === "valida")` de los dos llamadores, abajo).
   //
-  // M2 (corrección): obtenerDatosInvitacion() y validarInvitacion() corrían en paralelo, cada una
-  // decidiendo su propio pedazo de estado por su cuenta. Si validarInvitacion() resolvía primero,
-  // setFase("formulario") montaba CampoTelefono/SelectorFecha ANTES de que
-  // obtenerDatosInvitacion() hubiera llamado a setTelefono()/setFechaNacimiento() -- los dos son
-  // componentes con estado interno propio que solo leen su prop `valor` AL MONTARSE (useState(()
-  // => separarTelefono(valor)) en CampoTelefono.tsx:29; dia/mes/año en SelectorFecha.tsx:45-47,
-  // ninguno sincronizado con `valor` después del montaje), así que un valor que llega tarde queda
-  // guardado en el padre pero invisible en el campo -- el chofer vería el campo vacío y podría
-  // enviar un teléfono/fecha que no ve. (SelectorBuscable.tsx NO tiene este problema: lee `valor`
-  // directo en cada render, sin estado propio que lo espejee -- confirmado leyendo su código,
-  // SelectorBuscable.tsx:89-91.) Un solo Promise.all() espera las DOS antes de aplicar cualquier
-  // estado y de decidir la fase -- CampoTelefono/SelectorFecha solo se montan (fase "formulario")
-  // con los valores ya finales, nunca a mitad de carga.
+  // M2 (corrección, previa a esta spec): obtenerDatosInvitacion() y validarInvitacion() corrían
+  // en paralelo, cada una decidiendo su propio pedazo de estado por su cuenta. Si
+  // validarInvitacion() resolvía primero, setFase("formulario") montaba
+  // CampoTelefono/SelectorFecha ANTES de que obtenerDatosInvitacion() hubiera llamado a
+  // setTelefono()/setFechaNacimiento() -- los dos son componentes con estado interno propio que
+  // leen su prop `valor` AL MONTARSE, así que un valor que llega tarde queda guardado en el padre
+  // pero invisible en el campo. Por eso `aplicarDatosInvitacion` se llama DESPUÉS de que
+  // resolverInvitacion() (authCore.ts) ya esperó las dos llamadas, nunca antes.
+  //
+  // ⚠️ Hallazgo (Paso 3, probado en el iPhone con un código real): hasta una corrección posterior
+  // de esta misma spec, lo de arriba era CIERTO para CampoTelefono.tsx (useState(() =>
+  // separarTelefono(valor))) pero FALSO para SelectorFecha.tsx -- dia/mes/año arrancaban SIEMPRE
+  // en null, sin leer `valor` en absoluto, montara antes o después de que fechaNacimiento
+  // tuviera un valor real. El síntoma (desplegables vacíos con «Fecha seleccionada: null/01/null»
+  // mientras el padre sí tenía la fecha) no era un problema de orden/batching de los `set*` de
+  // aquí -- SelectorFecha.tsx ya corrige esto con su propio useState(() => descomponerFechaIso(valor)).
+  function aplicarDatosInvitacion(datos: DatosInvitacion | null) {
+    if (!datos) return;
+    // criterio 6: cada campo es string | null -- una invitación "abierta" (por enlace o por
+    // código) puede no traer ninguno de estos datos (schema.sql:490-495).
+    setDni(datos.dni ?? "");
+    setNombre(datos.nombre ?? "");
+    setApellidos(datos.apellidos ?? "");
+    setTelefono(datos.telefono ?? "");
+    setFechaNacimiento(datos.fecha_nacimiento);
+    setCorreo(datos.email ?? "");
+    // El DNI solo se bloquea si la invitación realmente lo trae atado -- una invitación abierta
+    // sin DNI no puede bloquear un campo que el chofer todavía tiene que completar.
+    setDniBloqueado(datos.dni !== null);
+    // Criterio 17/18: guarda el snapshot TAL CUAL (sin ?? "", sin tocar) -- marcasPrecargadas()
+    // es quien decide, campo por campo, si lo que hay ahora sigue igual a esto.
+    setPrecargado(datos);
+  }
+
+  // Sin token: queda en fase "invitacion" esperando el código de 8 -- el efecto de abajo solo
+  // corre si HAY token.
   useEffect(() => {
     if (!tokenInicial) return;
-    Promise.all([
-      obtenerDatosInvitacion(tokenInicial, supabase),
-      validarInvitacion(tokenInicial, supabase),
-    ]).then(([datos, resultado]) => {
-      if (datos) {
-        // criterio 2: cada campo es string | null -- una invitación "abierta" compartida por
-        // enlace puede no traer ninguno de estos datos (schema.sql:490-495), igual que por
-        // código de 8.
-        setDni(datos.dni ?? "");
-        setNombre(datos.nombre ?? "");
-        setApellidos(datos.apellidos ?? "");
-        setTelefono(datos.telefono ?? "");
-        setFechaNacimiento(datos.fecha_nacimiento);
-        setCorreo(datos.email ?? "");
-        // El DNI solo se bloquea si la invitación realmente lo trae atado -- una invitación
-        // abierta sin DNI no puede bloquear un campo que el chofer todavía tiene que completar.
-        setDniBloqueado(datos.dni !== null);
-      }
+    resolverInvitacion(tokenInicial, supabase).then(({ datos, resultado }) => {
       const accion = accionDeResultadoValidarInvitacion(resultado);
       if (accion.tipo === "valida") {
+        aplicarDatosInvitacion(datos);
         setFase("formulario");
       } else {
         setErrorInvitacion(t(accion.textoClave));
@@ -126,17 +146,21 @@ export default function RegistroScreen() {
   }, []);
 
   async function manejarValidarInvitacionManual() {
-    // Criterio 15: "Continuar" no llama a validar_invitacion si no hay 8 -- `invitacion` ya
+    // Criterio 15: "Continuar" no llama a resolverInvitacion si no hay 8 -- `invitacion` ya
     // viene normalizado por normalizarCodigoInvitacion() desde el propio onChangeText, así que
     // esta comprobación es solo defensiva (longitud exacta).
     if (!codigoInvitacionCompleto(invitacion) || validandoInvitacion) return;
     setErrorInvitacion(null);
     setValidandoInvitacion(true);
     try {
-      const resultado = await validarInvitacion(invitacion, supabase);
+      const { datos, resultado } = await resolverInvitacion(invitacion, supabase);
       const accion = accionDeResultadoValidarInvitacion(resultado);
-      if (accion.tipo === "valida") setFase("formulario");
-      else setErrorInvitacion(t(accion.textoClave));
+      if (accion.tipo === "valida") {
+        aplicarDatosInvitacion(datos);
+        setFase("formulario");
+      } else {
+        setErrorInvitacion(t(accion.textoClave));
+      }
     } finally {
       setValidandoInvitacion(false);
     }
@@ -150,6 +174,11 @@ export default function RegistroScreen() {
     telefono,
   };
   const erroresCampo = validarDatosRegistro(datosCampos);
+  // Criterio 17/18: se recalcula en cada render contra el snapshot de `precargado` -- editar un
+  // campo (y volver a escribir el valor original) actualiza la marca sola, sin ningún efecto
+  // aparte (marcasPrecargadas es pura, RegistroScreen ya re-renderiza con cada setNombre/
+  // setTelefono/etc. de los campos de abajo).
+  const marcas = marcasPrecargadas(precargado, { nombre, apellidos, telefono, fechaNacimiento, correo });
   const errorContrasena = validarContrasena(contrasena);
   const contrasenasCoinciden = confirmarContrasena.length === 0 || confirmarContrasena === contrasena;
   const correoValido = CORREO_VALIDO_REGEX.test(correo.trim());
@@ -389,6 +418,7 @@ export default function RegistroScreen() {
             onChangeText={setNombre}
             onBlur={() => marcarTocado("nombre")}
             error={errorDeCampo("nombre", "nombre")}
+            precargado={marcas.nombre}
           />
 
           <CampoTexto
@@ -398,6 +428,7 @@ export default function RegistroScreen() {
             onChangeText={setApellidos}
             onBlur={() => marcarTocado("apellidos")}
             error={errorDeCampo("apellidos", "apellidos")}
+            precargado={marcas.apellidos}
           />
 
           <SelectorFecha
@@ -410,6 +441,7 @@ export default function RegistroScreen() {
               // fecha, en vez de recién tras pulsar "Continuar", se marca "tocado" acá mismo.
               marcarTocado("fechaNacimiento");
             }}
+            precargado={marcas.fechaNacimiento}
           />
           {(tocado.fechaNacimiento || intentoEnvio) && erroresCampo.fechaNacimiento ? (
             <Text style={estilos.error}>{t(claveErrorCampo(erroresCampo.fechaNacimiento))}</Text>
@@ -431,6 +463,7 @@ export default function RegistroScreen() {
                   : t("registro.telefonoInvalido", { pais: separarTelefono(telefono).pais })
                 : undefined
             }
+            precargado={marcas.telefono}
           />
 
           <CampoTexto
@@ -443,6 +476,7 @@ export default function RegistroScreen() {
             value={correo}
             onChangeText={setCorreo}
             onBlur={() => marcarTocado("correo")}
+            precargado={marcas.correo}
             error={
               (tocado.correo || intentoEnvio) && !correoValido
                 ? t(correo.trim().length === 0 ? "comun.campoObligatorio" : "registro.correoInvalido")

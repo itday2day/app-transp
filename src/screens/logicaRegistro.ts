@@ -2,7 +2,12 @@
 // validarInvitacion()/registrarChofer() (authCore.ts). Mismo criterio que el resto de la familia
 // accionDeResultado*: sin React, sin i18n, se compila con `tsc` puro, se prueba con `node`.
 
-import type { ResultadoValidarInvitacion, ResultadoRegistro, EstadoInvitacion } from "@/services/authCore";
+import type {
+  ResultadoValidarInvitacion,
+  ResultadoRegistro,
+  EstadoInvitacion,
+  DatosInvitacion,
+} from "@/services/authCore";
 import type { ClaveErrorRegistro } from "@/utils/validarDatosRegistro";
 import type { ClaveTraduccion } from "@/i18n";
 
@@ -46,6 +51,134 @@ export function normalizarCodigoInvitacion(texto: string): string {
 
 export function codigoInvitacionCompleto(texto: string): boolean {
   return normalizarCodigoInvitacion(texto).length === LONGITUD_CODIGO_INVITACION;
+}
+
+/** Criterio 17 (spec_precarga_con_codigo_8_caracteres.md): ¿el valor actual de un campo precargado
+ * sigue igual a lo que llegó de la invitación? -- usada por la pantalla (3b) para decidir si se
+ * muestra la marca "Cargado por Administración" o si el chofer ya lo editó. Compara ya
+ * normalizado (sin espacios de más AL INICIO/FINAL, sin distinguir mayúsculas/minúsculas) --
+ * NUNCA el texto crudo. La normalización ESPECÍFICA de cada campo (el DNI ya viene en mayúsculas
+ * de normalizarDni(), el teléfono ya combinado a E.164 con su país vía combinarTelefono(), nunca
+ * el texto crudo del campo numérico suelto) es responsabilidad del llamador, antes de pasar los
+ * dos valores acá -- esta función no sabe nada de países ni de DNIs, solo compara dos strings.
+ *
+ * ⚠️ Corrección: `trim()` solo quita espacios de los EXTREMOS -- espacios dobles (u otros)
+ * DENTRO del valor ("Juan  Carlos" vs "Juan Carlos") NO se colapsan, así que esos dos NO cuentan
+ * como iguales a propósito (no es el mismo caso que "un espacio de más al final", que la spec sí
+ * pide tratar como igual).
+ *
+ * `valorPrecargado === null`, o vacío tras recortarlo (""/"   ") -- el campo nunca vino de la
+ * invitación con un valor real (abierta, ese dato en particular no estaba atado, o la invitación
+ * lo trae como cadena vacía) -- siempre "sin marca", sin importar qué haya tecleado el chofer. */
+export function sigueIgualAPrecargado(valorActual: string, valorPrecargado: string | null): boolean {
+  if (valorPrecargado === null || valorPrecargado.trim() === "") return false;
+  return valorActual.trim().toUpperCase() === valorPrecargado.trim().toUpperCase();
+}
+
+/** Lo que el formulario necesita comparar para decidir las marcas -- los mismos 5 campos de
+ * DatosInvitacion menos `dni` (criterio 13: el DNI atado NUNCA lleva esta marca, conserva su
+ * propio aviso de siempre, registro.dniBloqueadoAviso). */
+export interface ValoresActualesFormulario {
+  nombre: string;
+  apellidos: string;
+  telefono: string;
+  fechaNacimiento: string | null;
+  correo: string;
+}
+
+export interface MarcasPrecargadas {
+  nombre: boolean;
+  apellidos: boolean;
+  telefono: boolean;
+  fechaNacimiento: boolean;
+  correo: boolean;
+}
+
+/** Criterio 17: un booleano por campo, "¿sigue igual a lo precargado?" -- `precargado` es el
+ * `DatosInvitacion` tal cual llegó de resolverInvitacion()/aplicarDatosInvitacion() (RegistroScreen.tsx),
+ * sin volver a tocarlo. `precargado === null` (nunca se llegó a aplicar nada, p. ej. la
+ * invitación todavía no resolvió o no es válida) -> ningún campo lleva marca, igual que una
+ * invitación abierta (los 6 campos en `null`) -- los dos casos pasan por el mismo
+ * sigueIgualAPrecargado(), que ya trata `null` como "sin marca".
+ *
+ * Formatos ya confirmados contra RegistroScreen.tsx antes de escribir esto (mismo lado en los
+ * dos valores de cada comparación, nunca el texto crudo de un campo numérico suelto):
+ * - telefono: E.164 en los dos lados -- el estado `telefono` del formulario SIEMPRE lo guarda ya
+ *   combinado con el país (CampoTelefono.tsx, onCambiar -> combinarTelefono()), y `datos.telefono`
+ *   llega igual de la base (el Dashboard también lo combina con combinarTelefono() antes de
+ *   guardar). Nunca el número suelto sin el prefijo.
+ * - fechaNacimiento: "YYYY-MM-DD" en los dos lados -- SelectorFecha.tsx arma la misma fechaIso al
+ *   elegir, y `datos.fecha_nacimiento` llega así de la columna `date` (confirmado en el Paso 2,
+ *   HTTP real: "1996-06-06"), nunca un formato de pantalla ("05/05/1995").
+ * - nombre/apellidos/correo: texto simple, se comparan recortados (sigueIgualAPrecargado ya lo
+ *   hace) -- correo no necesita ninguna normalización extra del llamador: el formulario no lo
+ *   normaliza más que un `.trim()` propio al enviar (RegistroScreen.tsx, correoValido), lo mismo
+ *   que ya hace esta función. */
+export function marcasPrecargadas(
+  precargado: DatosInvitacion | null,
+  actual: ValoresActualesFormulario
+): MarcasPrecargadas {
+  return {
+    nombre: sigueIgualAPrecargado(actual.nombre, precargado?.nombre ?? null),
+    apellidos: sigueIgualAPrecargado(actual.apellidos, precargado?.apellidos ?? null),
+    telefono: sigueIgualAPrecargado(actual.telefono, precargado?.telefono ?? null),
+    fechaNacimiento: sigueIgualAPrecargado(
+      actual.fechaNacimiento ?? "",
+      precargado?.fecha_nacimiento ?? null
+    ),
+    correo: sigueIgualAPrecargado(actual.correo, precargado?.email ?? null),
+  };
+}
+
+export interface FechaIsoDescompuesta {
+  dia: string;
+  /** 0-based (0 = enero) -- el mismo índice que ya usa MESES.indexOf()/MESES[...] en
+   * SelectorFecha.tsx. Esta función nunca devuelve el NOMBRE del mes: necesitaría las 12
+   * traducciones de `MESES` (i18n), y este archivo se mantiene sin React, sin i18n -- el
+   * llamador (que ya tiene `MESES` en su propio scope) hace `MESES[mesIndice]`. */
+  mesIndice: number;
+  anio: string;
+}
+
+/** Corrección (spec_precarga_con_codigo_8_caracteres.md, Paso 3c): descompone un ISO
+ * "YYYY-MM-DD" en las piezas que SelectorFecha.tsx necesita para su estado inicial -- SIN `Date`
+ * ni husos horarios (un `Date` interpreta el string en UTC o en la zona local según el motor, con
+ * riesgo real de correr un día para fechas cercanas a medianoche). Partir el string a mano y
+ * validar cada parte como entero es determinista en cualquier huso.
+ *
+ * `dia` y `anio` ya van en el MISMO formato que usan las opciones de los desplegables de
+ * SelectorFecha.tsx (confirmado leyendo ese archivo antes de escribir esto): día de 2 cifras con
+ * cero a la izquierda (`diasDisponibles`: `.padStart(2, "0")`), año como string SIN padding
+ * (`aniosDisponibles`: `String(anio)`) -- si no coinciden exactamente, el desplegable no
+ * reconoce el valor como ninguna de sus opciones y se ve vacío (justo el síntoma medido en el
+ * iPhone antes de esta corrección).
+ *
+ * Tolera mes/día de 1 o 2 cifras en la ENTRADA (por si algún dato llegara sin el cero, aunque lo
+ * medido contra la base real en el Paso 2 siempre lo trae con 2 cifras) y SIEMPRE devuelve `dia`
+ * ya con 2 cifras -- el formato de salida es el único que le importa al desplegable.
+ *
+ * ⚠️ No valida que el día exista en ese mes (ej. "2021-04-31", abril solo tiene 30) -- esa
+ * garantía sigue siendo de `validarDatosRegistro()`/el trigger; esta función solo decide qué
+ * mostrar en los tres desplegables, nunca si la fecha es válida para registrarse.
+ *
+ * Vacío, `null`, o mal formado (incluido un mes o día fuera de 1-12/1-31) -> `null` --
+ * SelectorFecha.tsx queda con los tres desplegables en blanco, igual que hoy sin este valor. */
+export function descomponerFechaIso(valor: string | null): FechaIsoDescompuesta | null {
+  if (!valor) return null;
+  const partes = valor.split("-");
+  if (partes.length !== 3) return null;
+  const [anioTexto, mesTexto, diaTexto] = partes;
+  if (!/^\d{4}$/.test(anioTexto) || !/^\d{1,2}$/.test(mesTexto) || !/^\d{1,2}$/.test(diaTexto)) {
+    return null;
+  }
+  const mes = Number(mesTexto);
+  const dia = Number(diaTexto);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+  return {
+    dia: String(dia).padStart(2, "0"),
+    mesIndice: mes - 1,
+    anio: anioTexto,
+  };
 }
 
 export type AccionValidarInvitacion = { tipo: "valida" } | { tipo: "error"; textoClave: ClaveTraduccion };

@@ -13,7 +13,7 @@ import {
 } from "@/utils/telefonoPais";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
-import { espaciado } from "@/theme/spacing";
+import { espaciado, radios } from "@/theme/spacing";
 
 interface Props {
   etiqueta: string;
@@ -29,6 +29,13 @@ interface Props {
   // número). RegistroScreen decide el texto (necesita el país, que deriva de `valor` con
   // separarTelefono() -- nunca de parsePhoneNumberFromString(valor).country, ver telefonoPais.ts).
   error?: string;
+  /** Criterio 18 (spec_precarga_con_codigo_8_caracteres.md): fondo colores.advertenciaFondo
+   * cubriendo TODA la fila (prefijo y número) y, debajo, UNA sola línea "Cargado por
+   * Administración" (no una por sub-control -- a propósito no se pasa esta prop ni a
+   * SelectorBuscable ni a CampoTexto de abajo, para no duplicarla). Sin esta prop (default
+   * `undefined`), igual que siempre. Único llamador de CampoTelefono en toda la app:
+   * RegistroScreen.tsx (confirmado por grep). */
+  precargado?: boolean;
 }
 
 // spec_app_registro_paso5.md, paso 2c-3: selector de país (SelectorBuscable<Pais>, genérico, ya
@@ -42,7 +49,7 @@ interface Props {
 // `accessibilityLabel` para lectores de pantalla. Selector compacto (P2): cerrado muestra solo
 // "+<prefijo>" (`obtenerEtiquetaCompacta`); la lista abierta sigue mostrando "País (+prefijo)",
 // filtrable, sin cambios. Misma altura (52px) en los dos controles de la fila.
-export function CampoTelefono({ etiqueta, valor, onCambiar, onBlur, error }: Props) {
+export function CampoTelefono({ etiqueta, valor, onCambiar, onBlur, error, precargado }: Props) {
   const { t } = useTranslation();
   const [inicial] = useState(() => separarTelefono(valor));
   const [pais, setPais] = useState(inicial.pais);
@@ -67,14 +74,25 @@ export function CampoTelefono({ etiqueta, valor, onCambiar, onBlur, error }: Pro
 
   const paisSeleccionado = PAISES.find((p) => p.nombre === pais) ?? null;
 
+  // Criterio 18: UNA etiqueta accesible por sub-control, con el sufijo agregado acá mismo (no se
+  // pasa `precargado` a SelectorBuscable ni a CampoTexto -- cada uno pintaría su PROPIA línea
+  // "Cargado por Administración" por separado, y la spec pide una sola para toda la fila).
+  const prefijoEtiquetaAccesible = precargado
+    ? `${t("campoTelefono.prefijoEtiquetaAccesible")}, ${t("registro.cargadoPorAdministracion")}`
+    : t("campoTelefono.prefijoEtiquetaAccesible");
+  const numeroEtiquetaAccesible = precargado
+    ? `${t("campoTelefono.numeroEtiqueta")}, ${t("registro.cargadoPorAdministracion")}`
+    : t("campoTelefono.numeroEtiqueta");
+
   return (
     <View style={estilos.contenedor}>
       <Text style={estilos.etiqueta}>{etiqueta}</Text>
-      <View style={estilos.fila}>
-        <View style={estilos.columnaPrefijo}>
+      <View style={[estilos.fila, precargado && estilos.filaPrecargada]}>
+        <View style={[estilos.columnaPrefijo, precargado && estilos.columnaSinMargenInferior]}>
           <SelectorBuscable<Pais>
             etiqueta={t("campoTelefono.prefijoEtiquetaAccesible")}
             ocultarEtiquetaVisible
+            accessibilityLabel={prefijoEtiquetaAccesible}
             placeholder={t("campoTelefono.paisPlaceholder")}
             valor={paisSeleccionado}
             opciones={PAISES}
@@ -84,11 +102,11 @@ export function CampoTelefono({ etiqueta, valor, onCambiar, onBlur, error }: Pro
             onSeleccionar={(p) => actualizarPais(p.nombre)}
           />
         </View>
-        <View style={estilos.columnaNumero}>
+        <View style={[estilos.columnaNumero, precargado && estilos.columnaSinMargenInferior]}>
           <CampoTexto
             etiqueta={t("campoTelefono.numeroEtiqueta")}
             ocultarEtiquetaVisible
-            accessibilityLabel={t("campoTelefono.numeroEtiqueta")}
+            accessibilityLabel={numeroEtiquetaAccesible}
             placeholder={t("campoTelefono.numeroPlaceholder")}
             keyboardType="phone-pad"
             value={numero}
@@ -98,6 +116,11 @@ export function CampoTelefono({ etiqueta, valor, onCambiar, onBlur, error }: Pro
           />
         </View>
       </View>
+      {/* Criterio 10: la línea visible es la que de verdad hace accesible la marca -- el fondo
+          (estilos.filaPrecargada, arriba) nunca es la única señal. */}
+      {precargado ? (
+        <Text style={estilos.textoPrecargado}>{t("registro.cargadoPorAdministracion")}</Text>
+      ) : null}
       {error ? <Text style={estilos.textoError}>{error}</Text> : null}
     </View>
   );
@@ -116,12 +139,29 @@ const estilos = StyleSheet.create({
     flexDirection: "row",
     gap: espaciado.sm,
   },
+  // Decisión del usuario (2026-10-20): colores.advertenciaFondo, ya existente -- sin colores
+  // nuevos. El selector y el campo de número conservan su propio fondo opaco -- padding + radio
+  // acá para que se vea como una tarjeta resaltada alrededor de los dos, no solo en el hueco del
+  // `gap` entre ellos (criterio 18: "cubre TODA la fila, prefijo y número").
+  filaPrecargada: {
+    backgroundColor: colores.advertenciaFondo,
+    borderRadius: radios.md,
+    padding: espaciado.xs,
+  },
   // P2: selector compacto -- ancho de contenido, no flex:1 (eso se lo lleva el número).
   columnaPrefijo: {
     width: 92,
   },
   columnaNumero: {
     flex: 1,
+  },
+  // Corrección (Paso 3c, criterio 7): SelectorBuscable/CampoTexto traen su propio
+  // `contenedor: { marginBottom: espaciado.md }` (16) SIEMPRE, sin condición -- atrapado dentro
+  // del `padding: espaciado.xs` (4) de filaPrecargada, de arriba, se veía como un hueco extra
+  // abajo. Se cancela EXACTO solo cuando `precargado` está activo -- sin la marca,
+  // columnaPrefijo/columnaNumero quedan con su único estilo de siempre (width/flex).
+  columnaSinMargenInferior: {
+    marginBottom: -espaciado.md,
   },
   // Mismos 52px que el selector (SelectorBuscable.tsx: estilos.selector) -- criterio 8, "misma
   // altura" -- el default de CampoTexto queda por debajo de los 48px mínimos.
@@ -131,6 +171,11 @@ const estilos = StyleSheet.create({
   textoError: {
     ...tipografia.ayuda,
     color: colores.peligro,
+    marginTop: espaciado.xs,
+  },
+  textoPrecargado: {
+    ...tipografia.ayuda,
+    color: colores.textoSecundario,
     marginTop: espaciado.xs,
   },
 });

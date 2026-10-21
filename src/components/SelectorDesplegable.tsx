@@ -21,6 +21,13 @@ interface Props {
   textoDeshabilitado?: string;
   opcionEspecial?: OpcionEspecial;
   error?: string;
+  /** Criterio 18 (spec_precarga_con_codigo_8_caracteres.md): mismo patrón que ya tienen
+   * CampoTexto/SelectorBuscable -- oculta el `<Text>{etiqueta}</Text>` de arriba del botón (ej.
+   * SelectorFecha.tsx: un solo título "Fecha de nacimiento" cubre día/mes/año, así que cada
+   * sub-selector no necesita repetir el suyo, vacío). Sin esta prop (default `false`), igual que
+   * siempre -- CheckInForm.tsx y SelectorMatricula.tsx (los otros dos llamadores, confirmado por
+   * grep) no la pasan. */
+  ocultarEtiquetaVisible?: boolean;
 }
 
 // Dropdown genérico construido desde cero (TouchableOpacity + Modal + FlatList,
@@ -35,13 +42,14 @@ export function SelectorDesplegable({
   textoDeshabilitado,
   opcionEspecial,
   error,
+  ocultarEtiquetaVisible,
 }: Props) {
   const { t } = useTranslation();
   const [abierto, setAbierto] = useState(false);
 
   return (
     <View style={estilos.contenedor}>
-      <Text style={estilos.etiqueta}>{etiqueta}</Text>
+      {ocultarEtiquetaVisible ? null : <Text style={estilos.etiqueta}>{etiqueta}</Text>}
 
       <TouchableOpacity
         accessibilityRole="button"
