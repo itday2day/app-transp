@@ -285,7 +285,10 @@ export default function DetalleJornadaScreen() {
             <Fila etiqueta={t("detalleJornada.empresa")} valor={jornada.empresa} />
             <Fila etiqueta={t("detalleJornada.ruta")} valor={jornada.ruta} />
             <Fila etiqueta={t("detalleJornada.kmInicial")} valor={`${jornada.kmInicial} km`} />
-            <Fila etiqueta={t("detalleJornada.combustible")} valor={`${jornada.combustibleInicial}%`} />
+            <Fila
+              etiqueta={t("detalleJornada.combustible")}
+              valor={jornada.combustibleInicial != null ? `${jornada.combustibleInicial}%` : "-"}
+            />
             <FilaUbicacion
               etiqueta={t("detalleJornada.ubicacion")}
               lat={jornada.latInicial}

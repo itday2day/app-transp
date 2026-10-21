@@ -258,7 +258,7 @@ interface FilaJornadaCorregidaRemota {
   ruta: string;
   km_inicial: number;
   km_final: number | null;
-  combustible_inicial: NivelCombustible;
+  combustible_inicial: NivelCombustible | null;
   combustible_final: NivelCombustible | null;
   lat_final: number | null;
   lng_final: number | null;
@@ -285,7 +285,7 @@ interface FilaJornadaRecuperadaRemota {
   ruta: string;
   incidencias: string | null;
   km_inicial: number;
-  combustible_inicial: NivelCombustible;
+  combustible_inicial: NivelCombustible | null;
   foto_tacometro_inicial_url: string | null;
   foto_ruta_url: string | null;
   lat_inicial: number | null;

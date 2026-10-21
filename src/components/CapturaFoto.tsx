@@ -16,9 +16,13 @@ interface Props {
   uri: string | null;
   onCapturada: (uriComprimida: string) => void;
   error?: string;
+  /** spec_ajustes_previos_apk.md, B: velocímetro junto a "Foto del tablero"/"Foto del tacómetro".
+   * Decorativo -- `accessible={false}`, nunca lo lee el lector de pantalla; la etiqueta de texto
+   * sigue siendo lo único que se anuncia. */
+  icono?: keyof typeof Ionicons.glyphMap;
 }
 
-export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada, error }: Props) {
+export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada, error, icono }: Props) {
   const { t } = useTranslation();
   const [procesando, setProcesando] = useState(false);
   const [visorAbierto, setVisorAbierto] = useState(false);
@@ -54,7 +58,18 @@ export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada, error }: Props)
 
   return (
     <View style={estilos.contenedor}>
-      <Text style={estilos.etiqueta}>{etiqueta}</Text>
+      <View style={estilos.filaEtiqueta}>
+        {icono ? (
+          <Ionicons
+            name={icono}
+            size={16}
+            color={colores.textoPrincipal}
+            accessible={false}
+            importantForAccessibility="no"
+          />
+        ) : null}
+        <Text style={estilos.etiqueta}>{etiqueta}</Text>
+      </View>
       {ayuda ? <Text style={estilos.ayuda}>{ayuda}</Text> : null}
 
       <Pressable
@@ -94,10 +109,15 @@ const estilos = StyleSheet.create({
   contenedor: {
     marginBottom: espaciado.md,
   },
+  filaEtiqueta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: espaciado.xs,
+    marginBottom: espaciado.xs,
+  },
   etiqueta: {
     ...tipografia.cuerpo,
     fontWeight: "600",
-    marginBottom: espaciado.xs,
   },
   ayuda: {
     ...tipografia.ayuda,

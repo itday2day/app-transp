@@ -146,7 +146,7 @@
     "kmInicialEtiqueta": "Kilometraje inicial",
     "kmInicialPlaceholder": "Ej. 152340",
     "combustibleEtiqueta": "Nivel de combustible",
-    "fotoTablero": "Foto del tablero (odómetro)",
+    "fotoTablero": "Foto del tablero",
     "fotoTableroAyuda": "Sirve de respaldo del kilometraje inicial.",
     "fotoHojaRuta": "Foto de la hoja de ruta (opcional)",
     "fotoHojaRutaAyuda": "Respaldo general de la información de la faena. Aparece en el reporte si la agregas.",

@@ -25,7 +25,7 @@ interface FilaJornadaSQLite {
   ruta: string;
   incidencias: string | null;
   kmInicial: number;
-  combustibleInicial: NivelCombustible;
+  combustibleInicial: NivelCombustible | null;
   fotoTacometroInicialUri: string | null;
   fotoRutaUri: string;
   latInicial: number | null;
@@ -230,7 +230,7 @@ export interface JornadaCorregidaRemota {
   ruta: string;
   kmInicial: number;
   kmFinal: number | null;
-  combustibleInicial: NivelCombustible;
+  combustibleInicial: NivelCombustible | null;
   combustibleFinal: NivelCombustible | null;
   latFinal: number | null;
   lngFinal: number | null;
@@ -415,7 +415,7 @@ export interface JornadaRecuperadaRemota {
   ruta: string;
   incidencias: string | null;
   kmInicial: number;
-  combustibleInicial: NivelCombustible;
+  combustibleInicial: NivelCombustible | null;
   fotoTacometroInicialUrl: string | null;
   fotoRutaUrl: string | null;
   latInicial: number | null;

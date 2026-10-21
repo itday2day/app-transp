@@ -71,7 +71,8 @@ export interface Jornada {
   incidencias?: string;
 
   kmInicial: number;
-  combustibleInicial: NivelCombustible;
+  // opcional desde spec_ajustes_previos_apk.md (A1/A2/A3) -- NULL si el chofer no eligió nada.
+  combustibleInicial: NivelCombustible | null;
   // Opcionales desde spec_rutas_asignadas_admin.md: una jornada creada_por_admin (más abajo) no
   // tiene foto real de tacómetro ni GPS real -- el check-in del propio chofer (CheckInForm.tsx)
   // siempre los completa, así que en ese camino nunca vienen vacíos.

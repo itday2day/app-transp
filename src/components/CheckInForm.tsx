@@ -37,7 +37,9 @@ export interface ValoresCheckInForm {
   matricula: string;
   ruta: string;
   kmInicial: number;
-  combustibleInicial: NivelCombustible;
+  // spec_ajustes_previos_apk.md, A6: opcional -- si el chofer no elige nada, se guarda null
+  // (nunca 0, que SÍ es un valor real y válido, elegido a propósito).
+  combustibleInicial: NivelCombustible | null;
   fotoTacometroInicialUri: string;
   fotoRutaUri?: string;
   tuvoIncidenciaCheckin: boolean;
@@ -252,11 +254,6 @@ export function CheckInForm({
         focoRef: refKmInicial,
       },
       {
-        falta: combustible === null,
-        etiqueta: t("checkInForm.combustibleEtiqueta"),
-        contRef: refContCombustible,
-      },
-      {
         falta: fotoTacometro === null,
         etiqueta: t("checkInForm.fotoTablero"),
         contRef: refContFotoTacometro,
@@ -277,7 +274,7 @@ export function CheckInForm({
       return;
     }
 
-    if (!empresa || !combustible || !fotoTacometro) return; // nunca debería pasar: ya validado arriba
+    if (!empresa || !fotoTacometro) return; // nunca debería pasar: ya validado arriba
 
     yaEnviando.current = true;
     onEnviar({
@@ -389,11 +386,14 @@ export function CheckInForm({
         />
 
         <View ref={refContCombustible}>
+          {/* spec_ajustes_previos_apk.md, A6: opcional -- mismo sufijo que incidencias.detalleOpcional
+              (reutilizado, no una clave nueva casi idéntica) y permitirLimpiar, para poder volver a
+              "sin elegir" tras tocar un chip por error. */}
           <SelectorCombustible
-            etiqueta={t("checkInForm.combustibleEtiqueta")}
+            etiqueta={`${t("checkInForm.combustibleEtiqueta")}${t("incidencias.detalleOpcional")}`}
             valor={combustible}
             onCambiar={setCombustible}
-            error={mostrarErrores && combustible === null ? t("comun.campoObligatorio") : undefined}
+            permitirLimpiar
           />
         </View>
       </View>
@@ -406,6 +406,7 @@ export function CheckInForm({
           <CapturaFoto
             etiqueta={t("checkInForm.fotoTablero")}
             ayuda={t("checkInForm.fotoTableroAyuda")}
+            icono="speedometer-outline"
             uri={fotoTacometro}
             onCapturada={setFotoTacometro}
             error={mostrarErrores && fotoTacometro === null ? t("comun.campoObligatorio") : undefined}

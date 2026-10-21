@@ -1,4 +1,5 @@
 import * as SQLite from "expo-sqlite";
+import { construirSqlRelajarCombustibleInicial, type ColumnaTablaSqlite } from "./jornadasReconstruccionSql";
 
 // Se cachea la promesa (no la instancia ya resuelta) para que llamadas
 // concurrentes esperen la misma apertura en vez de abrir cada una su propio
@@ -28,7 +29,9 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
       ruta TEXT NOT NULL,
       incidencias TEXT,
       kmInicial REAL NOT NULL,
-      combustibleInicial REAL NOT NULL,
+      -- opcional desde spec_ajustes_previos_apk.md (A2/A3) -- instalaciones existentes se migran
+      -- en relajarCombustibleInicial() más abajo (SQLite no soporta ALTER COLUMN).
+      combustibleInicial REAL,
       -- fotoTacometroInicialUri/latInicial/lngInicial: nullable desde
       -- spec_rutas_asignadas_admin.md -- una jornada creada por Administración desde el Dashboard
       -- no tiene foto real de tacómetro ni GPS real del dispositivo. Instalaciones existentes se
@@ -85,6 +88,7 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
 
   await agregarColumnasFaltantes(db);
   await relajarNotNullCheckIn(db);
+  await relajarCombustibleInicial(db);
   await migrarCombustibleAPorcentaje(db);
 
   return db;
@@ -170,6 +174,38 @@ async function relajarNotNullCheckIn(db: SQLite.SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_jornadas_chofer ON jornadas (choferId);
     CREATE INDEX IF NOT EXISTS idx_jornadas_estado ON jornadas (estado);
   `);
+}
+
+// spec_ajustes_previos_apk.md, A2/A3: combustibleInicial deja de ser NOT NULL, igual que ya se
+// hizo en Supabase (schema_v25_combustible_inicial_opcional.sql). A diferencia de
+// relajarNotNullCheckIn() de arriba (varias sentencias sueltas, sin transacción -- deuda anotada,
+// no corregida acá), esta reconstrucción corre en UNA sola llamada nativa (BEGIN...COMMIT dentro
+// de un único execAsync, construirSqlRelajarCombustibleInicial() en jornadasReconstruccionSql.ts)
+// y copia TODAS las columnas reales de la tabla vieja (PRAGMA table_info), nunca una lista
+// escrita a mano -- ninguna columna agregada por agregarColumnasFaltantes() queda sin copiar.
+// Idempotente: se salta si combustibleInicial ya es nullable (notnull=0).
+async function relajarCombustibleInicial(db: SQLite.SQLiteDatabase): Promise<void> {
+  const columnas = await db.getAllAsync<ColumnaTablaSqlite>(`PRAGMA table_info(jornadas)`);
+  const combustible = columnas.find((c) => c.name === "combustibleInicial");
+  if (!combustible || combustible.notnull === 0) return;
+
+  const sql = construirSqlRelajarCombustibleInicial(columnas);
+  try {
+    await db.execAsync(sql);
+  } catch (error) {
+    // Ventana residual, mismo criterio que reemplazarCatalogo() en catalogoRepo.ts (Hallazgo
+    // #60): si execAsync falló a mitad del multi-statement, sqlite3_exec() no hace rollback
+    // automático -- puede quedar la transacción abierta. isInTransactionAsync() confirma antes
+    // de intentar el ROLLBACK (su propio try/catch: que falle nunca tapa el error original).
+    if (await db.isInTransactionAsync()) {
+      try {
+        await db.execAsync("ROLLBACK;");
+      } catch (errorRollback) {
+        console.error("relajarCombustibleInicial: el ROLLBACK también falló:", errorRollback);
+      }
+    }
+    throw error;
+  }
 }
 
 // combustibleInicial/combustibleFinal eran un enum de texto ("Reserva"|"1/4"|

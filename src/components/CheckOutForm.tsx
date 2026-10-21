@@ -114,7 +114,11 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
       return;
     }
 
-    if (!combustible || !fotoTacometro) return; // nunca debería pasar: ya validado arriba
+    // Criterio A7 (spec_ajustes_previos_apk.md): antes `!combustible` hacía que el chip "0%" dejara
+    // el botón inerte sin avisar (`!0` es `true`) -- `combustible === null` es la comprobación
+    // correcta, 0 es un valor real y válido. El combustible final sigue siendo obligatorio; solo
+    // se corrige que 0 sea un valor aceptado.
+    if (combustible === null || !fotoTacometro) return; // nunca debería pasar: ya validado arriba
 
     yaEnviando.current = true;
     onEnviar({
@@ -166,6 +170,7 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
         <CapturaFoto
           etiqueta={t("checkOutForm.fotoTacometro")}
           ayuda={t("checkOutForm.fotoTacometroAyuda")}
+          icono="speedometer-outline"
           uri={fotoTacometro}
           onCapturada={setFotoTacometro}
           error={mostrarErrores && fotoTacometro === null ? t("comun.campoObligatorio") : undefined}

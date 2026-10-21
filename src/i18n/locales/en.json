@@ -146,7 +146,7 @@
     "kmInicialEtiqueta": "Starting mileage",
     "kmInicialPlaceholder": "E.g. 152340",
     "combustibleEtiqueta": "Fuel level",
-    "fotoTablero": "Dashboard photo (odometer)",
+    "fotoTablero": "Dashboard photo",
     "fotoTableroAyuda": "Backs up the starting mileage.",
     "fotoHojaRuta": "Route sheet photo (optional)",
     "fotoHojaRutaAyuda": "General backup of the shift's information. Shown in the report if you add it.",

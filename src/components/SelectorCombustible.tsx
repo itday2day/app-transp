@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { NivelCombustible } from "@/types";
+import { siguienteCombustible } from "./logicaSelectorCombustible";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios } from "@/theme/spacing";
@@ -12,8 +13,13 @@ const PARADAS: NivelCombustible[] = [0, 10, 25, 50, 75, 100];
 interface Props {
   etiqueta: string;
   valor: NivelCombustible | null;
-  onCambiar: (nivel: NivelCombustible) => void;
+  onCambiar: (nivel: NivelCombustible | null) => void;
   error?: string;
+  /** spec_ajustes_previos_apk.md, A4: con `true`, tocar el chip ya elegido lo deja en "sin
+   * elegir" (`null`) -- la única forma de vaciar un campo opcional tras un toque equivocado. El
+   * check-in lo activa (combustible inicial opcional); el check-out NO lo pasa (sigue exigiendo
+   * un valor, igual que hoy). Default `false` para no cambiar nada donde no se pase. */
+  permitirLimpiar?: boolean;
 }
 
 function colorNivel(valor: number): string {
@@ -22,7 +28,7 @@ function colorNivel(valor: number): string {
   return colores.exito;
 }
 
-export function SelectorCombustible({ etiqueta, valor, onCambiar, error }: Props) {
+export function SelectorCombustible({ etiqueta, valor, onCambiar, error, permitirLimpiar = false }: Props) {
   const porcentaje = valor ?? 0;
 
   return (
@@ -49,7 +55,7 @@ export function SelectorCombustible({ etiqueta, valor, onCambiar, error }: Props
               key={parada}
               accessibilityRole="button"
               accessibilityState={{ selected: seleccionado }}
-              onPress={() => onCambiar(parada)}
+              onPress={() => onCambiar(siguienteCombustible(valor, parada, permitirLimpiar))}
               style={[estilos.chip, seleccionado && estilos.chipSeleccionado]}
             >
               <Text style={[estilos.textoChip, seleccionado && estilos.textoChipSeleccionado]}>
