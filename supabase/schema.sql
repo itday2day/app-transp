@@ -409,21 +409,22 @@ alter table public.choferes
 -- ============================================================
 -- INVITACIONES (schema_v19_invitaciones_alta_choferes.sql, Hallazgo #51)
 -- ============================================================
--- ⚠️ Esta sección incluye el trigger crear_chofer_desde_invitacion() y su comentario de cierre
--- de policies (Migración 2, más abajo): esos dos cambios están PENDIENTES DE APLICAR y NO
--- corresponden al estado actual de producción hasta que corra la Migración 2. Lo aplicado en
--- producción hoy es la Migración 1 (schema_v19_invitaciones_alta_choferes.sql: la tabla
--- invitaciones, las columnas nuevas de choferes, y validar_invitacion()/generar_codigo_invitacion()/
--- listar_estado_choferes()) MÁS schema_v21_alta_asistida_dni_atado.sql (ajuste del Hallazgo #51,
--- 2026-10-14: las 6 columnas de datos personales de invitaciones, su CHECK de normalización, la
--- función obtener_datos_invitacion(), y el cuerpo ya actualizado -- con DNI atado y borrado al
--- consumir -- de crear_chofer_desde_invitacion()) -- SIN el trigger sobre auth.users ni el cierre
--- de policies, eso sigue siendo exclusivo de la Migración 2.
+-- Esta sección incluye el trigger crear_chofer_desde_invitacion() y el cierre de policies de
+-- choferes (Migración 2, más abajo): aplicado en producción el 2026-10-16
+-- (schema_v23_trigger_auth_users.sql, por el SQL Editor -- igual que schema_v22, no figura en
+-- list_migrations). Lo aplicado en producción hoy es la Migración 1
+-- (schema_v19_invitaciones_alta_choferes.sql: la tabla invitaciones, las columnas nuevas de
+-- choferes, y validar_invitacion()/generar_codigo_invitacion()/listar_estado_choferes()) MÁS
+-- schema_v21_alta_asistida_dni_atado.sql (ajuste del Hallazgo #51, 2026-10-14: las 6 columnas de
+-- datos personales de invitaciones, su CHECK de normalización, la función
+-- obtener_datos_invitacion(), y el cuerpo ya actualizado -- con DNI atado y borrado al consumir --
+-- de crear_chofer_desde_invitacion()) MÁS schema_v23_trigger_auth_users.sql (Migración 2: el
+-- trigger sobre auth.users y el cierre de policies/privilegios de choferes).
 --
 -- Alta de choferes por invitación en vez del alta con contraseña temporal del Dashboard: el
 -- chofer se registra solo (signUp público de Supabase) con una invitación generada desde
--- /choferes; un trigger en auth.users (Migración 2, todavía no instalada -- ver más abajo)
--- valida y consume la invitación y crea la fila de choferes en la misma transacción. RLS activa
+-- /choferes; un trigger en auth.users (Migración 2, instalada -- ver más abajo) valida y consume
+-- la invitación y crea la fila de choferes en la misma transacción. RLS activa
 -- SIN ninguna policy para anon/authenticated: ni siquiera pueden intentar un select (con RLS
 -- encendida y cero policies, esos dos roles no bypasean nada). Solo service_role (que bypasea
 -- RLS) y las funciones security definer de abajo (dueñas de la tabla, también bypasean) la tocan.
@@ -563,12 +564,14 @@ begin
 end;
 $$;
 
--- Datos personales prellenados, SOLO por el token de 32 hex (ajuste del Hallazgo #51,
--- schema_v21_alta_asistida_dni_atado.sql, 2026-10-14) -- a diferencia de validar_invitacion(),
--- que acepta token O código sin distinguir, esta función exige el formato EXACTO del token: un
--- código de 8 caracteres, un token mal formado, inexistente, vencido, usado o revocado cae en el
--- mismo "nada" (cero filas) -- nunca se distingue por la forma de la respuesta si la invitación
--- existe. No devuelve token, código, id ni creada_por.
+-- Datos personales prellenados -- acepta token de 32 hex O código de 8 caracteres
+-- (spec_precarga_con_codigo_8_caracteres.md, 2026-10-20, migración obtener_datos_por_codigo).
+-- Antes (schema_v21_alta_asistida_dni_atado.sql, Hallazgo #51) solo aceptaba el token -- con el
+-- código de respaldo (el que existe para cuando falla el enlace) el formulario quedaba vacío.
+-- Mismo criterio de "nada distinto" que antes: un valor mal formado, un código o token
+-- inexistente, vencido, usado o revocado cae en el mismo "nada" (cero filas) -- nunca se
+-- distingue por la forma de la respuesta si la invitación existe. No devuelve token, código, id
+-- ni creada_por.
 create or replace function public.obtener_datos_invitacion(p_token text)
 returns table (
   dni text,
@@ -583,20 +586,38 @@ security definer
 set search_path = public
 as $$
 declare
-  v_token text := lower(regexp_replace(coalesce(p_token, ''), '[\s-]', '', 'g'));
+  -- Mismo criterio de limpieza que validar_invitacion(): quita espacios y guiones antes de
+  -- decidir nada -- el código de respaldo se suele dictar o copiar con un guion de separación
+  -- visual ("ABCD-2345").
+  v_limpio text := regexp_replace(coalesce(p_token, ''), '[\s-]', '', 'g');
+  v_token text := lower(v_limpio);
+  v_codigo text := upper(v_limpio);
   v_fila public.invitaciones%rowtype;
 begin
-  if v_token !~ '^[0-9a-f]{32}$' then
+  -- Un valor nunca puede cumplir las dos formas a la vez (32 caracteres contra exactamente 8),
+  -- así que el orden if/elsif no es ambiguo -- se prueba primero como token (mismo patrón exacto
+  -- que ya usaba esta función), después como código (alfabeto de 32 símbolos de
+  -- generar_codigo_invitacion()). Cualquier otro valor (vacío, NULL, mal formado) cae al `return`
+  -- de abajo sin tocar la tabla.
+  if v_token ~ '^[0-9a-f]{32}$' then
+    select i.* into v_fila
+    from public.invitaciones i
+    where lower(i.token) = v_token
+      and i.usada_at is null
+      and i.revocada_at is null
+      and i.vence_at > now()
+    limit 1;
+  elsif v_codigo ~ '^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$' then
+    select i.* into v_fila
+    from public.invitaciones i
+    where i.codigo = v_codigo
+      and i.usada_at is null
+      and i.revocada_at is null
+      and i.vence_at > now()
+    limit 1;
+  else
     return;
   end if;
-
-  select i.* into v_fila
-  from public.invitaciones i
-  where lower(i.token) = v_token
-    and i.usada_at is null
-    and i.revocada_at is null
-    and i.vence_at > now()
-  limit 1;
 
   if v_fila.id is null then
     return;
@@ -608,10 +629,9 @@ begin
 end;
 $$;
 
--- Función del trigger de alta -- SIN instalar todavía (Migración 2, junto con el cierre de
--- policies de choferes y la reapertura de signUp). Consume la invitación con un UPDATE de un
--- solo paso: no hay "leer y después escribir" en ningún punto -- la fila gana o no gana la
--- carrera exactamente en esa sentencia.
+-- Función del trigger de alta (instalada, Migración 2 -- ver el CREATE TRIGGER justo después de
+-- esta función). Consume la invitación con un UPDATE de un solo paso: no hay "leer y después
+-- escribir" en ningún punto -- la fila gana o no gana la carrera exactamente en esa sentencia.
 create or replace function public.crear_chofer_desde_invitacion()
 returns trigger
 language plpgsql
@@ -736,6 +756,15 @@ begin
 end;
 $$;
 
+-- Migración 2 (schema_v23_trigger_auth_users.sql, aplicada el 2026-10-16): el enlace que faltaba
+-- -- sin esto, la función de arriba existía y estaba probada, pero nada la ejecutaba. No necesita
+-- GRANT EXECUTE para nadie (ver el revoke de más abajo): un trigger se dispara por el propio
+-- mecanismo de Postgres, no por una llamada SQL explícita de quien hace el INSERT.
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.crear_chofer_desde_invitacion();
+
 -- Estado de cada chofer para /choferes (email/email_confirmed_at desde auth.users) -- evita que
 -- el Dashboard llame a la API de administración de Auth una vez por fila.
 create or replace function public.listar_estado_choferes()
@@ -784,12 +813,25 @@ grant execute on function public.listar_estado_choferes() to service_role;
 -- conserva en las dos lo que ya tuviera por su propio default privilege (no están en la lista de
 -- REVOKE de arriba para ese rol), que es justo lo que necesitan para funcionar.
 
--- ⚠️ Migración 2 (todavía no escrita/aplicada): instala el trigger
--- "create trigger ... after insert on auth.users for each row execute function
--- public.crear_chofer_desde_invitacion();", cierra las policies de choferes (INSERT solo por
--- trigger, UPDATE por columna) y reabre signUp en el panel de Auth. Mientras no exista, el alta
--- de choferes sigue siendo la del Dashboard (más abajo, sin cambios) y el registro público de
--- Auth permanece cerrado (disable_signup=true).
+-- Migración 2 (schema_v23_trigger_auth_users.sql, aplicada el 2026-10-16): cierre de privilegios
+-- de choferes frente a anon/authenticated -- el trigger de arriba es la única vía de alta, ya no
+-- hace falta que ningún rol de sesión pueda insertar. anon pierde INSERT/UPDATE/DELETE/TRUNCATE
+-- por completo (nunca tuvo una policy que lo dejara pasar, pero ahora tampoco tiene el privilegio
+-- de tabla). authenticated pierde INSERT/DELETE/TRUNCATE, y su UPDATE queda recortado a la única
+-- columna que la app toca con la sesión del chofer (debe_cambiar_contrasena -- ver
+-- src/services/authService.ts) en vez de la tabla completa; su SELECT no se toca (lo usa el
+-- login). service_role no cambia. v23 se aplicó el 2026-10-16 por el SQL Editor con el registro
+-- todavía CERRADO -- antes de aplicar, ese cierre lo confirmó el usuario desde el panel, sin
+-- lectura por API; una lectura de GET /auth/v1/settings hecha DESPUÉS de aplicar v23 (y antes de
+-- la reapertura) confirmó disable_signup: true. La reapertura de "Allow new users to sign up" fue
+-- un paso APARTE, hecho por el usuario en el panel después de verificar el trigger y las policies.
+-- Una lectura posterior de GET /auth/v1/settings confirmó disable_signup: false,
+-- mailer_autoconfirm: false, phone_autoconfirm: false, y "email" como único proveedor externo en
+-- true.
+revoke insert, delete, truncate on public.choferes from authenticated;
+revoke insert, update, delete, truncate on public.choferes from anon;
+revoke update on public.choferes from authenticated;
+grant update (debe_cambiar_contrasena) on public.choferes to authenticated;
 
 -- ============================================================
 -- STORAGE (fotos de evidencias: tacómetro inicial/final, hoja de ruta)
@@ -797,6 +839,18 @@ grant execute on function public.listar_estado_choferes() to service_role;
 insert into storage.buckets (id, name, public)
 values ('evidencias', 'evidencias', true)
 on conflict (id) do nothing;
+
+-- builds (Hallazgo #51, ajuste, schema_v22_bucket_builds.sql): bucket público para el .apk de
+-- distribución estable (ruta fija "builds/app-transp-latest.apk", que se sobrescribe en cada
+-- build nuevo -- lo sube el usuario a mano desde el panel, nunca un script con service_role).
+-- Sin policies de storage.objects (un bucket público sirve su URL sin necesitar una; nadie más
+-- que quien tiene acceso directo al panel escribe acá).
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('builds', 'builds', true, 209715200, array['application/vnd.android.package-archive'])
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 create policy "lectura publica de evidencias"
   on storage.objects for select
