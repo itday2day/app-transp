@@ -12,7 +12,6 @@
       "bundleIdentifier": "com.day2day.apptransp",
       "infoPlist": {
         "NSCameraUsageDescription": "Necesitamos acceso a la cámara para que puedas tomar la foto del tacómetro y de la ruta al iniciar o cerrar tu jornada.",
-        "NSPhotoLibraryUsageDescription": "Necesitamos acceso a tus fotos para adjuntar el respaldo del tacómetro si prefieres elegir una imagen existente.",
         "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para registrar el punto de inicio y cierre de tu jornada de trabajo."
       }
     },
@@ -43,7 +42,15 @@
       ],
       "expo-font",
       "expo-secure-store",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": false,
+          "savePhotosPermission": "Necesitamos este permiso para guardar en la galería de tu teléfono una copia de las fotos que tomas en la app.",
+          "granularPermissions": []
+        }
+      ]
     ],
     "extra": {
       "supabaseUrl": "https://tgmfopfekwlucofjlssn.supabase.co",

@@ -7,6 +7,7 @@ import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios } from "@/theme/spacing";
 import { comprimirImagen } from "@/services/imageService";
+import { guardarCopiaEnGaleria } from "@/services/galeriaService";
 import { VisorFotoAmpliada } from "@/components/VisorFotoAmpliada";
 
 interface Props {
@@ -35,6 +36,12 @@ export function CapturaFoto({ etiqueta, ayuda, uri, onCapturada, error }: Props)
     });
 
     if (resultado.canceled || !resultado.assets?.[0]) return;
+
+    // Criterio 4 (spec_copia_fotos_en_galeria.md): el uri CRUDO que entrega la cámara, antes de
+    // que comprimirImagen() lo reduzca a 1280px/0.6 -- es lo más cercano a "sin ningún cambio"
+    // que existe en la app (la propia cámara ya comprime a 0.6, Fase 1 punto 2). Sin `await`: no
+    // retrasa la captura ni el flujo normal de la foto hacia SQLite/subida (criterio 2).
+    void guardarCopiaEnGaleria(resultado.assets[0].uri);
 
     setProcesando(true);
     try {

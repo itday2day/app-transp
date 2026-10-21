@@ -7,6 +7,7 @@ import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado, radios } from "@/theme/spacing";
 import { comprimirImagen } from "@/services/imageService";
+import { guardarCopiaEnGaleria } from "@/services/galeriaService";
 import { VisorFotoAmpliada } from "@/components/VisorFotoAmpliada";
 
 interface Props {
@@ -31,6 +32,10 @@ export function GaleriaFotosIncidencia({ fotos, onCambiar }: Props) {
 
     const resultado = await ImagePicker.launchCameraAsync({ quality: 0.8, allowsEditing: false });
     if (resultado.canceled || !resultado.assets?.[0]) return;
+
+    // Criterio 4 (spec_copia_fotos_en_galeria.md): mismo uri CRUDO que CapturaFoto.tsx, antes de
+    // comprimirImagen(). Sin `await`: no retrasa la captura.
+    void guardarCopiaEnGaleria(resultado.assets[0].uri);
 
     setProcesando(true);
     try {
