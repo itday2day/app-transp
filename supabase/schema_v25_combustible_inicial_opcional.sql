@@ -1,0 +1,11 @@
+-- schema_v25_combustible_inicial_opcional.sql (2026-10-21)
+-- spec_ajustes_previos_apk.md, A1. El nivel de combustible inicial del check-in pasa a ser
+-- opcional: la columna deja de ser NOT NULL. El CHECK (between 0 and 100) NO se toca: un CHECK
+-- deja pasar NULL. Orden de despliegue obligatorio: esta migracion -> Dashboard y servidor de
+-- reportes -> app. Es una operacion de catalogo (no reescribe la tabla). Un .apk viejo siempre
+-- envia un valor, asi que sigue funcionando.
+--
+-- Reversa (solo valida mientras NO existan filas con combustible_inicial NULL; comprobar antes):
+--   select count(*) from public.jornadas where combustible_inicial is null;
+--   alter table public.jornadas alter column combustible_inicial set not null;
+alter table public.jornadas alter column combustible_inicial drop not null;

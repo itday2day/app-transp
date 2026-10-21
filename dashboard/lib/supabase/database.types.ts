@@ -212,7 +212,7 @@ export type Database = {
           chofer_id: string;
           chofer_nombre: string;
           combustible_final: number | null;
-          combustible_inicial: number;
+          combustible_inicial: number | null;
           creada_por: string | null;
           creada_por_admin: boolean;
           created_at: string;
@@ -251,7 +251,7 @@ export type Database = {
           chofer_id: string;
           chofer_nombre: string;
           combustible_final?: number | null;
-          combustible_inicial: number;
+          combustible_inicial?: number | null;
           creada_por?: string | null;
           creada_por_admin?: boolean;
           created_at?: string;
@@ -290,7 +290,7 @@ export type Database = {
           chofer_id?: string;
           chofer_nombre?: string;
           combustible_final?: number | null;
-          combustible_inicial?: number;
+          combustible_inicial?: number | null;
           creada_por?: string | null;
           creada_por_admin?: boolean;
           created_at?: string;

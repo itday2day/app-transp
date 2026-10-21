@@ -106,7 +106,8 @@ create table public.jornadas (
   incidencias text,
 
   km_inicial numeric not null,
-  combustible_inicial smallint not null check (combustible_inicial between 0 and 100),
+  -- opcional desde schema_v25_combustible_inicial_opcional.sql (spec_ajustes_previos_apk.md, A1)
+  combustible_inicial smallint check (combustible_inicial between 0 and 100),
   -- foto_tacometro_inicial_url/lat_inicial/lng_inicial: nullable desde
   -- schema_v13_jornadas_creadas_admin.sql (spec_rutas_asignadas_admin.md) -- una jornada cargada
   -- por Administración desde el Dashboard no tiene foto real de tacómetro ni GPS real.
