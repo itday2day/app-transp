@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { enlaceInvitacion } from "@/lib/invitaciones";
+import { BotonDescargarApp } from "@/components/invitacion/boton-descargar-app";
 
 // Segunda capa junto con el header real (next.config.ts: Referrer-Policy, X-Robots-Tag) -- este
 // <meta name="robots"> cubre a cualquier rastreador o navegador que mire la metadata de la
@@ -95,13 +96,7 @@ export default async function PaginaInvitacion({ params }: { params: Promise<{ t
             Pulsa el botón y espera a que termine la descarga. Si el teléfono pregunta, permite
             instalar desde este navegador.
           </p>
-          <a
-            href={enlaceDescarga}
-            rel="noreferrer noopener"
-            className="inline-flex h-12 items-center justify-center rounded-md bg-primary px-4 text-base font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Descargar la app
-          </a>
+          <BotonDescargarApp href={enlaceDescarga} token={token} />
         </div>
 
         <div className="flex flex-col gap-2 text-left">
