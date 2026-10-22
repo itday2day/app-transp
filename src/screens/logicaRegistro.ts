@@ -200,6 +200,28 @@ export function accionDeResultadoValidarInvitacion(
   return { tipo: "error", textoClave: CLAVE_INVITACION_INVALIDA[resultado.fila.estado] };
 }
 
+/** Hallazgo #68: qué única acción mostrar en la pantalla de invitación no válida cuando el
+ * token viene del ENLACE (nunca del código de 8 escrito a mano -- manejarValidarInvitacionManual()
+ * en RegistroScreen.tsx no cambia, ver criterio 6 corregido). `resultado.fila.estado === "valida"`
+ * nunca debería llegar acá -- el llamador ya lo desvía a la fase "formulario" antes de llamar a
+ * esta función (ver accionDeResultadoValidarInvitacion). */
+export type AccionInvitacionNoValida = "iniciarSesion" | "otroCodigo" | "reintentar";
+
+const ACCION_POR_ESTADO_INVITACION: Record<Exclude<EstadoInvitacion, "valida">, AccionInvitacionNoValida> = {
+  usada: "iniciarSesion",
+  vencida: "otroCodigo",
+  revocada: "otroCodigo",
+  no_existe: "otroCodigo",
+};
+
+export function accionParaEstadoInvitacion(resultado: ResultadoValidarInvitacion): AccionInvitacionNoValida {
+  if (!resultado.ok) return "reintentar";
+  // Defensivo: "valida" no debería llegar acá (ver comentario de arriba) -- si pasara, no hay
+  // acción de "invitación no válida" que mostrar; "reintentar" es el fallback menos dañino.
+  if (resultado.fila.estado === "valida") return "reintentar";
+  return ACCION_POR_ESTADO_INVITACION[resultado.fila.estado];
+}
+
 export type AccionResultadoRegistro =
   | { tipo: "pantallaCodigo" }
   // criterio 5: identities:[] -- ya existe una cuenta CONFIRMADA con ese correo. Tipo propio (no

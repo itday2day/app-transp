@@ -8,7 +8,8 @@
     "esperarCodigo": "Espera {{segundos}} s antes de pedir otro código.",
     "contrasenaCorta": "La contraseña debe tener al menos 6 caracteres.",
     "contrasenaDebil": "Elige una contraseña más segura.",
-    "contrasenaIgual": "Elige una contraseña distinta a la actual."
+    "contrasenaIgual": "Elige una contraseña distinta a la actual.",
+    "botonReintentar": "Reintentar"
   },
   "visorFoto": {
     "cerrar": "Cerrar"
@@ -55,6 +56,7 @@
     "invitacionEtiqueta": "Código de invitación",
     "invitacionPlaceholder": "Código de 8 caracteres",
     "botonValidarInvitacion": "Continuar",
+    "botonOtroCodigo": "Tengo otro código",
     "dniEtiqueta": "DNI",
     "dniPlaceholder": "12345678A",
     "dniBloqueadoAviso": "Este DNI viene de tu invitación y no se puede cambiar acá.",

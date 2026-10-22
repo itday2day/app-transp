@@ -16,7 +16,12 @@ import { SelectorFecha } from "@/components/SelectorFecha";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { TextoEnlace } from "@/components/TextoEnlace";
 import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
-import { resolverInvitacion, registrarChofer, type DatosInvitacion } from "@/services/authCore";
+import {
+  resolverInvitacion,
+  registrarChofer,
+  type DatosInvitacion,
+  type ResultadoValidarInvitacion,
+} from "@/services/authCore";
 import { supabase } from "@/lib/supabase";
 import { validarDatosRegistro, normalizarDni, type DatosRegistro } from "@/utils/validarDatosRegistro";
 import { validarContrasena } from "@/utils/validarContrasena";
@@ -25,13 +30,16 @@ import { telefonoEsValido, separarTelefono } from "@/utils/telefonoPais";
 import {
   accionDeResultadoValidarInvitacion,
   accionDeResultadoRegistro,
+  accionParaEstadoInvitacion,
   claveErrorCampo,
   tokenValido,
   normalizarCodigoInvitacion,
   codigoInvitacionCompleto,
   marcasPrecargadas,
+  type AccionInvitacionNoValida,
 } from "./logicaRegistro";
 import { RootStackParamList, RootStackNavigationProp } from "@/navigation/types";
+import type { ClaveTraduccion } from "@/i18n";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
@@ -55,12 +63,20 @@ export default function RegistroScreen() {
   // M2 (corrección): con token, la fase arranca en "cargandoInvitacion" -- ni el formulario de
   // código de 8 (fase "invitacion") ni "formulario" se muestran hasta que la carga completa, para
   // no revelar un instante el campo del código con un enlace que no lo necesita.
-  const [fase, setFase] = useState<"cargandoInvitacion" | "invitacion" | "formulario" | "confirmarCorreo">(
-    tokenInicial ? "cargandoInvitacion" : "invitacion"
-  );
+  const [fase, setFase] = useState<
+    "cargandoInvitacion" | "invitacion" | "invitacionNoValida" | "formulario" | "confirmarCorreo"
+  >(tokenInicial ? "cargandoInvitacion" : "invitacion");
   const [invitacion, setInvitacion] = useState(tokenInicial ?? "");
   const [validandoInvitacion, setValidandoInvitacion] = useState(false);
   const [errorInvitacion, setErrorInvitacion] = useState<string | null>(null);
+  // Hallazgo #68: SOLO para el token del ENLACE -- manejarValidarInvitacionManual() (código de 8
+  // a mano) sigue usando errorInvitacion/fase "invitacion" sin cambios (criterio 6 corregido).
+  // `textoClave` (no el texto ya traducido) para que un cambio de idioma en vivo no deje el
+  // mensaje congelado en el idioma viejo.
+  const [estadoInvitacionNoValida, setEstadoInvitacionNoValida] = useState<{
+    textoClave: ClaveTraduccion;
+    accion: AccionInvitacionNoValida;
+  } | null>(null);
   const [dniBloqueado, setDniBloqueado] = useState(false);
 
   const [dni, setDni] = useState("");
@@ -127,23 +143,59 @@ export default function RegistroScreen() {
     setPrecargado(datos);
   }
 
+  // Hallazgo #68: resultado de resolver el token del ENLACE -- válida va al formulario; cualquier
+  // otro resultado va a la fase "invitacionNoValida" (NUNCA a "invitacion", que es la del código
+  // de 8 a mano). Comparte esta decisión el efecto de montaje (abajo) y manejarReintentarInvitacion.
+  function procesarResultadoInvitacion(datos: DatosInvitacion | null, resultado: ResultadoValidarInvitacion) {
+    const accion = accionDeResultadoValidarInvitacion(resultado);
+    if (accion.tipo === "valida") {
+      aplicarDatosInvitacion(datos);
+      setFase("formulario");
+    } else {
+      setEstadoInvitacionNoValida({
+        textoClave: accion.textoClave,
+        accion: accionParaEstadoInvitacion(resultado),
+      });
+      setFase("invitacionNoValida");
+    }
+  }
+
   // Sin token: queda en fase "invitacion" esperando el código de 8 -- el efecto de abajo solo
   // corre si HAY token.
   useEffect(() => {
     if (!tokenInicial) return;
     resolverInvitacion(tokenInicial, supabase).then(({ datos, resultado }) => {
-      const accion = accionDeResultadoValidarInvitacion(resultado);
-      if (accion.tipo === "valida") {
-        aplicarDatosInvitacion(datos);
-        setFase("formulario");
-      } else {
-        setErrorInvitacion(t(accion.textoClave));
-        setFase("invitacion");
-      }
+      // Criterio 1 (#68): el campo del código se vacía al salir de la carga con enlace, sin
+      // importar el resultado -- así, si el chofer abre después "Tengo otro código", lo ve vacío.
+      setInvitacion("");
+      procesarResultadoInvitacion(datos, resultado);
     });
     // Solo al montar -- el token no cambia durante la vida de la pantalla.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // «Reintentar» (criterio 5/5a): re-resuelve el MISMO tokenInicial (deriva de params?.token en
+  // cada render, nunca se guardó en un estado visible) -- la pantalla no cambia mientras consulta,
+  // el botón queda en `cargando` (reusa validandoInvitacion, mismo estado que la validación manual
+  // -- las dos fases son mutuamente excluyentes) y nunca vacía ni sustituye el token.
+  async function manejarReintentarInvitacion() {
+    if (!tokenInicial || validandoInvitacion) return;
+    setValidandoInvitacion(true);
+    try {
+      const { datos, resultado } = await resolverInvitacion(tokenInicial, supabase);
+      procesarResultadoInvitacion(datos, resultado);
+    } finally {
+      setValidandoInvitacion(false);
+    }
+  }
+
+  // «Tengo otro código» (criterio 5b): abre la fase del código de 8 con el campo vacío, sin
+  // mensaje de error y "Continuar" deshabilitado hasta 8 caracteres (codigoInvitacionCompleto).
+  function manejarAbrirOtroCodigo() {
+    setInvitacion("");
+    setErrorInvitacion(null);
+    setFase("invitacion");
+  }
 
   async function manejarValidarInvitacionManual() {
     // Criterio 15: "Continuar" no llama a resolverInvitacion si no hay 8 -- `invitacion` ya
@@ -266,6 +318,37 @@ export default function RegistroScreen() {
     return (
       <View style={[estilos.pantalla, estilos.cargando]}>
         <ActivityIndicator color={colores.primario} />
+      </View>
+    );
+  }
+
+  // Hallazgo #68: el token del enlace nunca se muestra -- esta fase no tiene ningún campo,
+  // solo el mensaje de error (mismas claves de siempre) y UNA sola acción según el estado.
+  if (fase === "invitacionNoValida" && estadoInvitacionNoValida) {
+    return (
+      <View style={[estilos.pantalla, estilos.estadoInvitacionNoValida]}>
+        <Text style={estilos.error}>{t(estadoInvitacionNoValida.textoClave)}</Text>
+        {estadoInvitacionNoValida.accion === "iniciarSesion" ? (
+          <BotonPrimario
+            titulo={t("registro.botonIniciarSesion")}
+            onPress={() => navigation.navigate("Login")}
+            estilo={estilos.boton}
+          />
+        ) : estadoInvitacionNoValida.accion === "otroCodigo" ? (
+          <BotonPrimario
+            titulo={t("registro.botonOtroCodigo")}
+            onPress={manejarAbrirOtroCodigo}
+            estilo={estilos.boton}
+          />
+        ) : (
+          <BotonPrimario
+            titulo={t("comun.botonReintentar")}
+            onPress={manejarReintentarInvitacion}
+            cargando={validandoInvitacion}
+            deshabilitado={validandoInvitacion}
+            estilo={estilos.boton}
+          />
+        )}
       </View>
     );
   }
@@ -547,6 +630,10 @@ const estilos = StyleSheet.create({
   cargando: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  estadoInvitacionNoValida: {
+    justifyContent: "center",
+    padding: espaciado.lg,
   },
   contenido: {
     flexGrow: 1,
