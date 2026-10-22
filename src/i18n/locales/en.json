@@ -34,7 +34,11 @@
     "olvideContrasena": "Forgot your password?",
     "tengoInvitacion": "Have an invitation code? Sign up",
     "credencialesIncorrectas": "Incorrect email or password.",
-    "cuentaDadaDeBaja": "Your account has been deactivated. Contact Administration."
+    "cuentaDadaDeBaja": "Your account has been deactivated. Contact Administration.",
+    "invitacionEncontradaTitulo": "We found your invitation",
+    "invitacionEncontradaCuerpo": "You can continue your registration where you left it.",
+    "botonContinuarRegistro": "Continue my registration",
+    "botonAhoraNo": "Not now"
   },
   "registro": {
     "dniInvalido": "The ID number must have 9 characters.",

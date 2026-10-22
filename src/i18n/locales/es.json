@@ -34,7 +34,11 @@
     "olvideContrasena": "¿Olvidaste tu contraseña?",
     "tengoInvitacion": "¿Tienes un código de invitación? Regístrate",
     "credencialesIncorrectas": "Correo o contraseña incorrectos.",
-    "cuentaDadaDeBaja": "Tu cuenta está dada de baja. Contacta con Administración."
+    "cuentaDadaDeBaja": "Tu cuenta está dada de baja. Contacta con Administración.",
+    "invitacionEncontradaTitulo": "Encontramos tu invitación",
+    "invitacionEncontradaCuerpo": "Puedes seguir con tu registro desde donde lo dejaste.",
+    "botonContinuarRegistro": "Continuar con mi registro",
+    "botonAhoraNo": "Ahora no"
   },
   "registro": {
     "dniInvalido": "El DNI debe tener 9 caracteres.",

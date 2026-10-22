@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,16 +8,26 @@ import {
   Platform,
   ScrollView,
   TextInput,
+  Alert,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, CLAVE_YA_HUBO_SESION } from "@/context/AuthContext";
 import { CampoTexto } from "@/components/CampoTexto";
 import { BotonPrimario } from "@/components/BotonPrimario";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { TextoEnlace } from "@/components/TextoEnlace";
 import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
 import { accionDeResultadoLogin } from "./accionDeResultadoLogin";
+import { resolverInvitacion } from "@/services/authCore";
+import { supabase } from "@/lib/supabase";
+import { obtenerValor } from "@/services/almacenamientoSeguro";
+import {
+  tokenDeTextoPortapapeles,
+  decidirAccionPortapapeles,
+  debeRevisarPortapapelesEsteArranque,
+} from "@/services/logicaPortapapeles";
 import { RootStackNavigationProp } from "@/navigation/types";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
@@ -39,6 +49,65 @@ export default function LoginScreen() {
   const contrasenaRef = useRef<TextInput>(null);
 
   const puedeEnviar = identificador.trim().length > 0 && contrasena.length > 0;
+
+  // Criterio 9 (#69): tras pulsar cualquiera de los dos botones del aviso, vacía el portapapeles
+  // SOLO si todavía contiene esa misma invitación (el chofer pudo haber copiado otra cosa
+  // mientras el aviso estaba en pantalla). Declarada antes del efecto de abajo, que la usa.
+  async function vaciarSiSigueIgual(token: string) {
+    const actual = await Clipboard.getStringAsync();
+    if (tokenDeTextoPortapapeles(actual) === token) {
+      await Clipboard.setStringAsync("");
+    }
+  }
+
+  // Hallazgo #69: solo Android, solo acá (sin sesión -- estar en LoginScreen ya implica que no se
+  // llegó por un enlace de invitación en este arranque, el enlace monta Registro directo, ver
+  // RootNavigator.tsx), una vez por arranque y solo si en este dispositivo NUNCA hubo sesión
+  // (criterio 4b -- si no, un chofer que cerró sesión vería el aviso de Android en cada arranque).
+  // El token nunca se muestra ni se registra en ningún log.
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    if (!debeRevisarPortapapelesEsteArranque()) return;
+
+    (async () => {
+      const yaHuboSesion = await obtenerValor(CLAVE_YA_HUBO_SESION);
+      if (yaHuboSesion) return;
+
+      // getStringAsync(), NUNCA hasStringAsync() como filtro -- la documentación de Expo no dice
+      // que el booleano evite el aviso de Android 12+, así que no hay motivo para leer dos veces.
+      const texto = await Clipboard.getStringAsync();
+      const token = tokenDeTextoPortapapeles(texto);
+      if (!token) return;
+
+      const { resultado } = await resolverInvitacion(token, supabase);
+      const accion = decidirAccionPortapapeles(resultado);
+
+      if (accion === "ignorarYVaciar") {
+        await Clipboard.setStringAsync("");
+        return;
+      }
+      if (accion === "ignorarYConservar") return;
+
+      // "ofrecer": criterio 7, dos botones -- ninguno de los dos textos incluye el token.
+      Alert.alert(
+        t("login.invitacionEncontradaTitulo"),
+        t("login.invitacionEncontradaCuerpo"),
+        [
+          { text: t("login.botonAhoraNo"), style: "cancel", onPress: () => vaciarSiSigueIgual(token) },
+          {
+            text: t("login.botonContinuarRegistro"),
+            onPress: () => {
+              void vaciarSiSigueIgual(token);
+              navigation.navigate("Registro", { token });
+            },
+          },
+        ],
+        { cancelable: false }
+      );
+    })();
+    // Solo al montar -- "una vez por arranque" ya lo garantiza debeRevisarPortapapelesEsteArranque().
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function manejarIngreso() {
     if (!puedeEnviar || cargando) return;

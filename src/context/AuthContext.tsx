@@ -9,6 +9,13 @@ import { manejarEventoAuth } from "./manejarEventoAuth";
 import { programarRecargaUsuario } from "./programarRecargaUsuario";
 
 const CLAVE_USUARIO = "app_transp_usuario";
+// Hallazgo #69, criterio 4b: marca del TELÉFONO (sin choferId, mismo criterio que
+// app_transp_avisoGaleriaVisto en galeriaService.ts) -- "alguna vez hubo una sesión en este
+// dispositivo", para que LoginScreen.tsx nunca ofrezca leer el portapapeles si el chofer ya cerró
+// sesión alguna vez acá (evita el aviso de Android "la app pegó del portapapeles" en cada
+// arranque sin sesión, sin motivo). Se escribe una sola vez, nunca se borra (ni siquiera en
+// cerrarSesion()) y nunca contiene datos de la invitación.
+export const CLAVE_YA_HUBO_SESION = "app_transp_yaHuboSesion";
 
 interface AuthContextValor {
   usuario: Usuario | null;
@@ -58,6 +65,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const establecerSesion = useCallback(
     async (nuevoUsuario: Usuario) => {
       await guardarValor(CLAVE_USUARIO, JSON.stringify(nuevoUsuario));
+      // Hallazgo #69, criterio 4b: único punto de entrada de login/registro(signup)/recuperación
+      // -- escribe la marca de "ya hubo sesión" una vez por cada una (idempotente, re-escribir
+      // "true" es inocuo).
+      await guardarValor(CLAVE_YA_HUBO_SESION, "true");
       aplicarUsuario(nuevoUsuario);
       programarRecargaUsuario(nuevoUsuario.id, {
         cliente: supabase,
@@ -155,6 +166,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // `empresaDefecto`/`rutaDefecto`), restaurarSesion() ya lo reconstruyó sin ese campo;
         // volver a guardarlo acá deja SecureStore con la forma nueva (punto 4c).
         await guardarValor(CLAVE_USUARIO, JSON.stringify(restaurado.usuario));
+        // Hallazgo #69, criterio 4b: "restauración" es el tercer camino de entrada (junto con
+        // login/registro/recuperación, en establecerSesion) que cuenta como "hubo sesión en este
+        // dispositivo" -- un chofer que ya tenía la app instalada de antes nunca debe ver el
+        // aviso del portapapeles en Login.
+        await guardarValor(CLAVE_YA_HUBO_SESION, "true");
 
         // Punto 4.2 (y, desde 2c-0, P4): SOLO con "valida" (hay sesión real confirmada, no solo el
         // Usuario cacheado) se dispara una recarga EN SEGUNDO PLANO -- corrige `nombre: ""` (si el
