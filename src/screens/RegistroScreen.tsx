@@ -31,6 +31,7 @@ import {
   accionDeResultadoValidarInvitacion,
   accionDeResultadoRegistro,
   accionParaEstadoInvitacion,
+  invitacionTrasResolverEnlace,
   claveErrorCampo,
   tokenValido,
   normalizarCodigoInvitacion,
@@ -146,7 +147,13 @@ export default function RegistroScreen() {
   // Hallazgo #68: resultado de resolver el token del ENLACE -- válida va al formulario; cualquier
   // otro resultado va a la fase "invitacionNoValida" (NUNCA a "invitacion", que es la del código
   // de 8 a mano). Comparte esta decisión el efecto de montaje (abajo) y manejarReintentarInvitacion.
+  // Corrección tras la prueba real (2026-10-23): `invitacion` es justo lo que manejarRegistrar()
+  // manda en registrarChofer()/signUp -- con el enlace, válida debe dejar el TOKEN ahí (nunca
+  // ""), o el trigger rechaza el signUp y la revalidación posterior da "no_existe" aunque la
+  // invitación siga vigente. Cualquier otro resultado sí vacía el campo (para que "Tengo otro
+  // código" abra un campo realmente vacío).
   function procesarResultadoInvitacion(datos: DatosInvitacion | null, resultado: ResultadoValidarInvitacion) {
+    setInvitacion(invitacionTrasResolverEnlace(tokenInicial ?? "", resultado));
     const accion = accionDeResultadoValidarInvitacion(resultado);
     if (accion.tipo === "valida") {
       aplicarDatosInvitacion(datos);
@@ -165,9 +172,6 @@ export default function RegistroScreen() {
   useEffect(() => {
     if (!tokenInicial) return;
     resolverInvitacion(tokenInicial, supabase).then(({ datos, resultado }) => {
-      // Criterio 1 (#68): el campo del código se vacía al salir de la carga con enlace, sin
-      // importar el resultado -- así, si el chofer abre después "Tengo otro código", lo ve vacío.
-      setInvitacion("");
       procesarResultadoInvitacion(datos, resultado);
     });
     // Solo al montar -- el token no cambia durante la vida de la pantalla.

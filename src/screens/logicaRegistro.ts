@@ -214,6 +214,17 @@ const ACCION_POR_ESTADO_INVITACION: Record<Exclude<EstadoInvitacion, "valida">, 
   no_existe: "otroCodigo",
 };
 
+/** Hallazgo #68, corrección tras la prueba real (2026-10-23): qué debe valer el estado
+ * `invitacion` de RegistroScreen.tsx después de resolver el token del ENLACE -- `invitacion` es
+ * justo lo que `manejarRegistrar()` manda en `registrarChofer()`/`signUp`. Con `""` ahí (el bug
+ * real: el efecto de montaje vaciaba el campo SIEMPRE, sin importar el resultado) el trigger
+ * rechaza y la revalidación da "no_existe", aunque la invitación siga vigente. Válida -> el
+ * propio token (es el valor que necesita el signUp); cualquier otro resultado -> "" (para que
+ * "Tengo otro código" abra el campo realmente vacío). */
+export function invitacionTrasResolverEnlace(token: string, resultado: ResultadoValidarInvitacion): string {
+  return resultado.ok && resultado.fila.estado === "valida" ? token : "";
+}
+
 export function accionParaEstadoInvitacion(resultado: ResultadoValidarInvitacion): AccionInvitacionNoValida {
   if (!resultado.ok) return "reintentar";
   // Defensivo: "valida" no debería llegar acá (ver comentario de arriba) -- si pasara, no hay
