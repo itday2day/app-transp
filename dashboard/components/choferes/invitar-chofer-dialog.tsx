@@ -2,22 +2,16 @@
 
 import { Check, Copy } from "lucide-react";
 import { useMemo, useState } from "react";
-import { SelectorCodigoPais } from "@/components/choferes/selector-codigo-pais";
+import { CamposChofer } from "@/components/choferes/campos-chofer";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
-import { normalizarDni } from "@/lib/choferes";
 import { sugerirCorreccionCorreo } from "@/lib/correo";
 import { useEmpresas } from "@/lib/hooks/use-empresas";
 import { useRutas } from "@/lib/hooks/use-rutas";
 import { validarDatosInvitacion } from "@/lib/invitaciones";
-import {
-  combinarTelefono,
-  siguienteNumeroTelefono,
-  PAIS_TELEFONO_DEFECTO,
-} from "@/lib/telefono-pais";
+import { combinarTelefono, PAIS_TELEFONO_DEFECTO } from "@/lib/telefono-pais";
 import type {
   CrearInvitacionRequest,
   CrearInvitacionResponse,
@@ -275,110 +269,46 @@ export function InvitarChoferDialog({ onClose, onCreada }: InvitarChoferDialogPr
         </div>
 
         {modo === "con_datos" && (
-          <div className="flex flex-col gap-3 rounded-md border border-border p-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="inv-dni">DNI/NIE (opcional)</Label>
-                <Input
-                  id="inv-dni"
-                  value={dni}
-                  onChange={(e) => {
-                    setDni(normalizarDni(e.target.value));
-                    setInvitacionPendienteId(null);
-                  }}
-                  maxLength={9}
-                  disabled={bloqueado}
-                />
-              </div>
-              {/* Regla del Hallazgo #54 (filtros-jornadas.tsx): un <input type="date"> nativo
-                  ignora w-full por debajo de cierto ancho (confirmado en Safari de iPhone) --
-                  ancho EXPLÍCITO w-48 (192px) en vez de w-full, y en su propia fila
-                  (col-span-2) para que nunca comparta fila con DNI/NIE en pantallas angostas.
-                  Desde `lg` vuelve a lo que había: comparte fila con DNI/NIE (col-span-1) y
-                  w-full dentro de su celda. */}
-              <div className="col-span-2 lg:col-span-1">
-                <Label htmlFor="inv-fecha-nacimiento">Fecha de nacimiento (opcional)</Label>
-                <Input
-                  id="inv-fecha-nacimiento"
-                  type="date"
-                  value={fechaNacimiento}
-                  onChange={(e) => setFechaNacimiento(e.target.value)}
-                  disabled={bloqueado}
-                  className="w-48 lg:w-full"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="inv-nombre">Nombres (opcional)</Label>
-                <Input
-                  id="inv-nombre"
-                  value={nombre}
-                  onChange={(e) => setNombre(e.target.value)}
-                  disabled={bloqueado}
-                />
-              </div>
-              <div>
-                <Label htmlFor="inv-apellidos">Apellidos (opcional)</Label>
-                <Input
-                  id="inv-apellidos"
-                  value={apellidos}
-                  onChange={(e) => setApellidos(e.target.value)}
-                  disabled={bloqueado}
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="inv-telefono-numero">Teléfono (opcional)</Label>
-              {/* Corrección de la revisión (2026-10-20): SIN maxLength -- recorta los dígitos
-                  CRUDOS a ciegas y sigue sin contar el prefijo nacional. El tope real es "al
-                  teclear" (siguienteNumeroTelefono(), telefono-pais.ts): nunca recorta, solo
-                  rechaza el dígito que haría superar el máximo nacional del país elegido. */}
-              <div className="flex gap-2">
-                <SelectorCodigoPais
-                  value={paisTelefono}
-                  onChange={setPaisTelefono}
-                  disabled={bloqueado}
-                />
-                <Input
-                  id="inv-telefono-numero"
-                  value={numeroTelefono}
-                  onChange={(e) =>
-                    setNumeroTelefono(
-                      siguienteNumeroTelefono(paisTelefono, numeroTelefono, e.target.value)
-                    )
+          <div className="rounded-md border border-border p-3">
+            <CamposChofer
+              idPrefix="inv"
+              disabled={bloqueado}
+              opcional={{
+                nombre: true,
+                apellidos: true,
+                dni: true,
+                fechaNacimiento: true,
+                telefono: true,
+                correo: true,
+              }}
+              nombre={nombre}
+              onCambiarNombre={setNombre}
+              apellidos={apellidos}
+              onCambiarApellidos={setApellidos}
+              dni={dni}
+              onCambiarDni={(valor) => {
+                setDni(valor);
+                setInvitacionPendienteId(null);
+              }}
+              fechaNacimiento={fechaNacimiento}
+              onCambiarFechaNacimiento={setFechaNacimiento}
+              paisTelefono={paisTelefono}
+              onCambiarPaisTelefono={setPaisTelefono}
+              numeroTelefono={numeroTelefono}
+              onCambiarNumeroTelefono={setNumeroTelefono}
+              correo={{
+                modo: "editable",
+                valor: email,
+                onCambiar: manejarCambioCorreo,
+                sugerencia: sugerenciaCorreo,
+                onUsarSugerencia: () => {
+                  if (sugerenciaCorreo) {
+                    setEmail(sugerenciaCorreo);
+                    setSugerenciaCorreo(null);
                   }
-                  placeholder="612345678"
-                  className="flex-1"
-                  disabled={bloqueado}
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="inv-email">Correo (opcional)</Label>
-              <Input
-                id="inv-email"
-                type="email"
-                value={email}
-                onChange={(e) => manejarCambioCorreo(e.target.value)}
-                disabled={bloqueado}
-              />
-              {sugerenciaCorreo && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  ¿Quisiste decir <strong>{sugerenciaCorreo}</strong>?{" "}
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => {
-                      setEmail(sugerenciaCorreo);
-                      setSugerenciaCorreo(null);
-                    }}
-                  >
-                    Usar esta
-                  </button>
-                </p>
-              )}
-            </div>
+                },
+              }}
+            />
           </div>
         )}
 

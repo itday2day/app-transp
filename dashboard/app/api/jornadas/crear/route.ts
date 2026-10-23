@@ -120,16 +120,15 @@ export async function POST(request: Request) {
   }
 
   const kmFinal = numeroValido(cuerpo.kmFinal);
+  // spec_dashboard_choferes_limpieza.md, criterio 16: el combustible final deja de ser
+  // obligatorio para cerrar -- km final solo (cargado) ya es cierre completo; combustibleFinal
+  // vacío queda NULL, nunca 0. Pero combustibleFinal SIN kmFinal no se descarta en silencio: es
+  // un cuerpo inconsistente (cierre a medias) y se rechaza con 400.
   const combustibleFinal = numeroValido(cuerpo.combustibleFinal);
-  // Cierre "completo" solo si vienen los dos -- mismo criterio que ya exige CheckOutForm.tsx en
-  // la app móvil (km y combustible finales van juntos, nunca uno solo).
-  const hayCierre = kmFinal !== undefined && combustibleFinal !== undefined;
-  if ((kmFinal !== undefined) !== (combustibleFinal !== undefined)) {
-    return NextResponse.json(
-      { mensaje: "Si cargás el cierre, hacen falta km final y combustible final juntos." },
-      { status: 400 }
-    );
+  if (combustibleFinal !== undefined && kmFinal === undefined) {
+    return NextResponse.json({ mensaje: "Falta el km final." }, { status: 400 });
   }
+  const hayCierre = kmFinal !== undefined;
 
   const tuvoIncidencia = cuerpo.tuvoIncidencia === true;
   const errorIncidencia = validarIncidencia(
@@ -228,7 +227,7 @@ export async function POST(request: Request) {
     ...(hayCierre
       ? {
           km_final: kmFinal,
-          combustible_final: combustibleFinal,
+          combustible_final: combustibleFinal ?? null,
           fecha_check_out: fechaCheckOut
             ? new Date(fechaCheckOut).toISOString()
             : new Date().toISOString(),

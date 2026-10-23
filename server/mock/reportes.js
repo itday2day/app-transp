@@ -263,9 +263,8 @@ async function generarLibroExcel(jornadas, filtros) {
     // Hallazgo #51, paso 3b (criterio 13, C2 ajustada el 2026-10-13): nombre en vivo desde
     // `choferes` ("Apellidos, Nombre", SIN DNI -- el usuario prefirió no repetir el DNI en dos
     // columnas, se lee más limpio), más una columna de DNI aparte (para filtrar/tablas
-    // dinámicas). "N° Empleado" se conserva como ÚLTIMA columna de la hoja (más abajo, criterio
-    // B1 de spec_bloque_b_paso_3b_identificador_chofer.md) hasta el barrido -- ya no es la
-    // primera columna ni tiene fallback al UUID de chofer_id.
+    // dinámicas). "N° Empleado" ya no existe (spec_dashboard_choferes_limpieza.md, E1): era la
+    // ÚLTIMA columna de la hoja, así que quitarla no corrió ninguna otra de lugar.
     { header: "Chofer (Apellidos, Nombre)", key: "choferNombreApellidos", width: 26 },
     { header: "DNI", key: "dni", width: 12 },
     { header: "Empresa", key: "empresa", width: 20 },
@@ -306,9 +305,6 @@ async function generarLibroExcel(jornadas, filtros) {
       key: `fotoIncidenciaCheckOut${i + 1}`,
       width: 20,
     })),
-    // Última columna de la hoja (criterio B1/13): se conserva mientras existan los 5 choferes de
-    // prueba con numero_empleado; vacía para cualquier chofer registrado por invitación.
-    { header: "N° Empleado", key: "idUsuario", width: 14 },
   ];
   hoja.getRow(1).font = { bold: true };
 
@@ -322,12 +318,9 @@ async function generarLibroExcel(jornadas, filtros) {
       // desplegado todavía manda el nombre del payload viejo (choferIdentificador, de la versión
       // anterior de esta spec que SÍ llevaba el DNI en esta columna) o el payload original
       // (choferNombre, solo nombre sin apellidos), se cae en ese orden en vez de un texto vacío.
-      // idUsuario YA NO cae al UUID de choferId (criterio 12): "" deja la celda vacía, no un
-      // UUID ilegible.
       choferNombreApellidos:
         jornada.choferNombreApellidos ?? jornada.choferIdentificador ?? jornada.choferNombre,
       dni: jornada.choferDni ?? "",
-      idUsuario: jornada.choferNumeroEmpleado ?? "",
       empresa: jornada.empresa,
       fecha: serialFechaExcel(jornada.fechaCheckIn),
       horaCheckIn: fraccionHoraExcel(jornada.fechaCheckIn),
@@ -359,7 +352,6 @@ async function generarLibroExcel(jornadas, filtros) {
     // "@" = formato de texto -- un DNI que empieza con dígitos (la mayoría) no se reinterprete
     // como número y pierda, por ejemplo, un cero inicial (criterio 13).
     fila.getCell("dni").numFmt = "@";
-    fila.getCell("idUsuario").numFmt = "@";
     fila.getCell("fecha").numFmt = FORMATO_FECHA_EXCEL;
     fila.getCell("horaCheckIn").numFmt = FORMATO_HORA_EXCEL;
     if (jornada.fechaCheckOut) fila.getCell("horaCheckOut").numFmt = FORMATO_HORA_EXCEL;

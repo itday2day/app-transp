@@ -5,26 +5,17 @@ import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { VistaDatos, type CampoVista } from "@/components/ui/vista-datos";
-import { SelectorCodigoPais } from "@/components/choferes/selector-codigo-pais";
-import {
-  normalizarDni,
-  normalizarParaComparar,
-  SEXOS,
-  TELEFONO_VALIDO_REGEX,
-} from "@/lib/choferes";
-import { PAISES } from "@/lib/paises";
-import { combinarTelefono, siguienteNumeroTelefono, separarTelefono } from "@/lib/telefono-pais";
+import { CamposChofer } from "@/components/choferes/campos-chofer";
+import { normalizarDni, TELEFONO_VALIDO_REGEX } from "@/lib/choferes";
+import { useEstadoChoferes } from "@/lib/hooks/use-estado-choferes";
+import { combinarTelefono, separarTelefono } from "@/lib/telefono-pais";
 import { formatFecha } from "@/lib/utils";
 import type {
   ChoferDuplicadoResponse,
   ChoferRow,
   EditarChoferResponse,
   ResetearContrasenaResponse,
-  SexoChofer,
 } from "@/lib/types";
 
 // Hallazgo #51, criterio 22: el alta (chofer=null) se retiró -- "Invitar chofer"
@@ -49,17 +40,6 @@ function mensajeDeError(cuerpo: unknown, fallback: string): string {
   return cuerpo && typeof cuerpo === "object" && "mensaje" in cuerpo
     ? String((cuerpo as { mensaje: unknown }).mensaje)
     : fallback;
-}
-
-/** spec_telefono_e164_y_pais_desplegable.md: si el país guardado matchea una opción de PAISES
- * ignorando mayúsculas/acentos (ej. "Espana" sin tilde, dato real de antes de este spec), el
- * desplegable arranca con esa opción preseleccionada — el valor exacto de la lista, no el crudo
- * guardado. Si no matchea ninguna (país mal escrito, inventado, o inexistente en la lista), no
- * preselecciona nada: el desplegable queda vacío y el formulario exige elegir uno real. */
-function paisPreseleccionado(paisGuardado: string | null | undefined): string {
-  if (!paisGuardado) return "";
-  const normalizado = normalizarParaComparar(paisGuardado);
-  return PAISES.find((pais) => normalizarParaComparar(pais) === normalizado) ?? "";
 }
 
 /** Tarjeta de contraseña temporal — se muestra UNA sola vez (al crear o al resetear), con copiar
@@ -111,12 +91,16 @@ function ContrasenaTemporal({
 }
 
 export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps) {
+  // email/email_confirmed_at viven en auth.users, no en `choferes` -- misma query que ya usa
+  // /choferes (TablaChoferes), react-query la deduplica así que abrir el diálogo no dispara una
+  // segunda consulta de red.
+  const { data: estadoResp } = useEstadoChoferes();
+  const correoChofer = estadoResp?.data.find((e) => e.id === chofer.id)?.email ?? "—";
+
   const [nombre, setNombre] = useState(chofer.nombre);
   const [apellidos, setApellidos] = useState(chofer.apellidos);
   const [dni, setDni] = useState(chofer.dni);
   const [fechaNacimiento, setFechaNacimiento] = useState(chofer.fecha_nacimiento);
-  const [paisNacimiento, setPaisNacimiento] = useState(paisPreseleccionado(chofer.pais_nacimiento));
-  const [sexo, setSexo] = useState<SexoChofer | "">(chofer.sexo ?? "");
   // spec_telefono_pais_selector.md: el país arranca en España (o en el que corresponda al
   // teléfono ya guardado, separado por separarTelefono() — coincidencia de prefijo más largo
   // primero) y el número es solo el resto de los dígitos, sin el código de marcación.
@@ -140,8 +124,6 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
       apellidos: chofer.apellidos,
       dni: chofer.dni,
       fechaNacimiento: chofer.fecha_nacimiento,
-      paisNacimiento: paisPreseleccionado(chofer.pais_nacimiento),
-      sexo: (chofer.sexo ?? "") as SexoChofer | "",
       paisTelefono: telefonoSeparado.pais,
       numeroTelefono: telefonoSeparado.numero,
     }),
@@ -155,8 +137,6 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     apellidos !== valoresIniciales.apellidos ||
     dni !== valoresIniciales.dni ||
     fechaNacimiento !== valoresIniciales.fechaNacimiento ||
-    paisNacimiento !== valoresIniciales.paisNacimiento ||
-    sexo !== valoresIniciales.sexo ||
     paisTelefono !== valoresIniciales.paisTelefono ||
     numeroTelefono !== valoresIniciales.numeroTelefono;
 
@@ -179,8 +159,6 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     setApellidos(valoresIniciales.apellidos);
     setDni(valoresIniciales.dni);
     setFechaNacimiento(valoresIniciales.fechaNacimiento);
-    setPaisNacimiento(valoresIniciales.paisNacimiento);
-    setSexo(valoresIniciales.sexo);
     setPaisTelefono(valoresIniciales.paisTelefono);
     setNumeroTelefono(valoresIniciales.numeroTelefono);
     setError(null);
@@ -208,8 +186,6 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     if (!apellidos.trim()) return setError("Faltan los apellidos.");
     if (!dni.trim()) return setError("Falta el DNI.");
     if (!fechaNacimiento) return setError("Falta la fecha de nacimiento.");
-    if (!paisNacimiento.trim()) return setError("Falta el país de nacimiento.");
-    if (!sexo) return setError("Elegí el sexo.");
     // El FORMATO se exige siempre que haya algo tipeado (spec_telefono_e164_y_pais_desplegable.md)
     // -- un chofer ya cargado sin teléfono se puede seguir guardando sin teléfono, pero si hay
     // algo tipeado tiene que ser válido. Se arma acá, no en el input: el selector de país ya
@@ -230,8 +206,6 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
           apellidos: apellidos.trim(),
           dni: normalizarDni(dni),
           fechaNacimiento,
-          paisNacimiento: paisNacimiento.trim(),
-          sexo,
           telefono,
         }),
       });
@@ -312,18 +286,16 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
 
   if (modo === "ver") {
     const campos: CampoVista[] = [
-      // Hallazgo #51: un chofer registrado por invitación no tiene numero_empleado -- se omite
-      // la fila entera en vez de mostrar "—" (es un dato que ya no aplica, no uno vacío).
-      ...(chofer.numero_empleado
-        ? [{ etiqueta: "Número de empleado", valor: chofer.numero_empleado, mono: true }]
-        : []),
+      // spec_dashboard_choferes_limpieza.md, criterio 8: la fila "Número de empleado" se quitó
+      // de esta vista para todos los choferes (no solo para los de invitación) -- el
+      // `chofer.numero_empleado &&` de más abajo, en "Resetear contraseña", es un gate distinto y
+      // no se toca (criterio 10).
       { etiqueta: "Nombre", valor: chofer.nombre },
       { etiqueta: "Apellidos", valor: chofer.apellidos },
       { etiqueta: "DNI", valor: chofer.dni, mono: true },
       { etiqueta: "Fecha de nacimiento", valor: formatFecha(chofer.fecha_nacimiento), mono: true },
-      { etiqueta: "País de nacimiento", valor: chofer.pais_nacimiento ?? "—" },
-      { etiqueta: "Sexo", valor: chofer.sexo ?? "—" },
       { etiqueta: "Teléfono", valor: chofer.telefono ?? "—", mono: true },
+      { etiqueta: "Correo electrónico", valor: correoChofer },
     ];
 
     return (
@@ -414,126 +386,27 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   return (
     <Dialog open onClose={onClose} title={titulo} className="max-w-lg">
       <div className="flex flex-col gap-4">
-        {/* numero_empleado no se edita nunca (cambiar numeroEmpleado cambiaría el correo
-            sintético con el que el chofer ya inició sesión antes) -- solo se muestra como
-            referencia de solo lectura, y solo si existe (Hallazgo #51: uno registrado por
-            invitación no tiene). */}
-        {chofer.numero_empleado && (
-          <div>
-            <Label htmlFor="chf-numero">Número de empleado</Label>
-            <Input id="chf-numero" value={chofer.numero_empleado} disabled />
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="chf-nombre">Nombre</Label>
-            <Input
-              id="chf-nombre"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              disabled={deshabilitarCampos}
-            />
-          </div>
-          <div>
-            <Label htmlFor="chf-apellidos">Apellidos</Label>
-            <Input
-              id="chf-apellidos"
-              value={apellidos}
-              onChange={(e) => setApellidos(e.target.value)}
-              disabled={deshabilitarCampos}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="chf-dni">DNI</Label>
-            <Input
-              id="chf-dni"
-              value={dni}
-              onChange={(e) => setDni(normalizarDni(e.target.value))}
-              maxLength={9}
-              disabled={deshabilitarCampos}
-            />
-          </div>
-          <div>
-            <Label htmlFor="chf-sexo">Sexo</Label>
-            <Select
-              id="chf-sexo"
-              value={sexo}
-              onChange={(e) => setSexo(e.target.value as SexoChofer | "")}
-              disabled={deshabilitarCampos}
-            >
-              <option value="">Elegir…</option>
-              {SEXOS.map((valor) => (
-                <option key={valor} value={valor}>
-                  {valor}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label htmlFor="chf-fecha-nacimiento">Fecha de nacimiento</Label>
-            <Input
-              id="chf-fecha-nacimiento"
-              type="date"
-              value={fechaNacimiento}
-              onChange={(e) => setFechaNacimiento(e.target.value)}
-              disabled={deshabilitarCampos}
-            />
-          </div>
-          <div>
-            <Label htmlFor="chf-pais">País de nacimiento</Label>
-            <Select
-              id="chf-pais"
-              value={paisNacimiento}
-              onChange={(e) => setPaisNacimiento(e.target.value)}
-              disabled={deshabilitarCampos}
-            >
-              <option value="">Elegir…</option>
-              {PAISES.map((pais) => (
-                <option key={pais} value={pais}>
-                  {pais}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-
-        <div>
-          <Label htmlFor="chf-telefono-numero">Teléfono (opcional)</Label>
-          {/* spec_telefono_pais_selector.md: el "+" + código de marcación ya no se tipean — los
-              da el selector de país, elegido por nombre (filtrable), mostrado como ISO alpha-2 +
-              código. El campo numérico solo acepta dígitos; se componen los dos recién al
-              guardar (ver onSubmit, combinarTelefono()). Corrección de la revisión: SIN
-              maxLength -- un maxLength recorta los dígitos CRUDOS a ciegas y sigue sin contar el
-              prefijo nacional (GB: "0" + 10 dígitos). El tope real es "al teclear"
-              (siguienteNumeroTelefono(), telefono-pais.ts): nunca recorta, solo rechaza el
-              dígito que haría superar el máximo nacional del país elegido. */}
-          <div className="flex gap-2">
-            <SelectorCodigoPais
-              value={paisTelefono}
-              onChange={setPaisTelefono}
-              disabled={deshabilitarCampos}
-            />
-            <Input
-              id="chf-telefono-numero"
-              value={numeroTelefono}
-              onChange={(e) =>
-                setNumeroTelefono(
-                  siguienteNumeroTelefono(paisTelefono, numeroTelefono, e.target.value)
-                )
-              }
-              placeholder="612345678"
-              className="flex-1"
-              disabled={deshabilitarCampos}
-            />
-          </div>
-        </div>
+        {/* numero_empleado no se edita nunca -- la fila de solo lectura se quitó (criterio 8); el
+            `chofer.numero_empleado &&` de "Resetear contraseña" más abajo no se toca (criterio
+            10). */}
+        <CamposChofer
+          idPrefix="chf"
+          disabled={deshabilitarCampos}
+          opcional={{ telefono: true }}
+          nombre={nombre}
+          onCambiarNombre={setNombre}
+          apellidos={apellidos}
+          onCambiarApellidos={setApellidos}
+          dni={dni}
+          onCambiarDni={setDni}
+          fechaNacimiento={fechaNacimiento}
+          onCambiarFechaNacimiento={setFechaNacimiento}
+          paisTelefono={paisTelefono}
+          onCambiarPaisTelefono={setPaisTelefono}
+          numeroTelefono={numeroTelefono}
+          onCambiarNumeroTelefono={setNumeroTelefono}
+          correo={{ modo: "solo-lectura", valor: correoChofer }}
+        />
 
         {error && (
           <p role="alert" className="text-sm text-danger">

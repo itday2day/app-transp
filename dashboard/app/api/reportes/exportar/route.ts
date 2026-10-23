@@ -4,13 +4,12 @@ import { aplicarFiltrosJornadas, MAX_JORNADAS_POR_REPORTE } from "@/lib/jornadas
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { EstadoJornada, ExportarReporteResponse, JornadaRow } from "@/lib/types";
 
-// jornadas no guarda numero_empleado/apellidos/dni (solo chofer_id, uuid de Supabase Auth) —
+// jornadas no guarda nombre/apellidos/dni (solo chofer_id, uuid de Supabase Auth) —
 // se traen vía el embed de PostgREST sobre la FK jornadas.chofer_id -> choferes.id. Omit +
 // redefinición (no intersección con JornadaRow.choferes, que ya existe para el criterio 7 con
 // otra forma) para no terminar exigiendo las dos formas a la vez.
 type JornadaRowConChofer = Omit<JornadaRow, "choferes"> & {
   choferes: {
-    numero_empleado: string | null;
     nombre: string;
     apellidos: string;
     dni: string;
@@ -31,10 +30,6 @@ interface CuerpoPeticion {
 // usa la app móvil (ver src/types/index.ts -> JornadaReporte).
 interface JornadaReporte {
   choferId: string;
-  /** `null` si no existe (Hallazgo #51, paso 3b, criterio 12) -- ya no cae a chofer_id (ese
-   * fallback desaparece: reportes.js (criterio 14) deja la celda vacía en vez de mostrar un
-   * UUID). */
-  choferNumeroEmpleado: string | null;
   /** "Apellidos, Nombre" en vivo desde `choferes`, SIN DNI (C2 ajustada el 2026-10-13: el DNI
    * va en su propia columna -- choferDni -- no repetido acá; criterio 12). NO
    * jornada.chofer_nombre, que solo tiene el nombre. */
@@ -75,7 +70,6 @@ interface JornadaReporte {
 function filaAJornadaReporte(fila: JornadaRowConChofer): JornadaReporte {
   return {
     choferId: fila.chofer_id,
-    choferNumeroEmpleado: fila.choferes?.numero_empleado ?? null,
     choferNombreApellidos: fila.choferes
       ? nombreApellidosChofer(fila.choferes)
       : fila.chofer_nombre,
@@ -179,9 +173,7 @@ export async function POST(request: Request) {
   try {
     ({ query: queryFiltrada } = await aplicarFiltrosJornadas(
       supabase,
-      supabase
-        .from("jornadas")
-        .select("*, choferes(numero_empleado, nombre, apellidos, dni)", { count: "exact" }),
+      supabase.from("jornadas").select("*, choferes(nombre, apellidos, dni)", { count: "exact" }),
       {
         empresa: empresaFiltro,
         chofer: choferFiltro,

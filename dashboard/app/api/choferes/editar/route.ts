@@ -4,32 +4,26 @@ import {
   edadMinimaCumplida,
   identificadorChofer,
   normalizarDni,
-  SEXOS,
   TELEFONO_VALIDO_REGEX,
 } from "@/lib/choferes";
-import { PAISES } from "@/lib/paises";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import type { TablesUpdate } from "@/lib/supabase/database.types";
-import type {
-  ChoferDuplicadoResponse,
-  ChoferRow,
-  EditarChoferResponse,
-  SexoChofer,
-} from "@/lib/types";
+import type { ChoferDuplicadoResponse, ChoferRow, EditarChoferResponse } from "@/lib/types";
 
 // Duración de ban efectivamente permanente — mismo valor que usa la documentación oficial de
 // Supabase para "banear indefinidamente" (no existe un "para siempre" real en la API, así que
 // esto es la convención). "none" levanta el ban (reactivar).
 const BAN_PERMANENTE = "876000h";
 
+// spec_dashboard_choferes_limpieza.md, criterio 9: sexo/paisNacimiento ya no están acá a
+// propósito -- si una pestaña vieja todavía los manda, no se leen de `body` (TS los deja fuera
+// del tipo) y nunca llegan a `actualizacion`, así que el servidor los ignora sin devolver 400.
 interface CuerpoPeticion {
   id?: unknown;
   nombre?: unknown;
   apellidos?: unknown;
   dni?: unknown;
   fechaNacimiento?: unknown;
-  paisNacimiento?: unknown;
-  sexo?: unknown;
   telefono?: unknown;
   activo?: unknown;
 }
@@ -108,27 +102,6 @@ export async function POST(request: Request) {
       );
     }
     actualizacion.fecha_nacimiento = fecha;
-  }
-  if (body.paisNacimiento !== undefined) {
-    const pais = typeof body.paisNacimiento === "string" ? body.paisNacimiento.trim() : "";
-    if (!pais)
-      return NextResponse.json({ mensaje: "Falta el país de nacimiento." }, { status: 400 });
-    if (!PAISES.includes(pais)) {
-      return NextResponse.json(
-        { mensaje: "El país de nacimiento debe ser uno de la lista." },
-        { status: 400 }
-      );
-    }
-    actualizacion.pais_nacimiento = pais;
-  }
-  if (body.sexo !== undefined) {
-    if (typeof body.sexo !== "string" || !SEXOS.includes(body.sexo as SexoChofer)) {
-      return NextResponse.json(
-        { mensaje: "El sexo debe ser Masculino, Femenino u Otro." },
-        { status: 400 }
-      );
-    }
-    actualizacion.sexo = body.sexo;
   }
 
   let cambioActivo: boolean | undefined;

@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { nombreApellidosChofer } from "@/lib/choferes";
-import { cn } from "@/lib/utils";
-import type { ChoferRow, EstadoChoferAuth } from "@/lib/types";
+import { useEmpresas } from "@/lib/hooks/use-empresas";
+import { useRutas } from "@/lib/hooks/use-rutas";
+import { cn, formatFecha } from "@/lib/utils";
+import type { ChoferRow, EmpresaRow, EstadoChoferAuth, RutaRow } from "@/lib/types";
 
 interface TablaChoferesProps {
   choferes: ChoferRow[];
@@ -18,7 +20,35 @@ interface TablaChoferesProps {
   onAnulado: (choferId: string) => void;
 }
 
-const COLUMNAS = ["N.º empleado", "Nombre", "DNI", "País", "Teléfono", "Estado", ""];
+// spec_dashboard_choferes_limpieza.md, criterio 1: Nombre y apellidos -> DNI -> Teléfono ->
+// Correo -> Empresa/ruta por defecto -> Alta -> Estado -> acciones. Se quitan "N.º empleado" y
+// "País".
+const COLUMNAS = [
+  "Nombre y apellidos",
+  "DNI",
+  "Teléfono",
+  "Correo",
+  "Empresa / ruta",
+  "Alta",
+  "Estado",
+  "",
+];
+
+/** Nombre de la empresa y/o ruta por defecto del chofer, resueltos por id contra los catálogos ya
+ * cacheados por useEmpresas()/useRutas() -- nunca una consulta por fila. Si la empresa está
+ * inactiva se muestra igual su nombre (criterio 4); "—" si no tiene ninguna de las dos. */
+function textoEmpresaRuta(
+  chofer: ChoferRow,
+  empresaPorId: Map<string, EmpresaRow>,
+  rutaPorId: Map<string, RutaRow>
+): string {
+  const empresa = chofer.empresa_defecto_id
+    ? empresaPorId.get(chofer.empresa_defecto_id)
+    : undefined;
+  const ruta = chofer.ruta_defecto_id ? rutaPorId.get(chofer.ruta_defecto_id) : undefined;
+  if (empresa && ruta) return `${empresa.nombre} / ${ruta.nombre}`;
+  return empresa?.nombre ?? ruta?.nombre ?? "—";
+}
 
 function EstadoBadge({ chofer }: { chofer: ChoferRow }) {
   return (
@@ -175,6 +205,8 @@ function AccionesEstado({
 function TarjetaChofer({
   chofer,
   estado,
+  empresaPorId,
+  rutaPorId,
   cargando,
   onSeleccionar,
   onRevisado,
@@ -182,6 +214,8 @@ function TarjetaChofer({
 }: {
   chofer: ChoferRow;
   estado: EstadoChoferAuth | undefined;
+  empresaPorId: Map<string, EmpresaRow>;
+  rutaPorId: Map<string, RutaRow>;
   cargando: boolean;
   onSeleccionar: () => void;
   onRevisado: (chofer: ChoferRow) => void;
@@ -196,20 +230,20 @@ function TarjetaChofer({
         cargando && "opacity-60"
       )}
     >
+      {/* Criterio 2: mismos datos que la tabla, con nombre y DNI arriba. */}
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="font-medium">{nombreApellidosChofer(chofer)}</p>
-          <p className="font-mono text-xs text-muted-foreground">
-            {chofer.numero_empleado ? `N.º ${chofer.numero_empleado}` : "Registrado por invitación"}
-          </p>
+          <p className="font-mono text-xs text-muted-foreground">DNI: {chofer.dni}</p>
         </div>
         <EstadoBadge chofer={chofer} />
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-        <span className="font-mono">DNI: {chofer.dni}</span>
-        {chofer.pais_nacimiento && <span>{chofer.pais_nacimiento}</span>}
         {chofer.telefono && <span className="font-mono">Tel: {chofer.telefono}</span>}
+        <span>{estado?.email ?? "—"}</span>
+        <span>{textoEmpresaRuta(chofer, empresaPorId, rutaPorId)}</span>
+        <span>Alta: {formatFecha(chofer.created_at)}</span>
       </div>
 
       {chofer.debe_cambiar_contrasena && (
@@ -234,6 +268,20 @@ export function TablaChoferes({
   onRevisado,
   onAnulado,
 }: TablaChoferesProps) {
+  // Criterio 4: nombres resueltos desde los hooks existentes (no el id), sin una consulta por
+  // fila -- react-query ya cachea /api/empresas y /api/rutas (los usan invitar-chofer-dialog.tsx
+  // y los diálogos de jornadas).
+  const { data: empresasResp } = useEmpresas();
+  const { data: rutasResp } = useRutas();
+  const empresaPorId = useMemo(
+    () => new Map((empresasResp?.data ?? []).map((e) => [e.id, e])),
+    [empresasResp]
+  );
+  const rutaPorId = useMemo(
+    () => new Map((rutasResp?.data ?? []).map((r) => [r.id, r])),
+    [rutasResp]
+  );
+
   return (
     <>
       {/* Mismo criterio que TablaJornadas/TablaVehiculos: tabla desde `lg`, tarjetas por debajo. */}
@@ -258,11 +306,12 @@ export function TablaChoferes({
                   cargando && "opacity-60"
                 )}
               >
-                <td className="px-3 py-2 font-mono font-medium">{chofer.numero_empleado ?? "—"}</td>
                 <td className="px-3 py-2">{nombreApellidosChofer(chofer)}</td>
                 <td className="px-3 py-2 font-mono">{chofer.dni}</td>
-                <td className="px-3 py-2">{chofer.pais_nacimiento ?? "—"}</td>
                 <td className="px-3 py-2 font-mono">{chofer.telefono ?? "—"}</td>
+                <td className="px-3 py-2">{estadoPorId.get(chofer.id)?.email ?? "—"}</td>
+                <td className="px-3 py-2">{textoEmpresaRuta(chofer, empresaPorId, rutaPorId)}</td>
+                <td className="px-3 py-2">{formatFecha(chofer.created_at)}</td>
                 <td className="px-3 py-2">
                   <EstadoBadge chofer={chofer} />
                 </td>
@@ -300,6 +349,8 @@ export function TablaChoferes({
             key={chofer.id}
             chofer={chofer}
             estado={estadoPorId.get(chofer.id)}
+            empresaPorId={empresaPorId}
+            rutaPorId={rutaPorId}
             cargando={cargando}
             onSeleccionar={() => onSeleccionar(chofer)}
             onRevisado={onRevisado}

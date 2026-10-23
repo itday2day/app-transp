@@ -528,7 +528,9 @@ export interface CrearChoferResponse {
   contrasenaTemporal: string;
 }
 
-export interface EditarChoferRequest extends Partial<Omit<CamposChofer, "numeroEmpleado">> {
+export interface EditarChoferRequest extends Partial<
+  Omit<CamposChofer, "numeroEmpleado" | "sexo" | "paisNacimiento">
+> {
   id: string;
   activo?: boolean;
 }

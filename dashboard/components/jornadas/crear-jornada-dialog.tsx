@@ -152,8 +152,10 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
     ruta.trim() !== "" &&
     kmInicial.trim() !== "" &&
     // spec_ajustes_previos_apk.md, A6: el combustible inicial deja de ser requisito de
-    // "formulario completo" -- vacío ya no bloquea el guardado.
-    (!cargarCierre || (kmFinal.trim() !== "" && combustibleFinal.trim() !== "")) &&
+    // "formulario completo" -- vacío ya no bloquea el guardado. spec_dashboard_choferes_
+    // limpieza.md, criterio 16: lo mismo para el combustible final -- solo km final sigue siendo
+    // obligatorio para cerrar.
+    (!cargarCierre || kmFinal.trim() !== "") &&
     !detalleIncidenciaFaltante;
 
   async function manejarGuardar() {
@@ -179,7 +181,9 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
     };
     if (cargarCierre) {
       cuerpo.kmFinal = Number(kmFinal);
-      cuerpo.combustibleFinal = Number(combustibleFinal);
+      // spec_dashboard_choferes_limpieza.md, criterio 16: igual que combustibleInicial arriba --
+      // vacío -> undefined -> no se envía -> queda NULL en Supabase (nunca 0).
+      cuerpo.combustibleFinal = numeroOpcional(combustibleFinal);
       if (checkOutFecha && HORA_24H_REGEX.test(checkOutHora)) {
         cuerpo.fechaCheckOut = instanteEnEspanaComoUtc(checkOutFecha, checkOutHora);
       }
@@ -361,7 +365,9 @@ export function CrearJornadaDialog({ onClose, onCreada }: CrearJornadaDialogProp
                     />
                   </div>
                   <div>
-                    <Label htmlFor="crear-combustible-final">Combustible final (%)</Label>
+                    <Label htmlFor="crear-combustible-final">
+                      Combustible final (%) (opcional)
+                    </Label>
                     <Input
                       id="crear-combustible-final"
                       type="number"
