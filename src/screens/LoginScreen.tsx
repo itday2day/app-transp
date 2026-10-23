@@ -70,40 +70,47 @@ export default function LoginScreen() {
     if (!debeRevisarPortapapelesEsteArranque()) return;
 
     (async () => {
-      const yaHuboSesion = await obtenerValor(CLAVE_YA_HUBO_SESION);
-      if (yaHuboSesion) return;
+      try {
+        const yaHuboSesion = await obtenerValor(CLAVE_YA_HUBO_SESION);
+        if (yaHuboSesion) return;
 
-      // getStringAsync(), NUNCA hasStringAsync() como filtro -- la documentación de Expo no dice
-      // que el booleano evite el aviso de Android 12+, así que no hay motivo para leer dos veces.
-      const texto = await Clipboard.getStringAsync();
-      const token = tokenDeTextoPortapapeles(texto);
-      if (!token) return;
+        // getStringAsync(), NUNCA hasStringAsync() como filtro -- la documentación de Expo no
+        // dice que el booleano evite el aviso de Android 12+, así que no hay motivo para leer
+        // dos veces.
+        const texto = await Clipboard.getStringAsync();
+        const token = tokenDeTextoPortapapeles(texto);
+        if (!token) return;
 
-      const { resultado } = await resolverInvitacion(token, supabase);
-      const accion = decidirAccionPortapapeles(resultado);
+        const { resultado } = await resolverInvitacion(token, supabase);
+        const accion = decidirAccionPortapapeles(resultado);
 
-      if (accion === "ignorarYVaciar") {
-        await Clipboard.setStringAsync("");
-        return;
-      }
-      if (accion === "ignorarYConservar") return;
+        if (accion === "ignorarYVaciar") {
+          await Clipboard.setStringAsync("");
+          return;
+        }
+        if (accion === "ignorarYConservar") return;
 
-      // "ofrecer": criterio 7, dos botones -- ninguno de los dos textos incluye el token.
-      Alert.alert(
-        t("login.invitacionEncontradaTitulo"),
-        t("login.invitacionEncontradaCuerpo"),
-        [
-          { text: t("login.botonAhoraNo"), style: "cancel", onPress: () => vaciarSiSigueIgual(token) },
-          {
-            text: t("login.botonContinuarRegistro"),
-            onPress: () => {
-              void vaciarSiSigueIgual(token);
-              navigation.navigate("Registro", { token });
+        // "ofrecer": criterio 7, dos botones -- ninguno de los dos textos incluye el token.
+        Alert.alert(
+          t("login.invitacionEncontradaTitulo"),
+          t("login.invitacionEncontradaCuerpo"),
+          [
+            { text: t("login.botonAhoraNo"), style: "cancel", onPress: () => vaciarSiSigueIgual(token) },
+            {
+              text: t("login.botonContinuarRegistro"),
+              onPress: () => {
+                void vaciarSiSigueIgual(token);
+                navigation.navigate("Registro", { token });
+              },
             },
-          },
-        ],
-        { cancelable: false }
-      );
+          ],
+          { cancelable: false }
+        );
+      } catch {
+        // Mejor esfuerzo: un fallo acá (portapapeles inaccesible, red caída al resolver la
+        // invitación, etc.) nunca debe molestar al chofer en el Login -- sin registrar el
+        // contenido del portapapeles ni el token en ningún log.
+      }
     })();
     // Solo al montar -- "una vez por arranque" ya lo garantiza debeRevisarPortapapelesEsteArranque().
     // eslint-disable-next-line react-hooks/exhaustive-deps
