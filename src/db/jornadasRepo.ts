@@ -103,7 +103,7 @@ function filaAJornada(fila: FilaJornadaSQLite): Jornada {
     fotosIncidenciaCheckinUris: parsearFotos(fila.fotosIncidenciaCheckinUris),
     fotosIncidenciaCheckin: parsearFotos(fila.fotosIncidenciaCheckin),
     kmFinal: fila.kmFinal ?? undefined,
-    combustibleFinal: fila.combustibleFinal ?? undefined,
+    combustibleFinal: fila.combustibleFinal,
     fotoTacometroFinalUri: fila.fotoTacometroFinalUri ?? undefined,
     latFinal: fila.latFinal ?? undefined,
     lngFinal: fila.lngFinal ?? undefined,
@@ -136,6 +136,9 @@ export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promis
     // la misma frontera exacta donde ya se normalizaban los demás campos opcionales del spread.
     tipoIncidenciaCheckin: datos.tipoIncidenciaCheckin ?? undefined,
     fechaCheckIn: new Date().toISOString(),
+    // combustibleFinal no es opcional en Jornada (spec_app_build1_ajustes.md, criterio 2) --
+    // siempre NULL en el check-in, todavía no hubo cierre.
+    combustibleFinal: null,
     // El check-in del propio chofer nunca es una jornada creada_por_admin -- esa viene por el
     // camino de recuperación (insertarJornadaCreadaPorAdmin), no por acá.
     creadaPorAdmin: false,
@@ -478,7 +481,7 @@ export async function insertarJornadaRecuperada(remoto: JornadaRecuperadaRemota)
     fotoCheckInUrl: remoto.fotoTacometroInicialUrl ?? undefined,
     fotoRutaUrl: remoto.fotoRutaUrl ?? undefined,
     kmFinal: remoto.kmFinal ?? undefined,
-    combustibleFinal: remoto.combustibleFinal ?? undefined,
+    combustibleFinal: remoto.combustibleFinal,
     fotoTacometroFinalUri: remoto.fotoTacometroFinalUrl ?? undefined,
     latFinal: remoto.latFinal ?? undefined,
     lngFinal: remoto.lngFinal ?? undefined,

@@ -480,24 +480,10 @@ export default function RegistroScreen() {
           contentContainerStyle={estilos.contenido}
           keyboardShouldPersistTaps="handled"
         >
-          <CampoTexto
-            etiqueta={t("registro.dniEtiqueta")}
-            placeholder={t("registro.dniPlaceholder")}
-            autoCapitalize="characters"
-            autoCorrect={false}
-            // SIN maxLength nativo a propósito -- recortaría el texto CRUDO antes de que
-            // onChangeText se entere (mismo motivo que registro.invitacionEtiqueta, abajo), y
-            // V5 pega "99 999.903-a" (12 caracteres crudos) esperando que normalizarDni() limpie
-            // ANTES de contar los 9, no después. El único límite real es
-            // normalizarDni(texto).slice(0,9).
-            editable={!dniBloqueado}
-            value={dni}
-            onChangeText={(texto) => setDni(normalizarDni(texto).slice(0, 9))}
-            onBlur={() => marcarTocado("dni")}
-            error={errorDeCampo("dni", "dni")}
-          />
-          {dniBloqueado ? <Text style={estilos.ayuda}>{t("registro.dniBloqueadoAviso")}</Text> : null}
-
+          {/* spec_app_build1_ajustes.md, criterio 9: Nombre, Apellidos, DNI, Fecha de
+              nacimiento, Teléfono, Correo, Contraseña, Confirmar contraseña -- mismo orden que
+              ya usa el Dashboard al invitar (criterio 10: todo lo que depende del CAMPO, no del
+              orden, se mueve con él). */}
           <CampoTexto
             etiqueta={t("registro.nombreEtiqueta")}
             placeholder={t("registro.nombrePlaceholder")}
@@ -517,6 +503,24 @@ export default function RegistroScreen() {
             error={errorDeCampo("apellidos", "apellidos")}
             precargado={marcas.apellidos}
           />
+
+          <CampoTexto
+            etiqueta={t("registro.dniEtiqueta")}
+            placeholder={t("registro.dniPlaceholder")}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            // SIN maxLength nativo a propósito -- recortaría el texto CRUDO antes de que
+            // onChangeText se entere (mismo motivo que registro.invitacionEtiqueta, abajo), y
+            // V5 pega "99 999.903-a" (12 caracteres crudos) esperando que normalizarDni() limpie
+            // ANTES de contar los 9, no después. El único límite real es
+            // normalizarDni(texto).slice(0,9).
+            editable={!dniBloqueado}
+            value={dni}
+            onChangeText={(texto) => setDni(normalizarDni(texto).slice(0, 9))}
+            onBlur={() => marcarTocado("dni")}
+            error={errorDeCampo("dni", "dni")}
+          />
+          {dniBloqueado ? <Text style={estilos.ayuda}>{t("registro.dniBloqueadoAviso")}</Text> : null}
 
           <SelectorFecha
             etiqueta={t("registro.fechaNacimientoEtiqueta")}
@@ -560,6 +564,7 @@ export default function RegistroScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             textContentType="username"
+            autoComplete="email"
             value={correo}
             onChangeText={setCorreo}
             onBlur={() => marcarTocado("correo")}
@@ -577,6 +582,8 @@ export default function RegistroScreen() {
             secureTextEntry
             alternarVisibilidad
             autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
             value={contrasena}
             onChangeText={setContrasena}
             onBlur={() => marcarTocado("contrasena")}
@@ -595,6 +602,8 @@ export default function RegistroScreen() {
             secureTextEntry
             alternarVisibilidad
             autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
             value={confirmarContrasena}
             onChangeText={setConfirmarContrasena}
             onBlur={() => marcarTocado("confirmarContrasena")}

@@ -38,7 +38,8 @@
     "invitacionEncontradaTitulo": "Encontramos tu invitación",
     "invitacionEncontradaCuerpo": "Puedes seguir con tu registro desde donde lo dejaste.",
     "botonContinuarRegistro": "Continuar con mi registro",
-    "botonAhoraNo": "Ahora no"
+    "botonAhoraNo": "Ahora no",
+    "versionPie": "Versión {{version}} (build {{build}})"
   },
   "registro": {
     "dniInvalido": "El DNI debe tener 9 caracteres.",
@@ -155,7 +156,7 @@
     "fotoTablero": "Foto del tablero",
     "fotoTableroAyuda": "Sirve de respaldo del kilometraje inicial.",
     "fotoHojaRuta": "Foto de la hoja de ruta (opcional)",
-    "fotoHojaRutaAyuda": "Respaldo general de la información de la faena. Aparece en el reporte si la agregas.",
+    "fotoHojaRutaAyuda": "Respaldo general de la información de la ruta.",
     "incidenciasEtiqueta": "Incidencias",
     "incidenciasPlaceholder": "Novedades de la faena (opcional)",
     "botonEnviar": "Registrar check-in"
@@ -170,7 +171,7 @@
     "kmFinalEtiqueta": "Kilometraje final",
     "kmFinalError": "El kilometraje final no puede ser menor al inicial ({{km}} km).",
     "combustibleEtiqueta": "Nivel de combustible",
-    "fotoTacometro": "Foto del tacómetro",
+    "fotoTacometro": "Foto del tablero",
     "fotoTacometroAyuda": "Sirve de respaldo del kilometraje final.",
     "notaUbicacion": "Al confirmar, se capturará tu ubicación GPS actual automáticamente como punto de cierre.",
     "botonEnviar": "Registrar check-out",

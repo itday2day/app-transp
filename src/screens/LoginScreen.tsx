@@ -10,6 +10,7 @@ import {
   TextInput,
   Alert,
 } from "react-native";
+import * as Application from "expo-application";
 import * as Clipboard from "expo-clipboard";
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
@@ -185,6 +186,8 @@ export default function LoginScreen() {
               // "@" (TODO(barrido) arriba) -- "username" es el tipo que Apple recomienda para un
               // identificador de acceso que no es SIEMPRE un correo real.
               textContentType="username"
+              autoComplete="username"
+              importantForAutofill="yes"
               returnKeyType="next"
               // submitBehavior="submit" (no blurOnSubmit={false}, @deprecated en TextInput.d.ts
               // de la versión instalada): manda el submit sin blurear el campo, dejando el foco
@@ -202,6 +205,9 @@ export default function LoginScreen() {
               secureTextEntry
               alternarVisibilidad
               autoCapitalize="none"
+              autoComplete="current-password"
+              textContentType="password"
+              importantForAutofill="yes"
               returnKeyType="go"
               onSubmitEditing={manejarIngreso}
               value={contrasena}
@@ -230,6 +236,19 @@ export default function LoginScreen() {
                 onPress={() => navigation.navigate("Registro", undefined)}
               />
             </View>
+
+            {/* spec_app_build1_ajustes.md, criterio 22: Application.nativeApplicationVersion/
+                nativeBuildVersion (expo-application) -- el versionCode REAL, nunca
+                Constants.expoConfig (refleja app.json, no lo que EAS incrementó al generar el
+                .apk). null en Expo Go / web (no es un módulo nativo ahí) -- no se muestra nada. */}
+            {Application.nativeApplicationVersion && Application.nativeBuildVersion ? (
+              <Text style={estilos.version}>
+                {t("login.versionPie", {
+                  version: Application.nativeApplicationVersion,
+                  build: Application.nativeBuildVersion,
+                })}
+              </Text>
+            ) : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -290,6 +309,14 @@ const estilos = StyleSheet.create({
     textAlign: "center",
   },
   contenedorEnlace: {
+    marginTop: espaciado.lg,
+  },
+  // Criterio 22: "pequeña y discreta" -- mismo tamaño/color que una ayuda, nunca compite con el
+  // resto de la pantalla.
+  version: {
+    ...tipografia.ayuda,
+    color: colores.textoSecundario,
+    textAlign: "center",
     marginTop: espaciado.lg,
   },
 });

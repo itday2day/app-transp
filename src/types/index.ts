@@ -89,7 +89,9 @@ export interface Jornada {
   fotosIncidenciaCheckinUris?: string[]; // local, se muestran en DetalleJornadaScreen
 
   kmFinal?: number;
-  combustibleFinal?: NivelCombustible;
+  // opcional desde spec_app_build1_ajustes.md (criterios 1-6) -- mismo patrón que
+  // combustibleInicial arriba: NULL si el chofer no eligió nada, 0 es un valor real y distinto.
+  combustibleFinal: NivelCombustible | null;
   fotoTacometroFinalUri?: string;
   latFinal?: number;
   lngFinal?: number;

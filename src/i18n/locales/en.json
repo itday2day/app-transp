@@ -38,7 +38,8 @@
     "invitacionEncontradaTitulo": "We found your invitation",
     "invitacionEncontradaCuerpo": "You can continue your registration where you left it.",
     "botonContinuarRegistro": "Continue my registration",
-    "botonAhoraNo": "Not now"
+    "botonAhoraNo": "Not now",
+    "versionPie": "Version {{version}} (build {{build}})"
   },
   "registro": {
     "dniInvalido": "The ID number must have 9 characters.",
@@ -155,7 +156,7 @@
     "fotoTablero": "Dashboard photo",
     "fotoTableroAyuda": "Backs up the starting mileage.",
     "fotoHojaRuta": "Route sheet photo (optional)",
-    "fotoHojaRutaAyuda": "General backup of the shift's information. Shown in the report if you add it.",
+    "fotoHojaRutaAyuda": "General backup of the route information.",
     "incidenciasEtiqueta": "Notes",
     "incidenciasPlaceholder": "Shift notes (optional)",
     "botonEnviar": "Submit check-in"
@@ -170,7 +171,7 @@
     "kmFinalEtiqueta": "Final mileage",
     "kmFinalError": "Final mileage can't be less than the starting mileage ({{km}} km).",
     "combustibleEtiqueta": "Fuel level",
-    "fotoTacometro": "Odometer photo",
+    "fotoTacometro": "Dashboard photo",
     "fotoTacometroAyuda": "Backs up the final mileage.",
     "notaUbicacion": "When you confirm, your current GPS location will be captured automatically as the closing point.",
     "botonEnviar": "Submit check-out",

@@ -17,7 +17,7 @@ import { espaciado } from "@/theme/spacing";
 
 export interface ValoresCheckOutForm {
   kmFinal: number;
-  combustibleFinal: NivelCombustible;
+  combustibleFinal: NivelCombustible | null;
   fotoTacometroFinalUri: string;
   tuvoIncidencia: boolean;
   tipoIncidencia: TipoIncidencia | null;
@@ -89,11 +89,6 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
         focoRef: refKmFinalInterno,
       },
       {
-        falta: combustible === null,
-        etiqueta: t("checkOutForm.combustibleEtiqueta"),
-        contRef: refContCombustible,
-      },
-      {
         falta: fotoTacometro === null,
         etiqueta: t("checkOutForm.fotoTacometro"),
         contRef: refContFotoTacometro,
@@ -114,11 +109,9 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
       return;
     }
 
-    // Criterio A7 (spec_ajustes_previos_apk.md): antes `!combustible` hacía que el chip "0%" dejara
-    // el botón inerte sin avisar (`!0` es `true`) -- `combustible === null` es la comprobación
-    // correcta, 0 es un valor real y válido. El combustible final sigue siendo obligatorio; solo
-    // se corrige que 0 sea un valor aceptado.
-    if (combustible === null || !fotoTacometro) return; // nunca debería pasar: ya validado arriba
+    // spec_app_build1_ajustes.md, criterios 1-2: el combustible final deja de ser obligatorio --
+    // `combustible` viaja tal cual (null o un número, 0 incluido) a onEnviar.
+    if (!fotoTacometro) return; // nunca debería pasar: ya validado arriba
 
     yaEnviando.current = true;
     onEnviar({
@@ -158,11 +151,14 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
       />
 
       <View ref={refContCombustible}>
+        {/* spec_app_build1_ajustes.md, criterio 1: mismo sufijo que incidencias.detalleOpcional
+            (reutilizado, igual que ya hace checkInForm.combustibleEtiqueta) y permitirLimpiar,
+            para poder volver a "sin elegir" tras tocar un chip por error. */}
         <SelectorCombustible
-          etiqueta={t("checkOutForm.combustibleEtiqueta")}
+          etiqueta={`${t("checkOutForm.combustibleEtiqueta")}${t("incidencias.detalleOpcional")}`}
           valor={combustible}
           onCambiar={setCombustible}
-          error={mostrarErrores && combustible === null ? t("comun.campoObligatorio") : undefined}
+          permitirLimpiar
         />
       </View>
 
