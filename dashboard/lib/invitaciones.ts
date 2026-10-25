@@ -105,8 +105,13 @@ export function enriquecerInvitacionesListado(
   return filas.map((fila) => enriquecerInvitacionListado(fila, empresaPorId, rutaPorId));
 }
 
-// Dominio real del Dashboard (confirmado contra el servicio de Render, srv-daf8j6tbedkc73889bo0).
-const DOMINIO_DASHBOARD = "https://app-transp-dashboard.onrender.com";
+// Dominio real del Dashboard (spec_cambio_dominio_dashboard.md, 2026-10-25): app.day2day.es, un
+// subdominio de day2day.es apuntado por CNAME a app-transp-dashboard.onrender.com y verificado en
+// Render (Settings → Custom Domains) antes de este cambio de código -- orden DNS → Render →
+// código. app-transp-dashboard.onrender.com SIGUE ACTIVO en paralelo (no se apaga ni se
+// redirige): las invitaciones ya enviadas con ese dominio siguen abriendo bien, el token no
+// depende del host.
+const DOMINIO_DASHBOARD = "https://app.day2day.es";
 
 // ⚠️ `apptransp` es un scheme PROPUESTO, todavía no declarado en app.json (confirmado en la Fase
 // 1 de la spec: no existe ningún `scheme` hoy, ni `linking` en RootNavigator.tsx) — ese cambio es

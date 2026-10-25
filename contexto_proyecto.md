@@ -186,9 +186,15 @@ eliminaron por completo**, junto con todo lo que quedaba huérfano por su culpa:
 2026-09-09; ya está desplegado):
 
 - `app-transp-dashboard` — `rootDir: dashboard`, `npm install && npm run build` / `npm run start`
-  → `https://app-transp-dashboard.onrender.com`.
+  → `https://app-transp-dashboard.onrender.com`, y desde `spec_cambio_dominio_dashboard.md`
+  (2026-10-25) también en `https://app.day2day.es` (dominio propio, CNAME a este mismo servicio de
+  Render) — el de `onrender.com` **sigue activo en paralelo**, nunca se apagó ni se redirigió, para
+  que las invitaciones ya enviadas con ese host sigan abriendo. Orden del cambio: DNS (CNAME
+  `app.day2day.es` → este servicio) → Render (Custom Domain verificado, certificado emitido) →
+  código (`dashboard/lib/invitaciones.ts`, `DOMINIO_DASHBOARD`).
 - `app-transp-mock-server` — `rootDir: server/mock`, `npm install` / `npm start`
-  → `https://app-transp-mock-server.onrender.com`.
+  → `https://app-transp-mock-server.onrender.com` (sin dominio propio, fuera de alcance de esa
+  spec).
 
 Ambos en plan `free`, con dos limitaciones reales de esa plataforma (no bugs de este código):
 
@@ -2776,3 +2782,44 @@ string, ...): Q, ...}`, sin ningún cast) compiló limpio — el error "excessiv
     sirve para probar la app sin depender de la PC.
   - Pendiente: iOS necesita su propio build (`eas build --platform ios`), que requiere cuenta de
     Apple Developer para poder instalarse fuera de Expo Go — no se hizo en esta sesión.
+- **Implementado (2026-10-25, sin build, `spec_app_build1_ajustes.md` — Build 1)**: la app queda preparada para
+  recibir actualizaciones por internet sin reinstalar. `expo-updates` instalado y configurado con
+  `eas update:configure` (`app.json`: `updates.url` con el `projectId` real; `eas.json`: `channel`
+  por perfil de build — `development`/`preview`/`production` — y `autoIncrement: true` también en
+  `preview`, además del que ya tenía `production`). `runtimeVersion` usa la política
+  **`"appVersion"`** (`app.json`, `"runtimeVersion": { "policy": "appVersion" }`) — nunca
+  `"fingerprint"`: esa política calcula una huella de los archivos nativos distinta en el servidor
+  de EAS (Linux) y en el equipo de desarrollo (Windows, con los archivos CRLF "fantasma" ya
+  conocidos), lo que haría que una actualización nunca llegara. ⚠️ **Regla operativa**: con
+  `"appVersion"`, cualquier cambio NATIVO (un módulo nuevo, un permiso, la versión de Expo) exige
+  subir `"version"` en `app.json` y generar un `.apk` nuevo — una actualización por internet
+  **nunca** alcanza para un cambio nativo, el `runtimeVersion` instalado deja de coincidir y el
+  cliente simplemente no la descarga. `package.json` se mantiene igual a `app.json` al subir la
+  versión, pero no interviene en las actualizaciones (solo lee `expo-application` en runtime).
+  Publicar una actualización: `eas update --channel preview --message "<texto>" --environment
+<entorno>` (el flag `--environment` es obligatorio desde el SDK 55) — **siempre con aprobación
+  explícita del usuario**, nunca automático. Revertir una mala: `eas update:rollback` (republica una
+  actualización anterior, o hace que el cliente corra la versión embebida en el `.apk`) — además,
+  `expo-updates` tiene recuperación automática ante un arranque fallido: si el error ocurre antes de
+  que la app pinte su primera vista, intenta bajar una actualización nueva y, si no puede, vuelve
+  sola a la última que sí había arrancado bien; si el error ocurre después de pintar contenido,
+  nunca hace rollback automático (podría haber tocado estado persistente), solo busca una
+  actualización nueva. `expo-application` también entra en este build — `Application.
+nativeApplicationVersion`/`nativeBuildVersion` (nunca `Constants.expoConfig`, que refleja
+  `app.json` y no el `versionCode` real) alimentan la línea "Versión X (build N)" al pie de
+  `LoginScreen.tsx`, que sirve además para confirmar en el teléfono que el `autoIncrement` de
+  `preview` funcionó. **No se publicó ninguna actualización real en este build** — solo quedó
+  configurado. Pendiente: generar el `.apk` con `expo-updates` y probar una actualización por
+  internet (con aprobación explícita).
+- **Implementado (2026-10-25)**: el combustible final deja de ser obligatorio al cerrar una jornada,
+  tanto en la app (`CheckOutForm.tsx`, mismo criterio que ya tenía el combustible inicial desde
+  `spec_ajustes_previos_apk.md`) como en el Dashboard (`crear-jornada-dialog.tsx`/
+  `api/jornadas/crear/route.ts`, con el km final igual de obligatorio para cerrar). `NULL` viaja
+  como `NULL` de punta a punta (SQLite local, sincronización, Supabase) y `0` sigue siendo `0` — un
+  tanque vacío es un valor real, distinto de "no indicado". En el Dashboard ya está **verificado en
+  producción** (Hallazgo #70); en la app falta generar el `.apk` y probarlo en el teléfono.
+- ✅ **Resuelto (2026-10-23)**: la columna "N° Empleado" ya no existe en el reporte Excel
+  (`server/mock/reportes.js`) ni en el `.select()`/payload de `api/reportes/exportar/route.ts` del
+  Dashboard — era la última columna de la hoja "Jornadas", así que quitarla no corrió ninguna otra
+  de lugar. `numero_empleado`, `pais_nacimiento` y `sexo` quedan sin uso en el Dashboard y en el
+  Excel, pendientes de borrarse de la base en una migración posterior.
