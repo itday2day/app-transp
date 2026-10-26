@@ -1,24 +1,41 @@
 "use client";
 
-import { ClipboardList, Map as MapIcon, Truck, Users } from "lucide-react";
+import { Building2, ClipboardList, Map as MapIcon, Truck, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { MasMenu } from "@/components/mas-menu";
 import { cn } from "@/lib/utils";
 
-// ⚠️ 4ª entrada (Choferes, spec_alta_choferes_dashboard.md): calculado con el mismo método que
-// #16/#24, esto excede el presupuesto de la columna lateral en horizontal por ~14px (~404px
-// sobre ~390px disponibles) — decisión explícita del usuario: dejar que el `overflow-y-auto` ya
-// puesto en layout.tsx (red de seguridad desde el Hallazgo #15) haga su trabajo, en vez de
-// rediseñar la navegación. No confirmado en dispositivo real desde este entorno.
-const ENLACES = [
+// Barra lateral de escritorio (horizontal=false): las 5 entradas siempre visibles, sin "Más" --
+// ahí no hay presupuesto de ancho angosto que cuidar.
+const ENLACES_ESCRITORIO = [
   { href: "/mapa", label: "Mapa en vivo", icon: MapIcon },
   { href: "/jornadas", label: "Jornadas", icon: ClipboardList },
   { href: "/flota", label: "Flota", icon: Truck },
   { href: "/choferes", label: "Choferes", icon: Users },
+  { href: "/empresas", label: "Empresas", icon: Building2 },
+];
+
+// spec_catalogo_por_chofer.md (Etapa 2, Supuesto A2 aprobado): con 5 entradas ya confirmadas por
+// aritmética (#16/#24) que exceden el presupuesto de la columna lateral en horizontal, las barras
+// horizontales (tablet y la columna de 128px de teléfono horizontal) muestran solo 3 directas +
+// el menú "Más" (components/mas-menu.tsx) con las otras 2 -- mismo número de "espacios" visibles
+// que las 4 entradas de antes de este cambio, nunca más. No confirmado todavía en dispositivo
+// real desde este entorno (el usuario lo mide en producción tras el deploy).
+const ENLACES_HORIZONTAL_DIRECTOS = [
+  { href: "/mapa", label: "Mapa en vivo", icon: MapIcon },
+  { href: "/jornadas", label: "Jornadas", icon: ClipboardList },
+  { href: "/choferes", label: "Choferes", icon: Users },
+];
+
+const ENLACES_HORIZONTAL_EN_MAS = [
+  { href: "/flota", label: "Flota", icon: Truck },
+  { href: "/empresas", label: "Empresas", icon: Building2 },
 ];
 
 export function SidebarNav({ horizontal = false }: { horizontal?: boolean }) {
   const pathname = usePathname();
+  const enlaces = horizontal ? ENLACES_HORIZONTAL_DIRECTOS : ENLACES_ESCRITORIO;
 
   return (
     <nav
@@ -35,7 +52,7 @@ export function SidebarNav({ horizontal = false }: { horizontal?: boolean }) {
           : "flex-1 flex-col p-2"
       )}
     >
-      {ENLACES.map(({ href, label, icon: Icon }) => {
+      {enlaces.map(({ href, label, icon: Icon }) => {
         const activo = pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link
@@ -76,6 +93,7 @@ export function SidebarNav({ horizontal = false }: { horizontal?: boolean }) {
           </Link>
         );
       })}
+      {horizontal && <MasMenu entradas={ENLACES_HORIZONTAL_EN_MAS} />}
     </nav>
   );
 }

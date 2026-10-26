@@ -2,18 +2,23 @@
 
 import { Check, Copy, KeyRound, Pencil, RotateCcw, Save } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { VistaDatos, type CampoVista } from "@/components/ui/vista-datos";
 import { CamposChofer } from "@/components/choferes/campos-chofer";
+import { EmpresasRutasChofer } from "@/components/choferes/empresas-rutas-chofer";
 import { normalizarDni, TELEFONO_VALIDO_REGEX } from "@/lib/choferes";
 import { useEstadoChoferes } from "@/lib/hooks/use-estado-choferes";
+import { useRutas } from "@/lib/hooks/use-rutas";
+import { useVinculosChofer } from "@/lib/hooks/use-vinculos-chofer";
 import { combinarTelefono, separarTelefono } from "@/lib/telefono-pais";
 import { formatFecha } from "@/lib/utils";
 import type {
   ChoferDuplicadoResponse,
   ChoferRow,
+  DiferenciasVinculosChoferRequest,
   EditarChoferResponse,
   ResetearContrasenaResponse,
 } from "@/lib/types";
@@ -132,13 +137,98 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
-  const hayCambiosSinGuardar =
+  const camposChoferCambiaron =
     nombre !== valoresIniciales.nombre ||
     apellidos !== valoresIniciales.apellidos ||
     dni !== valoresIniciales.dni ||
     fechaNacimiento !== valoresIniciales.fechaNacimiento ||
     paisTelefono !== valoresIniciales.paisTelefono ||
     numeroTelefono !== valoresIniciales.numeroTelefono;
+
+  // Empresas y rutas (spec_catalogo_por_chofer.md, Etapa 2, decisión D1/D2): snapshot cargado al
+  // abrir el diálogo. vinculosResp llega async (useQuery), así que no puede sembrarse con un
+  // useMemo de una sola corrida como valoresIniciales arriba -- en vez de un useEffect que llame
+  // setState (regla de React: evitar setState síncrono dentro de un efecto, cascada de renders),
+  // se sincroniza DURANTE el render, comparando contra la última respuesta ya procesada (patrón
+  // "ajustar estado cuando cambia una prop" de la documentación de React) -- react-query además
+  // preserva la referencia cuando el contenido no cambió (structural sharing), así que esto corre
+  // una sola vez por snapshot real, no en cada render.
+  const queryClient = useQueryClient();
+  const { data: vinculosResp, isLoading: cargandoVinculos } = useVinculosChofer(chofer.id);
+  const { data: rutasResp } = useRutas();
+  const [vinculosProcesados, setVinculosProcesados] = useState<typeof vinculosResp>(undefined);
+  const [empresasSeleccionadas, setEmpresasSeleccionadas] = useState<Set<string>>(new Set());
+  const [rutasSeleccionadas, setRutasSeleccionadas] = useState<Set<string>>(new Set());
+  const [vinculosIniciales, setVinculosIniciales] = useState<{
+    empresas: Set<string>;
+    rutas: Set<string>;
+  } | null>(null);
+
+  if (vinculosResp && vinculosResp !== vinculosProcesados) {
+    const empresasIds = new Set(vinculosResp.empresas.map((e) => e.empresaId));
+    const rutasIds = new Set(vinculosResp.rutas.map((r) => r.rutaId));
+    setVinculosProcesados(vinculosResp);
+    setVinculosIniciales({ empresas: empresasIds, rutas: rutasIds });
+    setEmpresasSeleccionadas(empresasIds);
+    setRutasSeleccionadas(rutasIds);
+  }
+
+  function alternarEmpresa(empresaId: string, marcar: boolean) {
+    setEmpresasSeleccionadas((prev) => {
+      const siguiente = new Set(prev);
+      if (marcar) siguiente.add(empresaId);
+      else siguiente.delete(empresaId);
+      return siguiente;
+    });
+    if (!marcar) {
+      // Desmarcar la empresa también desmarca sus rutas en la UI -- quitar chofer_empresas borra
+      // chofer_rutas por la cascada del lado del servidor; esto solo mantiene la UI consistente
+      // con lo que va a pasar de verdad.
+      const rutasDeEstaEmpresa = (rutasResp?.data ?? [])
+        .filter((r) => r.empresa_id === empresaId)
+        .map((r) => r.id);
+      setRutasSeleccionadas((prev) => {
+        const siguiente = new Set(prev);
+        for (const id of rutasDeEstaEmpresa) siguiente.delete(id);
+        return siguiente;
+      });
+    }
+  }
+
+  function alternarRuta(rutaId: string, _empresaId: string, marcar: boolean) {
+    setRutasSeleccionadas((prev) => {
+      const siguiente = new Set(prev);
+      if (marcar) siguiente.add(rutaId);
+      else siguiente.delete(rutaId);
+      return siguiente;
+    });
+  }
+
+  /** null si no hay ninguna diferencia contra el snapshot inicial -- D1: la segunda petición
+   * (POST /api/choferes/vinculos) solo se manda si esto no es null. */
+  function calcularDiferenciasVinculos(): DiferenciasVinculosChoferRequest | null {
+    const iniciales = vinculosIniciales;
+    if (!iniciales) return null;
+    const empresasAgregar = Array.from(empresasSeleccionadas).filter(
+      (id) => !iniciales.empresas.has(id)
+    );
+    const empresasQuitar = Array.from(iniciales.empresas).filter(
+      (id) => !empresasSeleccionadas.has(id)
+    );
+    const rutasAgregar = Array.from(rutasSeleccionadas).filter((id) => !iniciales.rutas.has(id));
+    const rutasQuitar = Array.from(iniciales.rutas).filter((id) => !rutasSeleccionadas.has(id));
+    if (
+      empresasAgregar.length === 0 &&
+      empresasQuitar.length === 0 &&
+      rutasAgregar.length === 0 &&
+      rutasQuitar.length === 0
+    ) {
+      return null;
+    }
+    return { empresasAgregar, empresasQuitar, rutasAgregar, rutasQuitar };
+  }
+
+  const hayCambiosSinGuardar = camposChoferCambiaron || calcularDiferenciasVinculos() !== null;
 
   function manejarCancelar() {
     // El botón ya pasó a ser "Cerrar" (no "Cancelar") en el estado congelado post-guardado — no
@@ -161,7 +251,12 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     setFechaNacimiento(valoresIniciales.fechaNacimiento);
     setPaisTelefono(valoresIniciales.paisTelefono);
     setNumeroTelefono(valoresIniciales.numeroTelefono);
+    if (vinculosIniciales) {
+      setEmpresasSeleccionadas(new Set(vinculosIniciales.empresas));
+      setRutasSeleccionadas(new Set(vinculosIniciales.rutas));
+    }
     setError(null);
+    setErrorVinculos(null);
     setConfirmandoDescarte(false);
     setModo("ver");
   }
@@ -170,6 +265,11 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
   const [reseteando, setReseteando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // D1: mensaje de error DISTINTO del de arriba -- si falla guardar las asignaciones (después de
+  // que el chofer ya se guardó bien, si correspondía), este es el que se muestra; el diálogo
+  // queda en modo Editar con las casillas tal como las dejó el admin, para reintentar solo esto
+  // (POST /api/choferes/vinculos es idempotente -- reintentar el mismo diff es seguro).
+  const [errorVinculos, setErrorVinculos] = useState<string | null>(null);
   const [guardado, setGuardado] = useState(false);
   const [choferGuardado, setChoferGuardado] = useState<ChoferRow | null>(null);
   const [contrasenaTemporal, setContrasenaTemporal] = useState<string | null>(null);
@@ -180,6 +280,7 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
 
   async function onSubmit() {
     setError(null);
+    setErrorVinculos(null);
     setDuplicado(null);
 
     if (!nombre.trim()) return setError("Falta el nombre.");
@@ -193,6 +294,13 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     const telefono = numeroTelefono.trim() ? combinarTelefono(paisTelefono, numeroTelefono) : null;
     if (telefono && !TELEFONO_VALIDO_REGEX.test(telefono)) {
       return setError("El teléfono debe tener formato internacional, por ejemplo +34612345678.");
+    }
+
+    // D1: dos peticiones secuenciales -- primero el chofer (solo si cambió algo suyo), después
+    // las asignaciones (solo si cambió alguna). Si la primera falla, nunca se intenta la segunda.
+    if (!camposChoferCambiaron) {
+      await guardarVinculosSiCorresponde();
+      return;
     }
 
     setEnviando(true);
@@ -220,11 +328,46 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
       }
 
       const { chofer: actualizado } = cuerpo as EditarChoferResponse;
-      setGuardado(true);
       setChoferGuardado(actualizado);
       onGuardado(actualizado);
+      await guardarVinculosSiCorresponde();
     } catch {
       setError("No se pudo contactar al servidor.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  /** D1: segunda petición, solo si cambió alguna asignación. Si falla DESPUÉS de que el chofer ya
+   * se guardó bien, muestra su propio error (errorVinculos, distinto del de arriba) y deja las
+   * casillas tal como estaban -- reintentar es seguro (POST /api/choferes/vinculos es idempotente,
+   * D2). Nunca marca `guardado` en ese caso: el diálogo se queda en modo Editar. */
+  async function guardarVinculosSiCorresponde() {
+    const diferencias = calcularDiferenciasVinculos();
+    if (!diferencias) {
+      setGuardado(true);
+      return;
+    }
+    setEnviando(true);
+    try {
+      const respuesta = await fetch("/api/choferes/vinculos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ choferId: chofer.id, ...diferencias }),
+      });
+      const cuerpo: unknown = await respuesta.json().catch(() => null);
+      if (!respuesta.ok) {
+        setErrorVinculos(mensajeDeError(cuerpo, "No pudimos guardar las empresas y rutas."));
+        return;
+      }
+      setVinculosIniciales({
+        empresas: new Set(empresasSeleccionadas),
+        rutas: new Set(rutasSeleccionadas),
+      });
+      queryClient.invalidateQueries({ queryKey: ["vinculos-chofer", chofer.id] });
+      setGuardado(true);
+    } catch {
+      setErrorVinculos("No se pudieron guardar las empresas y rutas (sin conexión).");
     } finally {
       setEnviando(false);
     }
@@ -308,6 +451,19 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
           </div>
 
           <VistaDatos campos={campos} />
+
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-medium text-muted-foreground">Empresas y rutas</p>
+            <EmpresasRutasChofer
+              modo="ver"
+              vinculosActuales={vinculosResp ?? null}
+              cargandoVinculos={cargandoVinculos}
+              empresasSeleccionadas={empresasSeleccionadas}
+              rutasSeleccionadas={rutasSeleccionadas}
+              onAlternarEmpresa={alternarEmpresa}
+              onAlternarRuta={alternarRuta}
+            />
+          </div>
 
           {error && (
             <p role="alert" className="text-sm text-danger">
@@ -408,9 +564,29 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
           correo={{ modo: "solo-lectura", valor: correoChofer }}
         />
 
+        <div className="flex flex-col gap-2">
+          <p className="text-xs font-medium text-muted-foreground">Empresas y rutas</p>
+          <EmpresasRutasChofer
+            modo={deshabilitarCampos ? "ver" : "editar"}
+            vinculosActuales={vinculosResp ?? null}
+            cargandoVinculos={cargandoVinculos}
+            empresasSeleccionadas={empresasSeleccionadas}
+            rutasSeleccionadas={rutasSeleccionadas}
+            onAlternarEmpresa={alternarEmpresa}
+            onAlternarRuta={alternarRuta}
+            disabled={deshabilitarCampos}
+          />
+        </div>
+
         {error && (
           <p role="alert" className="text-sm text-danger">
             {error}
+          </p>
+        )}
+
+        {errorVinculos && (
+          <p role="alert" className="text-sm text-danger">
+            {errorVinculos}
           </p>
         )}
 

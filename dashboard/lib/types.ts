@@ -473,18 +473,32 @@ export interface ChoferesResponse {
   data: ChoferRow[];
 }
 
-/** Fila cruda de public.empresas (schema_v17_catalogo_empresas_rutas.sql, Hallazgo #48) —
- * catálogo compartido con la app móvil, nunca FK de jornadas.empresa (sigue siendo texto libre). */
+/** Fila cruda de public.empresas (schema_v17_catalogo_empresas_rutas.sql, Hallazgo #48;
+ * schema_v26_catalogo_por_chofer.sql, catálogo por chofer) — catálogo compartido con la app móvil,
+ * nunca FK de jornadas.empresa (sigue siendo texto libre). */
 export interface EmpresaRow {
   id: string;
   nombre: string;
   activo: boolean;
   created_at: string;
+  /** true si la creó el trigger de una jornada (criterio 6) y nadie la revisó todavía. */
+  pendiente_revision: boolean;
+  /** NULL si la creó el Dashboard. */
+  creada_por_chofer_id: string | null;
+  /** Clave generada por la base (mayúsculas, sin acentos, espacios colapsados) — ver
+   * claveNormalizada() en lib/catalogo.ts, su equivalente en JavaScript. */
+  clave_normalizada: string | null;
+}
+
+/** EmpresaRow + si ELLA MISMA o CUALQUIERA de sus rutas está pendiente de revisión (criterio 9,
+ * decisión D4) — calculado en el servidor (GET /api/empresas), nunca en el cliente. */
+export interface EmpresaConPendiente extends EmpresaRow {
+  tienePendiente: boolean;
 }
 
 /** Respuesta de GET /api/empresas. */
 export interface EmpresasResponse {
-  data: EmpresaRow[];
+  data: EmpresaConPendiente[];
 }
 
 /** Fila cruda de public.rutas — depende de una empresa (empresa_id), nunca FK de jornadas.ruta. */
@@ -494,11 +508,124 @@ export interface RutaRow {
   nombre: string;
   activo: boolean;
   created_at: string;
+  pendiente_revision: boolean;
+  creada_por_chofer_id: string | null;
+  clave_normalizada: string | null;
 }
 
 /** Respuesta de GET /api/rutas. */
 export interface RutasResponse {
   data: RutaRow[];
+}
+
+/** Origen de un vínculo chofer-empresa/chofer-ruta (schema_v26_catalogo_por_chofer.sql). */
+export type OrigenVinculo = "admin" | "chofer" | "invitacion";
+
+/** Fila cruda de public.chofer_empresas. */
+export interface ChoferEmpresaRow {
+  chofer_id: string;
+  empresa_id: string;
+  origen: OrigenVinculo;
+  created_at: string;
+}
+
+/** Fila cruda de public.chofer_rutas. */
+export interface ChoferRutaRow {
+  chofer_id: string;
+  ruta_id: string;
+  empresa_id: string;
+  origen: OrigenVinculo;
+  created_at: string;
+}
+
+/** Cuerpo de POST /api/choferes/[id]/vinculos (spec_catalogo_por_chofer.md, Etapa 2, decisión D2):
+ * DIFERENCIAS contra el snapshot que cargó el cliente, nunca "el conjunto completo" -- un vínculo
+ * origen='chofer' creado por el trigger entre que se abrió el diálogo y se guardó no debe borrarse
+ * nunca por esto. El servidor solo aplica lo que se pide explícitamente. */
+export interface DiferenciasVinculosChoferRequest {
+  empresasAgregar?: string[];
+  empresasQuitar?: string[];
+  rutasAgregar?: string[];
+  rutasQuitar?: string[];
+}
+
+/** Vínculo con el nombre ya resuelto -- lo que necesita la UI para mostrar la lista sin una
+ * segunda consulta. */
+export interface VinculoEmpresaConNombre {
+  empresaId: string;
+  nombreEmpresa: string;
+  activo: boolean;
+  origen: OrigenVinculo;
+}
+
+export interface VinculoRutaConNombre {
+  rutaId: string;
+  empresaId: string;
+  nombreRuta: string;
+  activo: boolean;
+  origen: OrigenVinculo;
+}
+
+/** Respuesta de GET y POST /api/choferes/[id]/vinculos: snapshot ya actualizado. */
+export interface VinculosChoferResponse {
+  empresas: VinculoEmpresaConNombre[];
+  rutas: VinculoRutaConNombre[];
+}
+
+/** Respuesta de POST /api/empresas/[id]/renombrar/previsualizar y /api/rutas/[id]/renombrar/previsualizar
+ * (decisión D5): el número previsto de jornadas, siempre con la nota de "coincidencia exacta". */
+export interface PrevisualizarRenombrarResponse {
+  jornadasAfectadas: number;
+  nota: string;
+}
+
+/** Respuesta de POST /api/empresas/[id]/renombrar y /api/rutas/[id]/renombrar: el número REAL
+ * devuelto por la función SQL (puede diferir del previsto). */
+export interface RenombrarResponse {
+  jornadasActualizadas: number;
+}
+
+/** Respuesta de POST /api/empresas/[id]/fusionar/previsualizar. */
+export interface PrevisualizarFusionarEmpresasResponse {
+  rutasCombinadas: number;
+  rutasMovidas: number;
+  choferesVinculados: number;
+  jornadasAfectadas: number;
+  nota: string;
+}
+
+/** Respuesta de POST /api/rutas/[id]/fusionar/previsualizar. */
+export interface PrevisualizarFusionarRutasResponse {
+  choferesVinculados: number;
+  jornadasAfectadas: number;
+  nota: string;
+}
+
+/** Respuesta de POST /api/empresas/[id]/fusionar y /api/rutas/[id]/fusionar. */
+export interface FusionarResponse {
+  jornadasActualizadas: number;
+}
+
+/** Fila de GET /api/empresas/[id]: detalle con sus rutas y los choferes vinculados (a la empresa y
+ * a cada ruta), para armar las casillas agrupadas de la pantalla de detalle. */
+export interface ChoferParaAsignacion {
+  id: string;
+  nombre: string;
+  apellidos: string;
+  /** Corrección C4: un chofer de baja se muestra atenuado y no se puede marcar de nuevo en las
+   * casillas de asignación -- salvo que ya estuviera vinculado (para poder desvincularlo). */
+  activo: boolean;
+}
+
+export interface RutaConChoferes extends RutaRow {
+  choferesVinculados: string[];
+}
+
+export interface EmpresaDetalleResponse {
+  empresa: EmpresaConPendiente;
+  rutas: RutaConChoferes[];
+  choferesVinculados: string[];
+  todosLosChoferes: ChoferParaAsignacion[];
 }
 
 /** Campos que carga el administrador al crear un chofer — son los mismos que hoy exige

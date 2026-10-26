@@ -364,6 +364,69 @@ fila cuyo nombre normalizado ya haya llegado en esa descarga. El "modo ruta manu
 `CheckInForm.tsx` (texto libre sin catálogo) y la lista fija incluida en la app desaparecieron los
 dos — toda empresa/ruta nueva nace siempre por este camino.
 
+**Catálogo por chofer — Dashboard (`spec_catalogo_por_chofer.md`, Etapa 2)**: administración de
+`empresas`/`rutas`/vínculos desde `dashboard/`, sobre la Etapa 1 (base) y la Etapa 3 (app) ya
+descritas arriba.
+
+- **`lib/catalogo.ts`**: `claveNormalizada()` es el equivalente en JavaScript de la columna
+  generada `clave_normalizada` de la base (`upper(f_unaccent(regexp_replace(trim(nombre),'\s+',' ','g')))`).
+  "NFD + quitar diacríticos combinables" no alcanza solo — no cubre los caracteres SIN forma de
+  descomposición Unicode (Æ, Œ, Ł, Ø, Đ) que el diccionario `unaccent` de Postgres sí resuelve
+  (medido contra la base real) — se sustituyen a mano antes del NFD; `ß` no necesita mapa
+  (`toUpperCase()` de JS ya da "SS"). Pruebas de los 12 casos reales + `ß`: `dashboard/scripts/
+  pruebas-catalogo.ts`. `obtenerOCrearEmpresa`/`obtenerOCrearRuta` buscan y reintentan por
+  `clave_normalizada` (no por `nombre` exacto): si tras un 23505 real la relectura tampoco
+  encuentra fila, lanzan `ColisionCatalogoError` en vez de un 500 crudo — `/api/jornadas/crear` y
+  `/api/jornadas/editar` la atrapan y responden 409.
+- **`lib/vinculos.ts` — asignaciones por DIFERENCIAS, no por conjunto completo**: `POST
+  /api/choferes/vinculos` recibe `{choferId, empresasAgregar/Quitar, rutasAgregar/Quitar}`
+  calculados por el cliente contra el snapshot que cargó, nunca "lo que debería quedar". Motivo:
+  entre que el admin abre el diálogo del chofer y guarda, el trigger `jornadas_alta_catalogo_desde_
+  chofer` puede crear un vínculo `origen='chofer'` nuevo — con un conjunto completo el servidor lo
+  borraría como "sobrante". El servidor solo aplica lo pedido explícitamente: inserta con `ON
+  CONFLICT DO NOTHING` (nunca pisa el `origen` de un vínculo que ya existe), inserta antes el
+  vínculo de empresa si falta (invariante de la FK compuesta), y valida que la empresa/ruta a
+  agregar esté `activo` (si no, 400 — una empresa/ruta de baja no se puede asignar a MÁS choferes,
+  pero sus vínculos ya existentes se siguen mostrando para poder quitarlos). Usado desde el diálogo
+  del chofer (`components/choferes/empresas-rutas-chofer.tsx`, D1: dos POST secuenciales — primero
+  `/api/choferes/editar` solo si cambió algún dato del chofer, después `/vinculos` solo si cambió
+  alguna asignación; si la segunda falla tras que la primera ya tuvo éxito, el diálogo se queda en
+  modo Editar con las casillas tal como estaban, reintentar es seguro) y desde el detalle de empresa
+  (`components/empresas/empresa-detalle-dialog.tsx`, un POST de un solo elemento por casilla).
+- **`lib/catalogo-gestion.ts` — renombrar/fusionar, con vista previa obligatoria**: los cuatro
+  endpoints de ejecución (`/api/empresas|rutas/renombrar`, `/api/empresas|rutas/fusionar`)
+  envuelven las RPC `renombrar_empresa`/`renombrar_ruta`/`fusionar_empresas`/`fusionar_rutas`
+  (solo `service_role`, Etapa 1). Sus pares `.../previsualizar` replican el MISMO criterio de
+  TEXTO EXACTO que usa la función SQL real sobre `jornadas` (mayúsculas, acentos y espacios
+  incluidos — una jornada escrita de otra forma no se toca ni se cuenta) para mostrar, antes de
+  confirmar, el número previsto más una nota fija explicándolo; después de ejecutar se muestra el
+  número REAL que devolvió la función (puede diferir si hubo una jornada nueva entre medio).
+  Colisión de nombre (clave normalizada ya usada por otra fila): 409 con "ya existe; usa Fusionar"
+  en vez de dejar que explote el 23505 de la base sin contexto — revalidado tanto en
+  `.../previsualizar` como otra vez justo antes de la RPC real (pudo pasar tiempo entre medio).
+- **`/empresas` (`app/(dashboard)/empresas/`)**: lista con las pendientes primero y después
+  alfabético; una empresa lleva la insignia "Pendiente de revisión" si ELLA MISMA lo está O si
+  CUALQUIERA de sus rutas lo está (`GET /api/empresas`, `bool_or` calculado en el servidor, nunca
+  en el cliente). El detalle de una empresa (diálogo, no una ruta de Next.js aparte — mismo patrón
+  que `ChoferDialog`/`VehiculoDialog`) lista sus rutas con casillas de choferes asignados por
+  ruta, y las propias de la empresa; activar/desactivar NO toca los vínculos existentes
+  (`chofer_empresas`/`chofer_rutas`), y no se puede crear una ruta nueva bajo una empresa inactiva
+  (validado en el servidor, `POST /api/rutas`).
+- **Menú "Más" (`components/mas-menu.tsx`, decisión D6)**: con la quinta entrada (Empresas), las
+  barras horizontales (tablet y la columna de 128px de teléfono horizontal) muestran solo 3
+  enlaces directos (Mapa, Jornadas, Choferes) + "Más" (Flota, Empresas) — la barra lateral de
+  escritorio sigue mostrando las 5 directas. Portal a `document.body` con `position: fixed`
+  calculada desde `getBoundingClientRect()` del botón (nunca `absolute` dentro de un contenedor con
+  `overflow`, que lo recortaría en esa columna angosta); si no entra abierto hacia la derecha, se
+  alinea por el borde derecho del botón. Cierra con Escape, click/touch fuera, scroll (capturado en
+  toda la jerarquía), resize y `orientationchange`; mueve el foco al primer ítem al abrir y lo
+  devuelve al botón al cerrar. No confirmado todavía en dispositivo real (igual que el resto de la
+  navegación — ver más arriba).
+- **`npm run types:supabase` + `supabase/schema.sql`**: ya reflejan el estado final de
+  `schema_v26_catalogo_por_chofer.sql` (tablas `chofer_empresas`/`chofer_rutas`, columnas
+  `pendiente_revision`/`creada_por_chofer_id`/`clave_normalizada` en `empresas`/`rutas`, las 4
+  funciones de gestión) — no quedó como parche aparte.
+
 **`SelectorBuscable<T>` (2026-09-16)**: selector genérico con buscador integrado (`src/components/
 SelectorBuscable.tsx`) — mismo patrón visual de hoja modal deslizable desde abajo que ya tenía
 `SelectorDesplegable.tsx`, con un campo de texto fijo arriba de la lista que la filtra en cada tecla
