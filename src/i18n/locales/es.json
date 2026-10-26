@@ -145,11 +145,11 @@
     "empresaEtiqueta": "Nombre de empresa",
     "empresaPlaceholder": "Selecciona una empresa",
     "rutaEtiqueta": "Ruta",
-    "rutaPlaceholderManual": "Escribe la ruta",
     "rutaPlaceholderLista": "Selecciona una ruta",
     "rutaDeshabilitada": "Primero selecciona una empresa",
     "elegirDeLaLista": "Elegir de la lista",
-    "agregarRutaManual": "Agregar nueva ruta manualmente...",
+    "agregarEmpresa": "Agregar empresa...",
+    "agregarRuta": "Agregar ruta...",
     "kmInicialEtiqueta": "Kilometraje inicial",
     "kmInicialPlaceholder": "Ej. 152340",
     "combustibleEtiqueta": "Nivel de combustible",
@@ -160,6 +160,16 @@
     "incidenciasEtiqueta": "Incidencias",
     "incidenciasPlaceholder": "Novedades de la faena (opcional)",
     "botonEnviar": "Registrar check-in"
+  },
+  "agregarCatalogo": {
+    "tituloEmpresa": "Agregar empresa",
+    "tituloRuta": "Agregar ruta",
+    "placeholderEmpresa": "Nombre de la empresa",
+    "placeholderRuta": "Nombre de la ruta",
+    "botonAgregar": "Agregar",
+    "botonCancelar": "Cancelar",
+    "yaEnLista": "Ya está en tu lista",
+    "errorAlAgregar": "No pudimos guardarlo. Prueba de nuevo."
   },
   "checkOut": {
     "titulo": "Fin de jornada",

@@ -1,14 +1,5 @@
 import React, { useEffect, useRef, useState, type RefObject } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
-  Keyboard,
-  ScrollView,
-  Alert,
-} from "react-native";
+import { View, StyleSheet, TextInput, ScrollView, Alert } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { SelectorBuscable } from "@/components/SelectorBuscable";
@@ -22,14 +13,17 @@ import {
   CLAVE_TIPO_INCIDENCIA_CHECKIN,
 } from "@/components/IncidenciasForm";
 import { BotonPrimario } from "@/components/BotonPrimario";
-import { EMPRESAS, RUTAS_POR_EMPRESA } from "@/data/empresas";
-import { obtenerCatalogoEmpresas, obtenerCatalogoRutasPorEmpresa } from "@/db/catalogoRepo";
+import { VentanaAgregarCatalogo } from "@/components/VentanaAgregarCatalogo";
+import {
+  obtenerCatalogoEmpresas,
+  obtenerCatalogoRutasPorEmpresa,
+  agregarCatalogoLocalPendiente,
+} from "@/db/catalogoRepo";
 import { listaConDefecto } from "@/utils/catalogoConDefecto";
 import { aplicarDefectosCheckIn } from "@/utils/aplicarDefectosCheckIn";
 import { IncidenciaData, NivelCombustible, TipoIncidenciaCheckin } from "@/types";
 import { scrollAlCampo } from "@/utils/scrollAlCampo";
 import { colores } from "@/theme/colors";
-import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
 
 export interface ValoresCheckInForm {
@@ -80,18 +74,21 @@ export function CheckInForm({
   rutaDefecto = null,
 }: Props) {
   const { t } = useTranslation();
-  // Estado inicial resuelto por la MISMA función pura que la llegada tardía (abajo) -- nunca
-  // empresaDefecto/rutaDefecto en crudo (bug real: su grafía puede diferir de la del catálogo
-  // bundle, EMPRESAS/RUTAS_POR_EMPRESA, que es lo único disponible en este primer render, antes
-  // de que responda SQLite). Una sola llamada para los dos, en orden (empresa antes de ruta).
+  // spec_catalogo_por_chofer.md (criterio 16): ya no hay catálogo bundle (EMPRESAS/
+  // RUTAS_POR_EMPRESA no existen más) -- en el primer render, antes de que responda SQLite, los
+  // dos catálogos están vacíos de verdad. aplicarDefectosCheckIn/listaConDefecto ya resuelven ese
+  // caso (criterio 21): un empresaDefecto/rutaDefecto que no esté en ningún catálogo todavía se
+  // antepone igual más abajo (empresasConDefecto/rutasPorEmpresaConDefecto), así que el selector
+  // nunca queda vacío si el chofer ya tiene un valor por defecto -- solo lo está si de verdad no
+  // tiene ninguno Y el catálogo todavía no bajó.
   const defectosIniciales = aplicarDefectosCheckIn({
     empresa: null,
     ruta: "",
     tocada: false,
     empresaDefecto,
     rutaDefecto,
-    empresasDisponibles: EMPRESAS,
-    rutasPorEmpresa: RUTAS_POR_EMPRESA,
+    empresasDisponibles: [],
+    rutasPorEmpresa: {},
   });
   const [empresa, setEmpresa] = useState<string | null>(defectosIniciales.empresa);
   const [matricula, setMatricula] = useState("");
@@ -102,13 +99,15 @@ export function CheckInForm({
   // SIEMPRE (incluso si ya había un defecto al montar) -- lo que importa es si el chofer tocó el
   // campo, no si ya traía un valor.
   const [empresaORutaTocada, setEmpresaORutaTocada] = useState(false);
-  const [rutaManual, setRutaManual] = useState(false);
+  // spec_catalogo_por_chofer.md (criterio 18): qué ventana "Agregar..." está abierta -- `null`
+  // cerrada, o el tipo ("empresa"/"ruta") que corresponde al selector que la disparó. Reemplaza al
+  // viejo "modo ruta manual" (rutaManual/CampoTexto/elegirDeLaLista en este archivo).
+  const [agregandoCatalogo, setAgregandoCatalogo] = useState<"empresa" | "ruta" | null>(null);
   const [kmInicial, setKmInicial] = useState("");
   const [combustible, setCombustible] = useState<NivelCombustible | null>(null);
   const [fotoTacometro, setFotoTacometro] = useState<string | null>(null);
   const [fotoRuta, setFotoRuta] = useState<string | null>(null);
   const [incidencia, setIncidencia] = useState<IncidenciaData>(INCIDENCIA_INICIAL);
-  const refRutaManual = useRef<TextInput>(null);
 
   // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): un objetivo de scroll/foco por
   // campo obligatorio, en el mismo orden en que aparecen en pantalla -- usado solo al tocar
@@ -128,13 +127,15 @@ export function CheckInForm({
   // deshabilitado.
   const yaEnviando = useRef(false);
 
-  // spec_catalogo_empresas_rutas.md (Hallazgo #48): arranca con la lista incluida en la app
-  // (EMPRESAS/RUTAS_POR_EMPRESA) -- nunca un selector vacío, ni en el primer uso sin red ni
-  // mientras se resuelve esta consulta a SQLite -- y la reemplaza con la caché del catálogo de
-  // Supabase en cuanto está disponible (criterio 10: sin conexión usa la caché ya descargada; sin
-  // caché todavía, esta lista incluida es el único respaldo que queda).
-  const [empresasDisponibles, setEmpresasDisponibles] = useState<string[]>(EMPRESAS);
-  const [rutasPorEmpresa, setRutasPorEmpresa] = useState<Record<string, string[]>>(RUTAS_POR_EMPRESA);
+  // spec_catalogo_por_chofer.md (criterio 16): ya no hay lista incluida en la app -- arranca
+  // vacío (nunca EMPRESAS/RUTAS_POR_EMPRESA, que no existen más) hasta que responda la primera
+  // consulta a SQLite, abajo. obtenerCatalogoEmpresas/obtenerCatalogoRutasPorEmpresa ya devuelven
+  // la UNIÓN de lo descargado de Supabase con lo que el propio chofer agregó localmente
+  // (catalogoLocalPendiente, ver catalogoRepo.ts) -- un catálogo vacío de verdad (primer arranque,
+  // sin red, nada agregado todavía) es una lista vacía real, con solo la opción "Agregar..."
+  // (criterio 16: sin respaldo de bundle).
+  const [empresasDisponibles, setEmpresasDisponibles] = useState<string[]>([]);
+  const [rutasPorEmpresa, setRutasPorEmpresa] = useState<Record<string, string[]>>({});
   // Solo true después de un intento de envío con algo pendiente -- antes de eso, estos campos
   // nunca mostraron un error reactivo (a diferencia del detalle de incidencia "Otro", que ya tenía
   // su propio aviso en vivo desde antes de este hallazgo y sigue igual).
@@ -148,8 +149,8 @@ export function CheckInForm({
         obtenerCatalogoRutasPorEmpresa(),
       ]);
       if (!activo) return;
-      if (empresasCache.length > 0) setEmpresasDisponibles(empresasCache);
-      if (Object.keys(rutasCache).length > 0) setRutasPorEmpresa(rutasCache);
+      setEmpresasDisponibles(empresasCache);
+      setRutasPorEmpresa(rutasCache);
     })();
     return () => {
       activo = false;
@@ -200,16 +201,6 @@ export function CheckInForm({
     if (resuelto.ruta !== ruta) setRuta(resuelto.ruta);
   }
 
-  useEffect(() => {
-    if (!rutaManual) return;
-    // El input se activa justo cuando se cierra el modal de "Ruta" (Selector-
-    // Desplegable); si se enfoca de inmediato, la animación de cierre del
-    // modal le roba el foco y el teclado se abre y se cierra al toque. Se
-    // espera a que esa animación termine antes de enfocar.
-    const temporizador = setTimeout(() => refRutaManual.current?.focus(), 350);
-    return () => clearTimeout(temporizador);
-  }, [rutaManual]);
-
   // El prop `enviando` solo baja a `false` cuando el envío (éxito o error) terminó en la pantalla
   // contenedora -- recién ahí vuelve a estar permitido un envío nuevo.
   useEffect(() => {
@@ -222,12 +213,59 @@ export function CheckInForm({
     // Las rutas dependen de la empresa, así que una ruta ya elegida deja de
     // tener sentido en cuanto cambia la empresa.
     setRuta("");
-    setRutaManual(false);
   }
 
   function manejarCambioRuta(nuevaRuta: string) {
     setEmpresaORutaTocada(true);
     setRuta(nuevaRuta);
+  }
+
+  // spec_catalogo_por_chofer.md (criterio 18): callback único de VentanaAgregarCatalogo para
+  // empresa Y ruta -- `agregandoCatalogo` (capturado en una variable local porque el cierre del
+  // modal, abajo, ya lo puso en null antes de que esto termine) dice cuál de los dos está en
+  // juego. `esNuevo=false` (duplicado, comparación sin acentos de la propia ventana): solo
+  // selecciona la grafía YA existente y avisa, sin tocar la base -- "una ruta nueva de una empresa
+  // que TAMBIÉN es nueva" (si algún día hiciera falta un alta compuesta) no aplica aquí porque la
+  // empresa SIEMPRE se elige/agrega ANTES de poder abrir la ventana de ruta (deshabilitada sin
+  // empresa, ver opcionEspecial de abajo) -- la fila de ruta en catalogoLocalPendiente ya queda
+  // con el nombre de esa empresa, nueva o no, sin ningún caso especial.
+  async function manejarConfirmarAgregarCatalogo(nombre: string, esNuevo: boolean) {
+    const tipo = agregandoCatalogo;
+    setAgregandoCatalogo(null);
+    if (!tipo) return;
+
+    if (!esNuevo) {
+      Alert.alert(t("agregarCatalogo.yaEnLista"));
+      if (tipo === "empresa") manejarCambioEmpresa(nombre);
+      else manejarCambioRuta(nombre);
+      return;
+    }
+
+    // Corrección 1 (2026-10-26): si agregarCatalogoLocalPendiente falla (SQLite), NO dejar la UI a
+    // medias (no tocar empresasDisponibles/rutasPorEmpresa ni preseleccionar nada) ni dejar pasar
+    // una excepción sin atrapar -- manejarConfirmarAgregarCatalogo es async y VentanaAgregarCatalogo
+    // la llama como onConfirmar sin esperarla ni atraparla, así que un throw acá se perdería como
+    // una unhandled promise rejection.
+    if (tipo === "empresa") {
+      try {
+        await agregarCatalogoLocalPendiente("empresa", "", nombre);
+      } catch {
+        Alert.alert(t("agregarCatalogo.errorAlAgregar"));
+        return;
+      }
+      setEmpresasDisponibles((prev) => [...prev, nombre]);
+      manejarCambioEmpresa(nombre);
+    } else {
+      if (!empresa) return; // nunca debería pasar: opcionEspecial de ruta va deshabilitada sin empresa
+      try {
+        await agregarCatalogoLocalPendiente("ruta", empresa, nombre);
+      } catch {
+        Alert.alert(t("agregarCatalogo.errorAlAgregar"));
+        return;
+      }
+      setRutasPorEmpresa((prev) => ({ ...prev, [empresa]: [...(prev[empresa] ?? []), nombre] }));
+      manejarCambioRuta(nombre);
+    }
   }
 
   const detalleIncidenciaValido = incidencia.tipo !== "Otro" || incidencia.detalle.trim().length > 0;
@@ -311,55 +349,39 @@ export function CheckInForm({
             opciones={empresasConDefecto}
             obtenerEtiqueta={(item) => item}
             onSeleccionar={manejarCambioEmpresa}
+            opcionEspecial={{
+              texto: t("checkInForm.agregarEmpresa"),
+              onPress: () => setAgregandoCatalogo("empresa"),
+            }}
             error={mostrarErrores && empresa === null ? t("comun.campoObligatorio") : undefined}
           />
         </View>
 
         <View ref={refContRuta}>
-          {rutaManual ? (
-            <View>
-              <CampoTexto
-                ref={refRutaManual}
-                etiqueta={t("checkInForm.rutaEtiqueta")}
-                placeholder={t("checkInForm.rutaPlaceholderManual")}
-                value={ruta}
-                onChangeText={manejarCambioRuta}
-                autoCapitalize="characters"
-                returnKeyType="done"
-                onSubmitEditing={() => Keyboard.dismiss()}
-                error={mostrarErrores && ruta.trim().length === 0 ? t("comun.campoObligatorio") : undefined}
-              />
-              {rutasDisponibles.length > 0 ? (
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setRutaManual(false);
-                    setRuta("");
-                  }}
-                  style={estilos.enlaceContenedor}
-                >
-                  <Text style={estilos.enlace}>{t("checkInForm.elegirDeLaLista")}</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ) : (
-            <SelectorDesplegable
-              etiqueta={t("checkInForm.rutaEtiqueta")}
-              placeholder={t("checkInForm.rutaPlaceholderLista")}
-              textoDeshabilitado={t("checkInForm.rutaDeshabilitada")}
-              valor={ruta || null}
-              opciones={rutasDisponibles}
-              deshabilitado={empresa === null}
-              onSeleccionar={manejarCambioRuta}
-              opcionEspecial={{
-                texto: t("checkInForm.agregarRutaManual"),
-                onPress: () => setRutaManual(true),
-              }}
-              error={mostrarErrores && ruta.trim().length === 0 ? t("comun.campoObligatorio") : undefined}
-            />
-          )}
+          <SelectorDesplegable
+            etiqueta={t("checkInForm.rutaEtiqueta")}
+            placeholder={t("checkInForm.rutaPlaceholderLista")}
+            textoDeshabilitado={t("checkInForm.rutaDeshabilitada")}
+            valor={ruta || null}
+            opciones={rutasDisponibles}
+            deshabilitado={empresa === null}
+            onSeleccionar={manejarCambioRuta}
+            opcionEspecial={{
+              texto: t("checkInForm.agregarRuta"),
+              onPress: () => setAgregandoCatalogo("ruta"),
+            }}
+            error={mostrarErrores && ruta.trim().length === 0 ? t("comun.campoObligatorio") : undefined}
+          />
         </View>
       </View>
+
+      <VentanaAgregarCatalogo
+        visible={agregandoCatalogo !== null}
+        tipo={agregandoCatalogo ?? "empresa"}
+        opcionesVisibles={agregandoCatalogo === "ruta" ? rutasDisponibles : empresasConDefecto}
+        onCerrar={() => setAgregandoCatalogo(null)}
+        onConfirmar={manejarConfirmarAgregarCatalogo}
+      />
 
       <View style={estilos.divisor} />
 
@@ -455,14 +477,5 @@ const estilos = StyleSheet.create({
   },
   boton: {
     marginTop: espaciado.sm,
-  },
-  enlaceContenedor: {
-    marginTop: -espaciado.sm,
-    marginBottom: espaciado.md,
-  },
-  enlace: {
-    ...tipografia.cuerpo,
-    color: colores.primario,
-    fontWeight: "600",
   },
 });

@@ -84,6 +84,22 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
       nombre TEXT NOT NULL,
       PRIMARY KEY (empresa, nombre)
     );
+
+    -- spec_catalogo_por_chofer.md (criterios 16-19): lo que el chofer agregó desde la ventana
+    -- "Agregar..." de CheckInForm.tsx, antes de que viaje en una jornada y el trigger del servidor
+    -- lo cree de verdad en empresas/rutas -- separada de catalogoEmpresas/catalogoRutas (que
+    -- reemplazarCatalogo() borra entera en cada descarga) para que una fila agregada acá no se
+    -- pierda si la descarga llega antes de que esa jornada se haya sincronizado. empresa = '' para
+    -- tipo='empresa' (no aplica); para tipo='ruta', el nombre de la empresa dueña. Se limpia fila
+    -- por fila dentro de reemplazarCatalogo() (catalogoRepo.ts) en cuanto el nombre ya aparece en
+    -- el catálogo recién descargado.
+    CREATE TABLE IF NOT EXISTS catalogoLocalPendiente (
+      tipo TEXT NOT NULL CHECK (tipo IN ('empresa', 'ruta')),
+      empresa TEXT NOT NULL,
+      nombre TEXT NOT NULL,
+      agregadoEn TEXT NOT NULL,
+      PRIMARY KEY (tipo, empresa, nombre)
+    );
   `);
 
   await agregarColumnasFaltantes(db);

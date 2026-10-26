@@ -17,9 +17,9 @@
 //     sin pasar por grafiaDeLista()/normalizar() (catalogoConDefecto.ts) -- si la fila de
 //     Usuario.empresaDefecto (construirUsuarioDesdeChofer(), authCore.ts, lee `empresas.nombre`
 //     vía el embed de la FK `empresa_defecto_id`) difiere en mayúsculas/espacios de la grafía que
-//     trae el catálogo local (empresasDisponibles arranca con el bundle EMPRESAS de
-//     src/data/empresas.ts hasta que SQLite responde, y ese bundle es mantenido a mano, no
-//     sincronizado con la tabla `empresas`), `rutasPorEmpresa[empresa]` (clave EXACTA) no
+//     trae el catálogo local (empresasDisponibles -- spec_catalogo_por_chofer.md, criterio 16:
+//     ya no hay bundle de respaldo, arranca vacío hasta que SQLite responde con la unión real del
+//     servidor y catalogoLocalPendiente), `rutasPorEmpresa[empresa]` (clave EXACTA) no
 //     encontraba nada, y rutasPorEmpresaConDefecto creaba una clave NUEVA con solo esa ruta en vez
 //     de reusar la lista completa de la empresa real. Acá toda comparación usa normalizar(), y
 //     `empresa`/`ruta` resueltos siempre terminan con la grafía del catálogo cuando existe ahí.

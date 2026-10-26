@@ -12,6 +12,14 @@ export interface ParEmpresaRuta {
   nombre: string;
 }
 
+/** Fila de catalogoLocalPendiente (spec_catalogo_por_chofer.md, criterios 16-19) -- empresa = ''
+ * para tipo='empresa' (no aplica). Mismas tres columnas que forman su PRIMARY KEY compuesta. */
+export interface FilaCatalogoLocalPendiente {
+  tipo: "empresa" | "ruta";
+  empresa: string;
+  nombre: string;
+}
+
 /** Escapa un valor para usarlo como literal SQL entre comillas simples: duplica cada comilla
  * simple (estándar SQL) y descarta \u0000 -- un NUL corta el string en el nativo (las cadenas C
  * terminan en NUL) y truncaría el literal en silencio en vez de insertar el valor completo. */
@@ -24,7 +32,17 @@ function escaparLiteralSql(valor: string): string {
  * que antes, cuando ese INSERT corría dentro de la transacción), catalogoRutas con INSERT OR
  * IGNORE (una ruta repetida se descarta en silencio, ya que (empresa, nombre) es la PRIMARY KEY
  * compuesta y sí se esperan repetidos legítimos entre ejecuciones). */
-export function construirSqlReemplazoCatalogo(empresas: string[], rutas: ParEmpresaRuta[]): string {
+export function construirSqlReemplazoCatalogo(
+  empresas: string[],
+  rutas: ParEmpresaRuta[],
+  // Criterio 19 (diagnóstico 7): filas de catalogoLocalPendiente cuyo nombre normalizado ya llegó
+  // en esta misma descarga -- calculadas por el llamador (catalogoRepo.ts, con
+  // filasPendientesAEliminar de catalogoUnion.ts) ANTES de abrir la transacción (una lectura
+  // simple con getAllAsync, segura: el riesgo de Hallazgo #60 es solo entre ESCRITURAS
+  // concurrentes). Van DENTRO del mismo BEGIN...COMMIT que el reemplazo de arriba -- una sola
+  // llamada a execAsync, sin ventana para otra escritura concurrente.
+  pendientesABorrar: FilaCatalogoLocalPendiente[] = []
+): string {
   const partes: string[] = ["BEGIN;", "DELETE FROM catalogoEmpresas;", "DELETE FROM catalogoRutas;"];
 
   for (const nombre of empresas) {
@@ -33,6 +51,11 @@ export function construirSqlReemplazoCatalogo(empresas: string[], rutas: ParEmpr
   for (const { empresa, nombre } of rutas) {
     partes.push(
       `INSERT OR IGNORE INTO catalogoRutas (empresa, nombre) VALUES ('${escaparLiteralSql(empresa)}', '${escaparLiteralSql(nombre)}');`
+    );
+  }
+  for (const fila of pendientesABorrar) {
+    partes.push(
+      `DELETE FROM catalogoLocalPendiente WHERE tipo = '${escaparLiteralSql(fila.tipo)}' AND empresa = '${escaparLiteralSql(fila.empresa)}' AND nombre = '${escaparLiteralSql(fila.nombre)}';`
     );
   }
 

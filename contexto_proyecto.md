@@ -306,11 +306,64 @@ lado del código.
 **Campos de una jornada** (`src/types/index.ts`): empresa, matrícula, ruta, km inicial/final,
 combustible inicial/final (`NivelCombustible` — porcentaje `number` 0-100, ver más abajo),
 incidencias (tipo + detalle), 3 fotos (tacómetro inicial, hoja de ruta opcional, tacómetro final),
-lat/lng de inicio y cierre. ⚠️ **Empresa y ruta ya eran una lista/catálogo antes de esta corrección**,
-no texto libre — `src/data/empresas.ts` (`EMPRESAS`, 19 nombres fijos, y `RUTAS_POR_EMPRESA`, 2-4
-rutas por empresa configurada, con opción de agregar una ruta a mano si la empresa no tiene ninguna
-cargada). Matrícula sí es distinta: lista de matrículas frecuentes del propio chofer (hasta 8,
-`obtenerMatriculasFrecuentes`) con opción de tipear una nueva — la lista no es un catálogo fijo.
+lat/lng de inicio y cierre. Empresa y ruta son una lista/catálogo, no texto libre — **pero ya NO hay
+ningún catálogo fijo incluido en la app** (`src/data/empresas.ts`, `EMPRESAS`/`RUTAS_POR_EMPRESA`,
+se eliminó por completo en `spec_catalogo_por_chofer.md`, Etapa 3, 2026-10-26 — ver el bloque
+"Catálogo por chofer" más abajo para el diseño completo). Matrícula sí sigue siendo distinta: lista
+de matrículas frecuentes del propio chofer (hasta 8, `obtenerMatriculasFrecuentes`) con opción de
+tipear una nueva — la lista no es un catálogo fijo ni compartido.
+
+**Catálogo por chofer (`spec_catalogo_por_chofer.md`, Etapa 3, 2026-10-26)**: lo que
+`CheckInForm.tsx` le muestra a un chofer en los selectores de empresa/ruta es, siempre, la **unión**
+de dos fuentes — nunca un bundle fijo:
+
+1. **Lo que el servidor le asignó a ESE chofer** (Etapa 1, ya en producción desde 2026-10-26): RLS
+   en `empresas`/`rutas` hace que cada chofer solo lea las filas vinculadas a él vía
+   `chofer_empresas`/`chofer_rutas` — `obtenerCatalogoEmpresas()`/`obtenerCatalogoRutasPorEmpresa()`
+   (`src/db/catalogoRepo.ts`) leen la caché local de esa descarga (`catalogoEmpresas`/
+   `catalogoRutas`, SQLite).
+2. **Lo que el propio chofer agregó localmente, todavía no confirmado por el servidor**: tabla
+   nueva `catalogoLocalPendiente` (`tipo 'empresa'|'ruta'`, `empresa` — `''` para tipo='empresa' —,
+   `nombre`, `agregadoEn`; PK compuesta `(tipo, empresa, nombre)`), creada en el mismo bloque
+   `CREATE TABLE IF NOT EXISTS` idempotente de `database.ts` que ya migra el resto del esquema (una
+   base existente de un `.apk` anterior la recibe sola, sin perder nada — probado contra SQLite
+   real en `specs/pruebas_auth/prueba_catalogoSql_sqlite.js`).
+
+La unión (`src/utils/catalogoUnion.ts`, puro) deduplica con `normalizarParaCompararCatalogo()`
+(`src/utils/agregarCatalogoTexto.ts`: mayúsculas es-ES, **sin acentos** — `normalize("NFD")` + quitar
+diacríticos —, espacios colapsados y recortados) — **no** con `normalizar()` de
+`catalogoConDefecto.ts` (que no quita acentos ni colapsa espacios; esa sigue sin tocarse, la usan
+`listaConDefecto`/`grafiaDeLista`/`aplicarDefectosCheckIn`). Corrección 1 (2026-10-26): la primera
+versión de la unión SÍ usaba `normalizar()` de `catalogoConDefecto.ts`, y por eso un nombre que el
+servidor trajera con acento ("ÁLAMO") y el mismo nombre agregado localmente sin acento ("ALAMO")
+quedaban como dos filas separadas para siempre (la de `catalogoLocalPendiente` nunca se limpiaba,
+porque tampoco "calzaba" al comparar contra lo descargado). Si el servidor ya tiene el nombre bajo
+otra grafía (con o sin acentos), su grafía gana y no se duplica.
+
+⚠️ **Límite conocido, sin arreglar (Corrección 1, 2026-10-26)**: la jornada en sí conserva el texto
+EXACTO que escribió el chofer (`jornadas.empresa`/`jornadas.ruta`, columnas de texto libre). Si el
+trigger del servidor la vincula a una empresa/ruta YA existente con otra grafía de acentos (p. ej.
+el chofer tipeó "ALAMO" y el trigger la vinculó a la "ÁLAMO" ya creada), la fila de `jornadas` se
+queda con "ALAMO" — el trigger normaliza para decidir el vínculo, pero nunca reescribe el texto de
+la jornada. `renombrar_empresa`/`renombrar_ruta`/`fusionar_empresas`/`fusionar_rutas` (Dashboard,
+Etapa 2) solo actúan sobre el texto EXACTO viejo (coincidencia literal, no normalizada) — una
+jornada con "ALAMO" no se corrige sola si alguien renombra o fusiona "ÁLAMO". Convivir con esto por
+ahora: el Excel/reporte puede mostrar las dos grafías para la misma empresa real.
+
+**Flujo «Agregar» → jornada → trigger → descarga**: la ventana
+"Agregar..." (`VentanaAgregarCatalogo.tsx`, abierta desde la opción `opcionEspecial` de
+`SelectorBuscable`/`SelectorDesplegable`) solo inserta en `catalogoLocalPendiente` — **nunca llama a
+Supabase directo**. El nombre viaja recién cuando esa jornada se sincroniza; ahí el trigger del
+servidor (`jornadas_alta_catalogo_desde_chofer`, Etapa 1) normaliza el texto y, si no existía, crea
+la empresa/ruta real marcada `pendiente_revision = true` y la vincula a ese chofer. Al sincronizar
+con éxito (`sincronizarPendientes` subió al menos una jornada), `NetworkContext.tsx` fuerza una
+redescarga del catálogo (resetea el throttle `catalogoUltimaDescargaRef`, decisión pura y probada
+en `src/utils/decisionRedescargaCatalogo.ts`) — así lo recién creado vuelve con su grafía oficial, y
+`reemplazarCatalogo()` (`catalogoRepo.ts`) borra de `catalogoLocalPendiente`, dentro del MISMO
+`execAsync` atómico del reemplazo (Hallazgo #60, `spec_transaccion_catalogo_sqlite.md`), cualquier
+fila cuyo nombre normalizado ya haya llegado en esa descarga. El "modo ruta manual" de
+`CheckInForm.tsx` (texto libre sin catálogo) y la lista fija incluida en la app desaparecieron los
+dos — toda empresa/ruta nueva nace siempre por este camino.
 
 **`SelectorBuscable<T>` (2026-09-16)**: selector genérico con buscador integrado (`src/components/
 SelectorBuscable.tsx`) — mismo patrón visual de hoja modal deslizable desde abajo que ya tenía

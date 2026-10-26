@@ -145,11 +145,11 @@
     "empresaEtiqueta": "Company name",
     "empresaPlaceholder": "Select a company",
     "rutaEtiqueta": "Route",
-    "rutaPlaceholderManual": "Type the route",
     "rutaPlaceholderLista": "Select a route",
     "rutaDeshabilitada": "Select a company first",
     "elegirDeLaLista": "Choose from the list",
-    "agregarRutaManual": "Add a new route manually...",
+    "agregarEmpresa": "Add company...",
+    "agregarRuta": "Add route...",
     "kmInicialEtiqueta": "Starting mileage",
     "kmInicialPlaceholder": "E.g. 152340",
     "combustibleEtiqueta": "Fuel level",
@@ -160,6 +160,16 @@
     "incidenciasEtiqueta": "Notes",
     "incidenciasPlaceholder": "Shift notes (optional)",
     "botonEnviar": "Submit check-in"
+  },
+  "agregarCatalogo": {
+    "tituloEmpresa": "Add company",
+    "tituloRuta": "Add route",
+    "placeholderEmpresa": "Company name",
+    "placeholderRuta": "Route name",
+    "botonAgregar": "Add",
+    "botonCancelar": "Cancel",
+    "yaEnLista": "Already on your list",
+    "errorAlAgregar": "We couldn't save that. Try again."
   },
   "checkOut": {
     "titulo": "End shift",

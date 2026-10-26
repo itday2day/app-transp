@@ -11,6 +11,7 @@ import {
   MAX_INTENTOS,
 } from "@/services/syncService";
 import { reiniciarIntentosAgotadosDeChofer } from "@/db/jornadasRepo";
+import { debeForzarRedescargaCatalogo } from "@/utils/decisionRedescargaCatalogo";
 import { Jornada } from "@/types";
 
 interface NetworkContextValor {
@@ -84,8 +85,20 @@ export function NetworkProvider({ children }: { children: React.ReactNode }) {
 
         setSincronizando(true);
         try {
-          await sincronizarPendientes(forzarReintento);
+          const resultadoSync = await sincronizarPendientes(forzarReintento);
           setUltimaSincronizacion(new Date());
+          // spec_catalogo_por_chofer.md (criterio 19, diagnóstico 6): al menos una jornada subió
+          // de verdad -- si viajaba una empresa/ruta "pendiente de revisión" (recién creada por el
+          // trigger del servidor), el catálogo ya cambió del lado del servidor.
+          // debeForzarRedescargaCatalogo() es pura (decisionRedescargaCatalogo.ts) -- acá solo se
+          // usa su resultado para limpiar el throttle de abajo (catalogoUltimaDescargaRef,
+          // capturado en este cierre aunque se declare más adelante en el componente -- JS solo
+          // exige que ya esté inicializado CUANDO esto corra, no que la declaración textual venga
+          // antes), para que el PRÓXIMO `revisar()` (hasta INTERVALO_REVISION_MS después, nunca
+          // este mismo tick) haga una descarga real por `descargarCatalogoSiCorresponde()`. Sin
+          // loop: esto solo borra un flag, no llama a nada -- y una descarga nunca dispara, a su
+          // vez, una sincronización.
+          if (debeForzarRedescargaCatalogo(resultadoSync)) catalogoUltimaDescargaRef.current = null;
         } finally {
           setSincronizando(false);
         }

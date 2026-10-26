@@ -35,6 +35,11 @@ function normalizar(texto: string): string {
   return texto.toLowerCase().normalize("NFD").replace(DIACRITICOS, "");
 }
 
+interface OpcionEspecial {
+  texto: string;
+  onPress: () => void;
+}
+
 interface Props<T> {
   etiqueta: string;
   placeholder: string;
@@ -51,6 +56,11 @@ interface Props<T> {
    * un string simple (como la lista de empresas). */
   obtenerClave?: (item: T) => string;
   onSeleccionar: (item: T) => void;
+  /** Criterio 18 (spec_catalogo_por_chofer.md): mismo prop/patrón que ya tiene
+   * SelectorDesplegable.tsx -- una fila fija al final de la lista (FlatList ListFooterComponent),
+   * tappable, que cierra el modal y dispara `onPress`. Usado por CheckInForm.tsx para la opción
+   * "Agregar..." de empresa. */
+  opcionEspecial?: OpcionEspecial;
   error?: string;
   /** Para lectores de pantalla cuando el título visible está oculto (`ocultarEtiquetaVisible`) o
    * cuando `etiqueta=""` -- por defecto, `etiqueta` (el texto visible del botón, cuando lo hay,
@@ -72,6 +82,7 @@ export function SelectorBuscable<T>({
   obtenerEtiquetaCompacta = obtenerEtiqueta,
   obtenerClave = obtenerEtiqueta,
   onSeleccionar,
+  opcionEspecial,
   error,
   accessibilityLabel = etiqueta || undefined,
   ocultarEtiquetaVisible = false,
@@ -159,6 +170,22 @@ export function SelectorBuscable<T>({
                     </TouchableOpacity>
                   );
                 }}
+                ListFooterComponent={
+                  opcionEspecial ? (
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        cerrar();
+                        opcionEspecial.onPress();
+                      }}
+                      style={estilos.opcionEspecial}
+                    >
+                      <Ionicons name="add-circle-outline" size={20} color={colores.primario} />
+                      <Text style={estilos.textoOpcionEspecial}>{opcionEspecial.texto}</Text>
+                    </TouchableOpacity>
+                  ) : null
+                }
               />
             </Pressable>
           </Pressable>
@@ -260,6 +287,20 @@ const estilos = StyleSheet.create({
   textoOpcionSeleccionada: {
     fontWeight: "600",
     color: colores.primario,
+  },
+  opcionEspecial: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: espaciado.sm,
+    paddingHorizontal: espaciado.lg,
+    paddingVertical: espaciado.md,
+    borderTopWidth: 1,
+    borderTopColor: colores.borde,
+  },
+  textoOpcionEspecial: {
+    ...tipografia.cuerpo,
+    color: colores.primario,
+    fontWeight: "600",
   },
   textoVacio: {
     ...tipografia.ayuda,
