@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import {
+  ColisionCatalogoError,
   normalizarNombreEmpresa,
   normalizarNombreRuta,
   obtenerOCrearEmpresa,
@@ -204,8 +205,16 @@ export async function POST(request: Request) {
   // diverjan en mayúsculas/espacios.
   const empresaNormalizada = normalizarNombreEmpresa(empresa);
   const rutaNormalizada = normalizarNombreRuta(ruta);
-  const empresaId = await obtenerOCrearEmpresa(supabase, empresaNormalizada);
-  await obtenerOCrearRuta(supabase, empresaId, rutaNormalizada);
+  let empresaId: string;
+  try {
+    empresaId = await obtenerOCrearEmpresa(supabase, empresaNormalizada);
+    await obtenerOCrearRuta(supabase, empresaId, rutaNormalizada);
+  } catch (error) {
+    if (error instanceof ColisionCatalogoError) {
+      return NextResponse.json({ mensaje: error.message }, { status: 409 });
+    }
+    throw error;
+  }
 
   const nuevaFila: TablesInsert<"jornadas"> = {
     chofer_id: choferId,

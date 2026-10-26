@@ -361,51 +361,275 @@ from public.ubicaciones_tracking;
 revoke all on public.ubicaciones_tracking_planas from anon, authenticated;
 
 -- ============================================================
--- CATÁLOGO DE EMPRESAS Y RUTAS (schema_v17_catalogo_empresas_rutas.sql, Hallazgo #48)
+-- CATÁLOGO DE EMPRESAS Y RUTAS (schema_v17_catalogo_empresas_rutas.sql, Hallazgo #48;
+-- schema_v26_catalogo_por_chofer.sql, 2026-10-25 -- aplicada en producción, versión
+-- 20261026102737, plegada acá como estado final)
 -- ============================================================
 -- jornadas.empresa/ruta SIGUEN siendo texto libre, sin FK a este catálogo -- alimenta solo las
 -- listas de selección (Dashboard y app) y evita variantes nuevas hacia adelante, nunca reescribe
--- el historial. Empresas Y rutas en MAYÚSCULAS (CHECK validado en las dos -- el seed ya cumple;
--- el de rutas se agregó después de aplicar la migración original, ver el UPDATE + ALTER TABLE
--- documentado en schema_v17_catalogo_empresas_rutas.sql). Solo escribe el Dashboard
--- (service_role, bypassa RLS); los choferes solo leen.
+-- el historial. Empresas Y rutas en MAYÚSCULAS (CHECK validado en las dos). Solo escribe el
+-- Dashboard (service_role, bypassa RLS) y el trigger jornadas_alta_catalogo_desde_chofer() de más
+-- abajo (alta "pendiente de revisión" desde el texto que escribe el propio chofer); cada chofer
+-- autenticado solo LEE lo que tiene vinculado (chofer_empresas/chofer_rutas) -- antes de
+-- schema_v26 cualquier chofer autenticado leía el catálogo entero.
+--
+-- unaccent es STABLE, no IMMUTABLE (depende del diccionario resuelto por search_path) -- Postgres
+-- rechaza usarla directo en un índice o una columna generada. f_unaccent la envuelve fijando el
+-- diccionario por nombre completamente calificado ("extensions.unaccent"), lo que la vuelve
+-- determinista y por lo tanto segura de marcar IMMUTABLE (patrón documentado de PostgreSQL/
+-- Supabase). Tiene que existir ANTES de las columnas generadas de más abajo que la usan.
+create extension if not exists unaccent with schema extensions;
+
+create or replace function extensions.f_unaccent(text)
+returns text
+language sql
+immutable
+parallel safe
+as $$
+  select extensions.unaccent('extensions.unaccent', $1);
+$$;
+
 create table public.empresas (
   id uuid primary key default gen_random_uuid(),
   nombre text not null check (nombre = upper(nombre)),
   activo boolean not null default true,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- schema_v26 (criterios 3, 6): alta "pendiente de revisión" desde una jornada del chofer; NULL
+  -- si la creó el Dashboard. clave_normalizada es una clave ADICIONAL más estricta (mayúsculas,
+  -- sin acentos, espacios colapsados) -- no reemplaza el CHECK/índice de abajo.
+  pendiente_revision boolean not null default false,
+  creada_por_chofer_id uuid references public.choferes(id) on delete set null,
+  clave_normalizada text generated always as (
+    upper(extensions.f_unaccent(regexp_replace(trim(nombre), '\s+', ' ', 'g')))
+  ) stored
 );
 
 create unique index empresas_nombre_normalizado on public.empresas (lower(nombre));
+-- ⚠️ Riesgo anotado (schema_v26, no resuelto): este índice es PERMANENTE -- una empresa
+-- fusionada/desactivada sigue "reservando" su clave_normalizada para siempre.
+create unique index empresas_clave_normalizada_unique on public.empresas (clave_normalizada);
 
 create table public.rutas (
   id uuid primary key default gen_random_uuid(),
   empresa_id uuid not null references public.empresas(id),
   nombre text not null check (nombre = upper(nombre)),
   activo boolean not null default true,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  pendiente_revision boolean not null default false,
+  creada_por_chofer_id uuid references public.choferes(id) on delete set null,
+  clave_normalizada text generated always as (
+    upper(extensions.f_unaccent(regexp_replace(trim(nombre), '\s+', ' ', 'g')))
+  ) stored,
+  -- schema_v26 (criterio 1): la FK compuesta de chofer_rutas (ruta_id, empresa_id) -> esta tabla
+  -- exige que (id, empresa_id) tenga su propia restricción UNIQUE -- no alcanza con que "id" ya
+  -- sea PK por su lado.
+  constraint rutas_id_empresa_id_unique unique (id, empresa_id)
 );
 
 create unique index rutas_empresa_nombre_normalizado on public.rutas (empresa_id, lower(nombre));
-
-alter table public.empresas enable row level security;
-alter table public.rutas enable row level security;
-
-create policy "choferes leen el catalogo de empresas"
-  on public.empresas for select
-  to authenticated
-  using (true);
-
-create policy "choferes leen el catalogo de rutas"
-  on public.rutas for select
-  to authenticated
-  using (true);
+create unique index rutas_empresa_clave_normalizada_unique on public.rutas (empresa_id, clave_normalizada);
 
 -- Hallazgo #51 (D3 = b): recién acá, con empresas/rutas ya creadas -- ver el comentario en la
 -- definición de la tabla choferes, más arriba, sobre por qué no van en el CREATE TABLE.
 alter table public.choferes
   add column empresa_defecto_id uuid references public.empresas(id),
   add column ruta_defecto_id uuid references public.rutas(id);
+
+-- schema_v26 (criterio 1): vínculos chofer-empresa/chofer-ruta, SIN función única de escritura --
+-- el invariante "una ruta vinculada implica su empresa vinculada" lo garantizan dos FK compuestas,
+-- no un trigger ni una función. chofer_rutas lleva "empresa_id" propio (denormalizado) solo para
+-- poder expresar ese invariante como FK; las dos FK se verifican siempre contra el estado YA
+-- COMMITEADO de rutas/chofer_empresas (NOT DEFERRABLE) -- por eso renombrar_empresa/renombrar_ruta/
+-- fusionar_empresas/fusionar_rutas (sección de gestión, más abajo) mueven primero los vínculos
+-- hijos y recién después el padre, nunca al revés.
+create table public.chofer_empresas (
+  chofer_id uuid not null references public.choferes(id) on delete cascade,
+  -- SIN "on delete cascade" hacia empresas: no se borra una empresa con vínculos (se desactiva o
+  -- se fusiona) -- intentar borrarla vinculada falla por esta FK, a propósito.
+  empresa_id uuid not null references public.empresas(id),
+  origen text not null check (origen in ('admin', 'chofer', 'invitacion')),
+  created_at timestamptz not null default now(),
+  primary key (chofer_id, empresa_id)
+);
+
+create table public.chofer_rutas (
+  chofer_id uuid not null,
+  ruta_id uuid not null,
+  empresa_id uuid not null,
+  origen text not null check (origen in ('admin', 'chofer', 'invitacion')),
+  created_at timestamptz not null default now(),
+  primary key (chofer_id, ruta_id),
+  foreign key (chofer_id, empresa_id)
+    references public.chofer_empresas (chofer_id, empresa_id) on delete cascade,
+  foreign key (ruta_id, empresa_id)
+    references public.rutas (id, empresa_id)
+);
+
+alter table public.empresas enable row level security;
+alter table public.rutas enable row level security;
+alter table public.chofer_empresas enable row level security;
+alter table public.chofer_rutas enable row level security;
+
+-- schema_v26 (criterio 4): cada chofer solo lee lo que tiene vinculado.
+create policy "chofer lee sus empresas vinculadas"
+  on public.empresas for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.chofer_empresas ce
+      where ce.empresa_id = empresas.id
+        and ce.chofer_id = auth.uid()
+    )
+  );
+
+create policy "chofer lee sus rutas vinculadas"
+  on public.rutas for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.chofer_rutas cr
+      where cr.ruta_id = rutas.id
+        and cr.chofer_id = auth.uid()
+    )
+  );
+
+-- El chofer solo puede LEER sus propias filas de vínculo (hace falta para que las dos policies de
+-- arriba evalúen su EXISTS bajo RLS); nunca puede escribir -- sin ninguna policy de INSERT/UPDATE/
+-- DELETE, esos comandos quedan bloqueados para cualquier rol salvo el dueño de la tabla y
+-- service_role.
+create policy "chofer lee sus propios vinculos de empresa"
+  on public.chofer_empresas for select
+  to authenticated
+  using (chofer_id = auth.uid());
+
+create policy "chofer lee sus propios vinculos de ruta"
+  on public.chofer_rutas for select
+  to authenticated
+  using (chofer_id = auth.uid());
+
+-- GRANT/REVOKE (schema_v26, criterio 4): jornadas queda fuera, no tocada aquí.
+revoke all on table
+  public.empresas, public.rutas, public.chofer_empresas, public.chofer_rutas
+from anon;
+
+revoke insert, update, delete, truncate on table
+  public.empresas, public.rutas, public.chofer_empresas, public.chofer_rutas
+from authenticated;
+
+grant select, references, trigger on table
+  public.empresas, public.rutas, public.chofer_empresas, public.chofer_rutas
+to authenticated;
+
+grant all on table public.chofer_empresas, public.chofer_rutas to service_role;
+
+-- ============================================================
+-- ALTA DE EMPRESA/RUTA DESDE LA JORNADA (schema_v26_catalogo_por_chofer.sql, criterios 6 y 7)
+-- ============================================================
+-- Trigger AFTER INSERT (nunca AFTER UPDATE -- empresa/ruta de una jornada se fijan una sola vez y
+-- nunca se reescriben en ningún reintento) que crea y vincula, como "pendiente de revisión", la
+-- empresa/ruta que el chofer escribe al hacer check-in -- solo cuando la jornada la crea el propio
+-- chofer autenticado (auth.uid() = NEW.chofer_id), nunca cuando la crea el Dashboard
+-- (service_role, auth.uid() es NULL). Todo el cuerpo va envuelto en EXCEPTION WHEN OTHERS: un
+-- error aquí nunca debe impedir que la jornada se guarde.
+create or replace function public.jornadas_alta_catalogo_desde_chofer()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_clave_empresa text;
+  v_nombre_empresa text;
+  v_empresa_id uuid;
+  v_empresa_activa boolean;
+  v_clave_ruta text;
+  v_nombre_ruta text;
+  v_ruta_id uuid;
+begin
+  if auth.role() is distinct from 'authenticated' or auth.uid() is distinct from new.chofer_id then
+    return new;
+  end if;
+
+  begin
+    v_clave_empresa := upper(extensions.f_unaccent(regexp_replace(trim(new.empresa), '\s+', ' ', 'g')));
+
+    if length(v_clave_empresa) >= 2 and length(v_clave_empresa) <= 60 then
+      select id, activo into v_empresa_id, v_empresa_activa
+        from public.empresas where clave_normalizada = v_clave_empresa;
+
+      if v_empresa_id is null then
+        v_nombre_empresa := upper(regexp_replace(trim(new.empresa), '\s+', ' ', 'g'));
+
+        insert into public.empresas (nombre, pendiente_revision, creada_por_chofer_id)
+          values (v_nombre_empresa, true, new.chofer_id)
+          on conflict (clave_normalizada) do nothing
+          returning id into v_empresa_id;
+
+        if v_empresa_id is null then
+          select id, activo into v_empresa_id, v_empresa_activa
+            from public.empresas where clave_normalizada = v_clave_empresa;
+        else
+          v_empresa_activa := true;
+        end if;
+      end if;
+
+      if v_empresa_id is not null and v_empresa_activa then
+        insert into public.chofer_empresas (chofer_id, empresa_id, origen)
+          values (new.chofer_id, v_empresa_id, 'chofer')
+          on conflict (chofer_id, empresa_id) do nothing;
+
+        v_clave_ruta := upper(extensions.f_unaccent(regexp_replace(trim(new.ruta), '\s+', ' ', 'g')));
+
+        if length(v_clave_ruta) >= 2 and length(v_clave_ruta) <= 60 then
+          select id into v_ruta_id
+            from public.rutas
+            where empresa_id = v_empresa_id and clave_normalizada = v_clave_ruta and activo;
+
+          if v_ruta_id is null then
+            v_nombre_ruta := upper(regexp_replace(trim(new.ruta), '\s+', ' ', 'g'));
+
+            insert into public.rutas (empresa_id, nombre, pendiente_revision, creada_por_chofer_id)
+              values (v_empresa_id, v_nombre_ruta, true, new.chofer_id)
+              on conflict (empresa_id, clave_normalizada) do nothing
+              returning id into v_ruta_id;
+
+            if v_ruta_id is null then
+              select id into v_ruta_id
+                from public.rutas
+                where empresa_id = v_empresa_id and clave_normalizada = v_clave_ruta and activo;
+            end if;
+          end if;
+
+          if v_ruta_id is not null then
+            insert into public.chofer_rutas (chofer_id, ruta_id, empresa_id, origen)
+              values (new.chofer_id, v_ruta_id, v_empresa_id, 'chofer')
+              on conflict (chofer_id, ruta_id) do nothing;
+          end if;
+        end if;
+      end if;
+    end if;
+  exception when others then
+    raise warning 'jornadas_alta_catalogo_desde_chofer: error no bloqueante para la jornada % (chofer %): %',
+      new.id, new.chofer_id, sqlerrm;
+  end;
+
+  return new;
+end;
+$$;
+
+create trigger jornadas_alta_catalogo_desde_chofer_trigger
+  after insert on public.jornadas
+  for each row
+  execute function public.jornadas_alta_catalogo_desde_chofer();
+
+-- Este proyecto tiene un default ACL (pg_default_acl, rol postgres, esquema public, objtype 'f')
+-- que concede EXECUTE a anon/authenticated/service_role sobre TODA función nueva, en el momento en
+-- que se crea -- no es un privilegio heredado de PUBLIC. "revoke execute ... from public" no toca
+-- esos grants explícitos -- hace falta revocarlos a anon/authenticated por su nombre. Es función de
+-- trigger (RETURNS TRIGGER): nadie puede llamarla directo por SQL aunque tuviera EXECUTE -- este
+-- REVOKE es higiene/consistencia con el default ACL, no una vulnerabilidad real que cierre.
+revoke execute on function public.jornadas_alta_catalogo_desde_chofer()
+  from public, anon, authenticated;
 
 -- ============================================================
 -- INVITACIONES (schema_v19_invitaciones_alta_choferes.sql, Hallazgo #51)
@@ -745,6 +969,30 @@ begin
     end if;
   end;
 
+  -- Vínculos de la invitación (schema_v26_catalogo_por_chofer.sql, criterio 8, 2026-10-25): si la
+  -- invitación traía empresa (y, dentro de ella, ruta), el chofer recién creado queda vinculado
+  -- con origen='invitacion' -- mismo mecanismo que usa el Dashboard (origen='admin') y el trigger
+  -- de jornadas (origen='chofer'). Envuelto en su propio BEGIN/EXCEPTION: un vínculo que fallara
+  -- (por ejemplo, una ruta que no perteneciera a la empresa de la invitación) nunca debe romper el
+  -- alta del chofer -- un fallo deshace los dos INSERT de este bloque (sub-transacción implícita
+  -- de plpgsql) pero nunca el resto de la función.
+  if v_invitacion.empresa_id is not null then
+    begin
+      insert into public.chofer_empresas (chofer_id, empresa_id, origen)
+        values (new.id, v_invitacion.empresa_id, 'invitacion')
+        on conflict (chofer_id, empresa_id) do nothing;
+
+      if v_invitacion.ruta_id is not null then
+        insert into public.chofer_rutas (chofer_id, ruta_id, empresa_id, origen)
+          values (new.id, v_invitacion.ruta_id, v_invitacion.empresa_id, 'invitacion')
+          on conflict (chofer_id, ruta_id) do nothing;
+      end if;
+    exception when others then
+      raise warning 'crear_chofer_desde_invitacion: no se pudo crear el vinculo de la invitacion % para el chofer %: %',
+        v_invitacion.id, new.id, sqlerrm;
+    end;
+  end if;
+
   -- Borrado de datos personales al consumirse (ajuste del Hallazgo #51,
   -- schema_v21_alta_asistida_dni_atado.sql, 2026-10-14): ya viven en choferes (recién insertados
   -- arriba) -- no hace falta conservarlos en la invitación. Misma transacción que el INSERT.
@@ -833,6 +1081,275 @@ revoke insert, delete, truncate on public.choferes from authenticated;
 revoke insert, update, delete, truncate on public.choferes from anon;
 revoke update on public.choferes from authenticated;
 grant update (debe_cambiar_contrasena) on public.choferes to authenticated;
+
+-- ============================================================
+-- CATÁLOGO: RENOMBRAR Y FUSIONAR (schema_v26_catalogo_por_chofer.sql, criterio 9)
+-- ============================================================
+-- Solo service_role, en DOS capas: (1) el GRANT/REVOKE de más abajo le quita EXECUTE a cualquier
+-- otro rol; (2) la función igual comprueba auth.role() adentro, por si algún día alguien le
+-- concede EXECUTE a authenticated por error. Cada función es una sola llamada: ya es atómica por
+-- construcción. Van después de INVITACIONES porque fusionar_rutas/fusionar_empresas actualizan
+-- esa tabla (invitaciones.ruta_id/empresa_id) además de choferes/jornadas/rutas/empresas.
+create or replace function public.renombrar_empresa(p_empresa_id uuid, p_nombre_nuevo text)
+returns integer
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_nombre_viejo text;
+  v_nombre_normalizado text;
+  v_filas integer;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'renombrar_empresa: solo service_role';
+  end if;
+
+  v_nombre_normalizado := upper(regexp_replace(trim(p_nombre_nuevo), '\s+', ' ', 'g'));
+  if length(v_nombre_normalizado) < 2 or length(v_nombre_normalizado) > 60 then
+    raise exception 'renombrar_empresa: el nombre debe tener entre 2 y 60 caracteres tras normalizar';
+  end if;
+
+  select nombre into v_nombre_viejo from public.empresas where id = p_empresa_id;
+  if v_nombre_viejo is null then
+    raise exception 'renombrar_empresa: la empresa % no existe', p_empresa_id;
+  end if;
+
+  update public.empresas set nombre = v_nombre_normalizado where id = p_empresa_id;
+
+  -- Actualiza también el texto de jornadas.empresa que coincidía EXACTAMENTE con el nombre viejo
+  -- (jornadas.empresa sigue siendo texto libre, sin FK).
+  update public.jornadas set empresa = v_nombre_normalizado where empresa = v_nombre_viejo;
+  get diagnostics v_filas = row_count;
+
+  return v_filas;
+end;
+$$;
+
+create or replace function public.renombrar_ruta(p_ruta_id uuid, p_nombre_nuevo text)
+returns integer
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_nombre_viejo text;
+  v_empresa_id uuid;
+  v_nombre_empresa text;
+  v_nombre_normalizado text;
+  v_filas integer;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'renombrar_ruta: solo service_role';
+  end if;
+
+  v_nombre_normalizado := upper(regexp_replace(trim(p_nombre_nuevo), '\s+', ' ', 'g'));
+  if length(v_nombre_normalizado) < 2 or length(v_nombre_normalizado) > 60 then
+    raise exception 'renombrar_ruta: el nombre debe tener entre 2 y 60 caracteres tras normalizar';
+  end if;
+
+  select r.nombre, r.empresa_id, e.nombre
+    into v_nombre_viejo, v_empresa_id, v_nombre_empresa
+    from public.rutas r
+    join public.empresas e on e.id = r.empresa_id
+    where r.id = p_ruta_id;
+
+  if v_nombre_viejo is null then
+    raise exception 'renombrar_ruta: la ruta % no existe', p_ruta_id;
+  end if;
+
+  update public.rutas set nombre = v_nombre_normalizado where id = p_ruta_id;
+
+  -- Solo dentro de la misma empresa (en texto): dos empresas distintas pueden tener una ruta con
+  -- el mismo nombre viejo por coincidencia, y esa otra no debe tocarse.
+  update public.jornadas
+    set ruta = v_nombre_normalizado
+    where empresa = v_nombre_empresa and ruta = v_nombre_viejo;
+  get diagnostics v_filas = row_count;
+
+  return v_filas;
+end;
+$$;
+
+create or replace function public.fusionar_rutas(p_origen_id uuid, p_destino_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_nombre_origen text;
+  v_nombre_destino text;
+  v_empresa_origen uuid;
+  v_empresa_destino uuid;
+  v_nombre_empresa text;
+  v_filas integer;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'fusionar_rutas: solo service_role';
+  end if;
+
+  if p_origen_id = p_destino_id then
+    raise exception 'fusionar_rutas: origen y destino no pueden ser la misma ruta';
+  end if;
+
+  select nombre, empresa_id into v_nombre_origen, v_empresa_origen
+    from public.rutas where id = p_origen_id;
+  select nombre, empresa_id into v_nombre_destino, v_empresa_destino
+    from public.rutas where id = p_destino_id;
+
+  if v_nombre_origen is null or v_nombre_destino is null then
+    raise exception 'fusionar_rutas: origen o destino no existen';
+  end if;
+
+  if v_empresa_origen <> v_empresa_destino then
+    raise exception 'fusionar_rutas: las dos rutas deben pertenecer a la misma empresa';
+  end if;
+
+  select nombre into v_nombre_empresa from public.empresas where id = v_empresa_origen;
+
+  -- Mover los vínculos (chofer_rutas) de la ruta de origen a la de destino, sin duplicar si un
+  -- chofer ya estaba vinculado a las dos.
+  insert into public.chofer_rutas (chofer_id, ruta_id, empresa_id, origen)
+    select chofer_id, p_destino_id, empresa_id, origen
+    from public.chofer_rutas where ruta_id = p_origen_id
+    on conflict (chofer_id, ruta_id) do nothing;
+  delete from public.chofer_rutas where ruta_id = p_origen_id;
+
+  update public.choferes set ruta_defecto_id = p_destino_id where ruta_defecto_id = p_origen_id;
+  update public.invitaciones set ruta_id = p_destino_id where ruta_id = p_origen_id;
+
+  update public.jornadas
+    set ruta = v_nombre_destino
+    where empresa = v_nombre_empresa and ruta = v_nombre_origen;
+  get diagnostics v_filas = row_count;
+
+  update public.rutas set activo = false where id = p_origen_id;
+
+  return v_filas;
+end;
+$$;
+
+create or replace function public.fusionar_empresas(p_origen_id uuid, p_destino_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path to 'public'
+as $$
+declare
+  v_nombre_origen text;
+  v_nombre_destino text;
+  v_filas integer;
+  r record;
+  v_ruta_destino_id uuid;
+  v_nombre_ruta_destino text;
+begin
+  if auth.role() is distinct from 'service_role' then
+    raise exception 'fusionar_empresas: solo service_role';
+  end if;
+
+  if p_origen_id = p_destino_id then
+    raise exception 'fusionar_empresas: origen y destino no pueden ser la misma empresa';
+  end if;
+
+  select nombre into v_nombre_origen from public.empresas where id = p_origen_id;
+  select nombre into v_nombre_destino from public.empresas where id = p_destino_id;
+
+  if v_nombre_origen is null or v_nombre_destino is null then
+    raise exception 'fusionar_empresas: origen o destino no existen';
+  end if;
+
+  drop table if exists pg_temp._tmp_vinculos_ruta;
+  create temp table _tmp_vinculos_ruta (chofer_id uuid, origen text);
+
+  -- Vínculos de empresa PRIMERO, antes del bucle de rutas: el bucle de más abajo reinserta
+  -- chofer_rutas con empresa_id = p_destino_id -- esa reinserción exige que cada chofer que tenía
+  -- chofer_empresas(chofer_id, origen) YA tenga también chofer_empresas(chofer_id, destino), por
+  -- la FK compuesta (chofer_id, empresa_id) -> chofer_empresas. Si este INSERT corriera después
+  -- del bucle, un chofer vinculado SOLO a la empresa de origen haría fallar la reinserción con
+  -- foreign_key_violation (23503) -- bug real encontrado el 2026-10-26. El DELETE de la fila de
+  -- origen se queda DESPUÉS del bucle: para entonces ya no queda ningún chofer_rutas apuntando a
+  -- esa empresa, así que borrarla no deja nada colgado.
+  insert into public.chofer_empresas (chofer_id, empresa_id, origen)
+    select chofer_id, p_destino_id, origen from public.chofer_empresas where empresa_id = p_origen_id
+    on conflict (chofer_id, empresa_id) do nothing;
+
+  -- Rutas de la empresa de origen, una por una: si la de destino ya tiene una ruta con la misma
+  -- clave (combinar), se desactiva la de origen y sus vínculos pasan a la de destino que ya
+  -- existía; si no, la ruta se MUEVE entera (conserva su id) a la empresa de destino.
+  for r in select * from public.rutas where empresa_id = p_origen_id loop
+    select id, nombre into v_ruta_destino_id, v_nombre_ruta_destino
+      from public.rutas
+      where empresa_id = p_destino_id and clave_normalizada = r.clave_normalizada;
+
+    truncate _tmp_vinculos_ruta;
+    insert into _tmp_vinculos_ruta
+      select chofer_id, origen from public.chofer_rutas where ruta_id = r.id;
+    delete from public.chofer_rutas where ruta_id = r.id;
+
+    if v_ruta_destino_id is not null then
+      -- Combinar: los vínculos de la ruta de origen pasan a la ya existente en destino.
+      insert into public.chofer_rutas (chofer_id, ruta_id, empresa_id, origen)
+        select chofer_id, v_ruta_destino_id, p_destino_id, origen from _tmp_vinculos_ruta
+        on conflict (chofer_id, ruta_id) do nothing;
+
+      update public.jornadas
+        set ruta = v_nombre_ruta_destino
+        where empresa = v_nombre_origen and ruta = r.nombre;
+
+      update public.choferes set ruta_defecto_id = v_ruta_destino_id where ruta_defecto_id = r.id;
+      update public.invitaciones set ruta_id = v_ruta_destino_id where ruta_id = r.id;
+
+      update public.rutas set activo = false where id = r.id;
+    else
+      -- Mover: la ruta pasa entera a la empresa de destino, conservando su id (sus vínculos no
+      -- necesitan remapearse por eso).
+      update public.rutas set empresa_id = p_destino_id where id = r.id;
+
+      insert into public.chofer_rutas (chofer_id, ruta_id, empresa_id, origen)
+        select chofer_id, r.id, p_destino_id, origen from _tmp_vinculos_ruta
+        on conflict (chofer_id, ruta_id) do nothing;
+    end if;
+  end loop;
+
+  drop table if exists pg_temp._tmp_vinculos_ruta;
+
+  -- Vínculos de empresa: el INSERT que los mueve a destino ya corrió ANTES del bucle -- aquí solo
+  -- queda borrar la fila de origen.
+  delete from public.chofer_empresas where empresa_id = p_origen_id;
+
+  update public.choferes set empresa_defecto_id = p_destino_id where empresa_defecto_id = p_origen_id;
+  update public.invitaciones set empresa_id = p_destino_id where empresa_id = p_origen_id;
+
+  -- Único conteo de jornadas: para este punto, todo renombrado de ruta (rama "combinar" del loop)
+  -- ya se aplicó sobre filas que todavía tenían empresa = v_nombre_origen -- este UPDATE final
+  -- cuenta cada fila de jornadas de esa empresa exactamente una vez.
+  update public.jornadas set empresa = v_nombre_destino where empresa = v_nombre_origen;
+  get diagnostics v_filas = row_count;
+
+  update public.empresas set activo = false where id = p_origen_id;
+
+  return v_filas;
+end;
+$$;
+
+-- "from public" NO alcanza: el default ACL de este proyecto (pg_default_acl, rol postgres,
+-- esquema public) le da EXECUTE a anon y authenticated, como GRANT EXPLÍCITO, en el momento en que
+-- Postgres crea cada función nueva -- revocar solo PUBLIC deja esos dos grants intactos. Se revoca
+-- a los tres explícitamente.
+revoke execute on function
+  public.renombrar_empresa(uuid, text),
+  public.renombrar_ruta(uuid, text),
+  public.fusionar_empresas(uuid, uuid),
+  public.fusionar_rutas(uuid, uuid)
+from public, anon, authenticated;
+
+grant execute on function
+  public.renombrar_empresa(uuid, text),
+  public.renombrar_ruta(uuid, text),
+  public.fusionar_empresas(uuid, uuid),
+  public.fusionar_rutas(uuid, uuid)
+to service_role;
 
 -- ============================================================
 -- STORAGE (fotos de evidencias: tacómetro inicial/final, hoja de ruta)

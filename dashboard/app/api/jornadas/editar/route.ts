@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import {
+  ColisionCatalogoError,
   normalizarNombreEmpresa,
   normalizarNombreRuta,
   obtenerOCrearEmpresa,
@@ -304,18 +305,26 @@ export async function POST(request: Request) {
   // la versión nueva (o ya existente) queda registrada en el catálogo, y `jornadas.empresa`/`ruta`
   // guardan el mismo texto normalizado. La ruta necesita saber de qué empresa es incluso si solo
   // se corrigió la ruta (no la empresa): se usa `actual.empresa` como respaldo.
-  if (campos.empresa !== undefined) {
-    const empresaNormalizada = normalizarNombreEmpresa(campos.empresa);
-    await obtenerOCrearEmpresa(supabase, empresaNormalizada);
-    actualizacion.empresa = empresaNormalizada;
-  }
-  if (campos.matricula !== undefined) actualizacion.matricula = campos.matricula;
-  if (campos.ruta !== undefined) {
-    const empresaDeLaRuta = campos.empresa !== undefined ? actualizacion.empresa! : actual.empresa;
-    const rutaNormalizada = normalizarNombreRuta(campos.ruta);
-    const empresaId = await obtenerOCrearEmpresa(supabase, empresaDeLaRuta);
-    await obtenerOCrearRuta(supabase, empresaId, rutaNormalizada);
-    actualizacion.ruta = rutaNormalizada;
+  try {
+    if (campos.empresa !== undefined) {
+      const empresaNormalizada = normalizarNombreEmpresa(campos.empresa);
+      await obtenerOCrearEmpresa(supabase, empresaNormalizada);
+      actualizacion.empresa = empresaNormalizada;
+    }
+    if (campos.matricula !== undefined) actualizacion.matricula = campos.matricula;
+    if (campos.ruta !== undefined) {
+      const empresaDeLaRuta =
+        campos.empresa !== undefined ? actualizacion.empresa! : actual.empresa;
+      const rutaNormalizada = normalizarNombreRuta(campos.ruta);
+      const empresaId = await obtenerOCrearEmpresa(supabase, empresaDeLaRuta);
+      await obtenerOCrearRuta(supabase, empresaId, rutaNormalizada);
+      actualizacion.ruta = rutaNormalizada;
+    }
+  } catch (error) {
+    if (error instanceof ColisionCatalogoError) {
+      return NextResponse.json({ mensaje: error.message }, { status: 409 });
+    }
+    throw error;
   }
   if (campos.kmInicial !== undefined) actualizacion.km_inicial = campos.kmInicial;
   if (campos.kmFinal !== undefined) actualizacion.km_final = campos.kmFinal;

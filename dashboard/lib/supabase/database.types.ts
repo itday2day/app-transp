@@ -38,6 +38,81 @@ export type Database = {
         };
         Relationships: [];
       };
+      chofer_empresas: {
+        Row: {
+          chofer_id: string;
+          created_at: string;
+          empresa_id: string;
+          origen: string;
+        };
+        Insert: {
+          chofer_id: string;
+          created_at?: string;
+          empresa_id: string;
+          origen: string;
+        };
+        Update: {
+          chofer_id?: string;
+          created_at?: string;
+          empresa_id?: string;
+          origen?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "chofer_empresas_chofer_id_fkey";
+            columns: ["chofer_id"];
+            isOneToOne: false;
+            referencedRelation: "choferes";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "chofer_empresas_empresa_id_fkey";
+            columns: ["empresa_id"];
+            isOneToOne: false;
+            referencedRelation: "empresas";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      chofer_rutas: {
+        Row: {
+          chofer_id: string;
+          created_at: string;
+          empresa_id: string;
+          origen: string;
+          ruta_id: string;
+        };
+        Insert: {
+          chofer_id: string;
+          created_at?: string;
+          empresa_id: string;
+          origen: string;
+          ruta_id: string;
+        };
+        Update: {
+          chofer_id?: string;
+          created_at?: string;
+          empresa_id?: string;
+          origen?: string;
+          ruta_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "chofer_rutas_chofer_id_empresa_id_fkey";
+            columns: ["chofer_id", "empresa_id"];
+            isOneToOne: false;
+            referencedRelation: "chofer_empresas";
+            referencedColumns: ["chofer_id", "empresa_id"];
+          },
+          {
+            foreignKeyName: "chofer_rutas_ruta_id_empresa_id_fkey";
+            columns: ["ruta_id", "empresa_id"];
+            isOneToOne: false;
+            referencedRelation: "rutas";
+            referencedColumns: ["id", "empresa_id"];
+          },
+        ];
+      };
       choferes: {
         Row: {
           activo: boolean;
@@ -113,23 +188,40 @@ export type Database = {
       empresas: {
         Row: {
           activo: boolean;
+          clave_normalizada: string | null;
+          creada_por_chofer_id: string | null;
           created_at: string;
           id: string;
           nombre: string;
+          pendiente_revision: boolean;
         };
         Insert: {
           activo?: boolean;
+          clave_normalizada?: string | null;
+          creada_por_chofer_id?: string | null;
           created_at?: string;
           id?: string;
           nombre: string;
+          pendiente_revision?: boolean;
         };
         Update: {
           activo?: boolean;
+          clave_normalizada?: string | null;
+          creada_por_chofer_id?: string | null;
           created_at?: string;
           id?: string;
           nombre?: string;
+          pendiente_revision?: boolean;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "empresas_creada_por_chofer_id_fkey";
+            columns: ["creada_por_chofer_id"];
+            isOneToOne: false;
+            referencedRelation: "choferes";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       invitaciones: {
         Row: {
@@ -337,26 +429,42 @@ export type Database = {
       rutas: {
         Row: {
           activo: boolean;
+          clave_normalizada: string | null;
+          creada_por_chofer_id: string | null;
           created_at: string;
           empresa_id: string;
           id: string;
           nombre: string;
+          pendiente_revision: boolean;
         };
         Insert: {
           activo?: boolean;
+          clave_normalizada?: string | null;
+          creada_por_chofer_id?: string | null;
           created_at?: string;
           empresa_id: string;
           id?: string;
           nombre: string;
+          pendiente_revision?: boolean;
         };
         Update: {
           activo?: boolean;
+          clave_normalizada?: string | null;
+          creada_por_chofer_id?: string | null;
           created_at?: string;
           empresa_id?: string;
           id?: string;
           nombre?: string;
+          pendiente_revision?: boolean;
         };
         Relationships: [
+          {
+            foreignKeyName: "rutas_creada_por_chofer_id_fkey";
+            columns: ["creada_por_chofer_id"];
+            isOneToOne: false;
+            referencedRelation: "choferes";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "rutas_empresa_id_fkey";
             columns: ["empresa_id"];
@@ -724,6 +832,14 @@ export type Database = {
         | { Args: { table_name: string }; Returns: string };
       enablelongtransactions: { Args: never; Returns: string };
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean };
+      fusionar_empresas: {
+        Args: { p_destino_id: string; p_origen_id: string };
+        Returns: number;
+      };
+      fusionar_rutas: {
+        Args: { p_destino_id: string; p_origen_id: string };
+        Returns: number;
+      };
       generar_codigo_invitacion: { Args: never; Returns: string };
       geometry: { Args: { "": string }; Returns: unknown };
       geometry_above: {
@@ -896,6 +1012,14 @@ export type Database = {
       };
       postgis_version: { Args: never; Returns: string };
       postgis_wagyu_version: { Args: never; Returns: string };
+      renombrar_empresa: {
+        Args: { p_empresa_id: string; p_nombre_nuevo: string };
+        Returns: number;
+      };
+      renombrar_ruta: {
+        Args: { p_nombre_nuevo: string; p_ruta_id: string };
+        Returns: number;
+      };
       st_3dclosestpoint: {
         Args: { geom1: unknown; geom2: unknown };
         Returns: unknown;
