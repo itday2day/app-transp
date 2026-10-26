@@ -3,7 +3,13 @@ import { NextResponse } from "next/server";
 import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { claveNormalizada, normalizarNombreEmpresa } from "@/lib/catalogo";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
-import type { EmpresaConPendiente, EmpresaRow, EmpresasResponse } from "@/lib/types";
+import type {
+  CrearEmpresaRequest,
+  CuerpoSinValidar,
+  EmpresaConPendiente,
+  EmpresaRow,
+  EmpresasResponse,
+} from "@/lib/types";
 
 // GET /api/empresas (spec_catalogo_empresas_rutas.md, Hallazgo #48; spec_catalogo_por_chofer.md,
 // Etapa 2, decisión D4) — el catálogo completo, sin filtrar por `activo` (el selector/la pantalla
@@ -60,9 +66,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: "Sesión inválida o expirada." }, { status: 401 });
   }
 
-  let cuerpo: { nombre?: unknown };
+  let cuerpo: CuerpoSinValidar<CrearEmpresaRequest>;
   try {
-    cuerpo = (await request.json()) as { nombre?: unknown };
+    cuerpo = (await request.json()) as CuerpoSinValidar<CrearEmpresaRequest>;
   } catch {
     return NextResponse.json({ mensaje: "Cuerpo de la petición inválido." }, { status: 400 });
   }

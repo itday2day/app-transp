@@ -9,6 +9,14 @@ import { Dialog } from "@/components/ui/dialog";
 import { SelectorBuscable } from "@/components/ui/selector-buscable";
 import { useEmpresaDetalle } from "@/lib/hooks/use-empresa-detalle";
 import { useEmpresas } from "@/lib/hooks/use-empresas";
+import {
+  construirCuerpoActivar,
+  construirCuerpoCrearRuta,
+  construirCuerpoFusionar,
+  construirCuerpoRenombrar,
+  construirCuerpoRevisar,
+  construirCuerpoVinculosChofer,
+} from "@/lib/peticiones-catalogo";
 import type {
   ChoferParaAsignacion,
   EmpresaConPendiente,
@@ -32,11 +40,13 @@ async function leerJson(respuesta: Response): Promise<unknown> {
  * Comparte la misma forma para empresa y ruta -- los endpoints de previsualizar/renombrar de cada
  * una tienen la misma respuesta (PrevisualizarRenombrarResponse/RenombrarResponse). */
 function RenombrarInline({
+  id,
   nombreActual,
   rutaPrevisualizar,
   rutaRenombrar,
   onRenombrado,
 }: {
+  id: string;
   nombreActual: string;
   rutaPrevisualizar: string;
   rutaRenombrar: string;
@@ -56,10 +66,11 @@ function RenombrarInline({
     if (!nombreNuevo.trim() || nombreNuevo.trim() === nombreActual) return;
     setCargando(true);
     try {
+      const cuerpoPeticion = construirCuerpoRenombrar(id, nombreNuevo);
       const respuesta = await fetch(rutaPrevisualizar, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombreNuevo }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       const cuerpo = await leerJson(respuesta);
       if (!respuesta.ok) {
@@ -78,10 +89,11 @@ function RenombrarInline({
     setCargando(true);
     setError(null);
     try {
+      const cuerpoPeticion = construirCuerpoRenombrar(id, nombreNuevo);
       const respuesta = await fetch(rutaRenombrar, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombreNuevo }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       const cuerpo = await leerJson(respuesta);
       if (!respuesta.ok) {
@@ -199,10 +211,11 @@ function FusionarInline<T extends { id: string; nombre: string }>({
     setResultado(null);
     setCargando(true);
     try {
+      const cuerpoPeticion = construirCuerpoFusionar(item.id, id);
       const respuesta = await fetch(rutaPrevisualizar, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ origenId: item.id, destinoId: id }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       const cuerpo = await leerJson(respuesta);
       if (!respuesta.ok) {
@@ -222,10 +235,11 @@ function FusionarInline<T extends { id: string; nombre: string }>({
     setCargando(true);
     setError(null);
     try {
+      const cuerpoPeticion = construirCuerpoFusionar(item.id, destinoId);
       const respuesta = await fetch(rutaFusionar, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ origenId: item.id, destinoId }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       const cuerpo = await leerJson(respuesta);
       if (!respuesta.ok) {
@@ -253,7 +267,7 @@ function FusionarInline<T extends { id: string; nombre: string }>({
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/30 p-3">
       <p className="text-xs text-muted-foreground">
-        Elegí con cuál se queda &quot;{item.nombre}&quot; (la otra se desactiva):
+        Elige con cuál se queda &quot;{item.nombre}&quot; (la otra se desactiva):
       </p>
       <SelectorBuscable
         idPrefix="fusion-destino"
@@ -322,13 +336,13 @@ function CasillasChoferes({
     setEnviando(choferId);
     setError(null);
     try {
+      const cuerpoPeticion = construirCuerpoVinculosChofer(choferId, {
+        [marcar ? campoAgregar : campoQuitar]: [idObjetivo],
+      });
       const respuesta = await fetch("/api/choferes/vinculos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          choferId,
-          [marcar ? campoAgregar : campoQuitar]: [idObjetivo],
-        }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       const cuerpo = await leerJson(respuesta);
       if (!respuesta.ok) {
@@ -400,10 +414,11 @@ function FilaRuta({
     setCambiandoEstado(true);
     setError(null);
     try {
+      const cuerpoPeticion = construirCuerpoActivar(ruta.id, !ruta.activo);
       const respuesta = await fetch("/api/rutas/activar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: ruta.id, activo: !ruta.activo }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       const cuerpo = await leerJson(respuesta);
       if (!respuesta.ok) {
@@ -421,10 +436,11 @@ function FilaRuta({
   async function marcarRevisada() {
     setError(null);
     try {
+      const cuerpoPeticion = construirCuerpoRevisar(ruta.id);
       const respuesta = await fetch("/api/rutas/revisar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: ruta.id }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       if (!respuesta.ok) {
         const cuerpo = await leerJson(respuesta);
@@ -470,6 +486,7 @@ function FilaRuta({
             {ruta.activo ? "Dar de baja" : "Reactivar"}
           </Button>
           <RenombrarInline
+            id={ruta.id}
             nombreActual={ruta.nombre}
             rutaPrevisualizar="/api/rutas/renombrar/previsualizar"
             rutaRenombrar="/api/rutas/renombrar"
@@ -540,10 +557,11 @@ export function EmpresaDetalleDialog({ empresaId, onClose }: EmpresaDetalleDialo
     setCambiandoEstado(true);
     setError(null);
     try {
+      const cuerpoPeticion = construirCuerpoActivar(empresa.id, !empresa.activo);
       const respuesta = await fetch("/api/empresas/activar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: empresa.id, activo: !empresa.activo }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       const cuerpo = await leerJson(respuesta);
       if (!respuesta.ok) {
@@ -561,10 +579,11 @@ export function EmpresaDetalleDialog({ empresaId, onClose }: EmpresaDetalleDialo
   async function marcarRevisada() {
     setError(null);
     try {
+      const cuerpoPeticion = construirCuerpoRevisar(empresaId);
       const respuesta = await fetch("/api/empresas/revisar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: empresaId }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       if (!respuesta.ok) {
         const cuerpo = await leerJson(respuesta);
@@ -582,10 +601,11 @@ export function EmpresaDetalleDialog({ empresaId, onClose }: EmpresaDetalleDialo
     if (!nuevaRuta.trim()) return;
     setCreandoRuta(true);
     try {
+      const cuerpoPeticion = construirCuerpoCrearRuta(empresaId, nuevaRuta);
       const respuesta = await fetch("/api/rutas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ empresaId, nombre: nuevaRuta }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       const cuerpo = await leerJson(respuesta);
       if (!respuesta.ok) {
@@ -640,6 +660,7 @@ export function EmpresaDetalleDialog({ empresaId, onClose }: EmpresaDetalleDialo
               {empresa.activo ? "Dar de baja" : "Reactivar"}
             </Button>
             <RenombrarInline
+              id={empresa.id}
               nombreActual={empresa.nombre}
               rutaPrevisualizar="/api/empresas/renombrar/previsualizar"
               rutaRenombrar="/api/empresas/renombrar"

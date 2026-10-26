@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
+import { construirCuerpoCrearEmpresa } from "@/lib/peticiones-catalogo";
 
 interface CrearEmpresaDialogProps {
   onClose: () => void;
@@ -28,10 +29,11 @@ export function CrearEmpresaDialog({ onClose, onCreada }: CrearEmpresaDialogProp
     }
     setEnviando(true);
     try {
+      const cuerpoPeticion = construirCuerpoCrearEmpresa(nombre);
       const respuesta = await fetch("/api/empresas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       const cuerpo: unknown = await respuesta.json().catch(() => null);
       if (!respuesta.ok) {

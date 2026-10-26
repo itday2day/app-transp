@@ -4,7 +4,7 @@ import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { claveNormalizada, normalizarNombreRuta } from "@/lib/catalogo";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import { esUuid } from "@/lib/utils";
-import type { RutaRow, RutasResponse } from "@/lib/types";
+import type { CrearRutaRequest, CuerpoSinValidar, RutaRow, RutasResponse } from "@/lib/types";
 
 // GET /api/rutas (spec_catalogo_empresas_rutas.md, Hallazgo #48) — el catálogo completo de TODAS
 // las empresas de una sola vez (la tabla es chica): el cliente filtra por empresa_id en memoria.
@@ -38,9 +38,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: "Sesión inválida o expirada." }, { status: 401 });
   }
 
-  let cuerpo: { empresaId?: unknown; nombre?: unknown };
+  let cuerpo: CuerpoSinValidar<CrearRutaRequest>;
   try {
-    cuerpo = (await request.json()) as { empresaId?: unknown; nombre?: unknown };
+    cuerpo = (await request.json()) as CuerpoSinValidar<CrearRutaRequest>;
   } catch {
     return NextResponse.json({ mensaje: "Cuerpo de la petición inválido." }, { status: 400 });
   }

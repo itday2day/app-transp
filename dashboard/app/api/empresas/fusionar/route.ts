@@ -4,7 +4,7 @@ import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { FusionInvalidaError, validarFusionEmpresas } from "@/lib/catalogo-gestion";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import { esUuid } from "@/lib/utils";
-import type { FusionarResponse } from "@/lib/types";
+import type { CuerpoSinValidar, FusionarRequest, FusionarResponse } from "@/lib/types";
 
 // POST /api/empresas/fusionar — envuelve la RPC fusionar_empresas() (solo service_role). Revalida
 // origen≠destino y que el destino exista y esté ACTIVO ANTES de llamar a la RPC (corrección C3):
@@ -17,9 +17,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: "Sesión inválida o expirada." }, { status: 401 });
   }
 
-  let cuerpo: { origenId?: unknown; destinoId?: unknown };
+  let cuerpo: CuerpoSinValidar<FusionarRequest>;
   try {
-    cuerpo = (await request.json()) as { origenId?: unknown; destinoId?: unknown };
+    cuerpo = (await request.json()) as CuerpoSinValidar<FusionarRequest>;
   } catch {
     return NextResponse.json({ mensaje: "Cuerpo de la petición inválido." }, { status: 400 });
   }

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import { esUuid } from "@/lib/utils";
-import type { RutaRow } from "@/lib/types";
+import type { ActivarRequest, CuerpoSinValidar, RutaRow } from "@/lib/types";
 
 // POST /api/rutas/activar — mismo criterio que /api/empresas/activar: no toca chofer_rutas.
 export async function POST(request: Request) {
@@ -13,9 +13,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: "Sesión inválida o expirada." }, { status: 401 });
   }
 
-  let cuerpo: { id?: unknown; activo?: unknown };
+  let cuerpo: CuerpoSinValidar<ActivarRequest>;
   try {
-    cuerpo = (await request.json()) as { id?: unknown; activo?: unknown };
+    cuerpo = (await request.json()) as CuerpoSinValidar<ActivarRequest>;
   } catch {
     return NextResponse.json({ mensaje: "Cuerpo de la petición inválido." }, { status: 400 });
   }

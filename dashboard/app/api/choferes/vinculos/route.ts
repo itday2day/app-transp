@@ -8,7 +8,7 @@ import {
   obtenerVinculosChofer,
   VinculoInvalidoError,
 } from "@/lib/vinculos";
-import type { DiferenciasVinculosChoferRequest } from "@/lib/types";
+import type { CuerpoSinValidar, VinculosChoferRequest } from "@/lib/types";
 
 // GET /api/choferes/vinculos?choferId=... — snapshot de empresas/rutas vinculadas (spec_catalogo_
 // por_chofer.md, Etapa 2): lo que carga el diálogo del chofer al abrirse en modo Ver/Editar.
@@ -44,10 +44,6 @@ export async function GET(request: NextRequest) {
 // para el motivo exacto: no borrar un vínculo origen='chofer' creado por el trigger mientras el
 // admin tenía el diálogo abierto). Usada desde el diálogo del chofer Y desde la pantalla de detalle
 // de empresa (un llamado por chofer que se marca/desmarca ahí).
-interface CuerpoPeticion extends DiferenciasVinculosChoferRequest {
-  choferId?: unknown;
-}
-
 export async function POST(request: Request) {
   const cookieStore = await cookies();
   const sesion = await obtenerAdminSesion(cookieStore.get(NOMBRE_COOKIE_SESION)?.value);
@@ -55,9 +51,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: "Sesión inválida o expirada." }, { status: 401 });
   }
 
-  let cuerpo: CuerpoPeticion;
+  let cuerpo: CuerpoSinValidar<VinculosChoferRequest>;
   try {
-    cuerpo = (await request.json()) as CuerpoPeticion;
+    cuerpo = (await request.json()) as CuerpoSinValidar<VinculosChoferRequest>;
   } catch {
     return NextResponse.json({ mensaje: "Cuerpo de la petición inválido." }, { status: 400 });
   }
@@ -70,10 +66,10 @@ export async function POST(request: Request) {
   const supabase = crearClienteSupabaseAdmin();
   try {
     await aplicarDiferenciasVinculosChofer(supabase, choferId, {
-      empresasAgregar: cuerpo.empresasAgregar,
-      empresasQuitar: cuerpo.empresasQuitar,
-      rutasAgregar: cuerpo.rutasAgregar,
-      rutasQuitar: cuerpo.rutasQuitar,
+      empresasAgregar: cuerpo.empresasAgregar as string[] | undefined,
+      empresasQuitar: cuerpo.empresasQuitar as string[] | undefined,
+      rutasAgregar: cuerpo.rutasAgregar as string[] | undefined,
+      rutasQuitar: cuerpo.rutasQuitar as string[] | undefined,
     });
     const vinculos = await obtenerVinculosChofer(supabase, choferId);
     return NextResponse.json(vinculos);

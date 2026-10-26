@@ -549,6 +549,55 @@ export interface DiferenciasVinculosChoferRequest {
   rutasQuitar?: string[];
 }
 
+/** Cuerpo de POST /api/choferes/vinculos -- las diferencias (arriba) más el chofer al que se le
+ * aplican. */
+export interface VinculosChoferRequest extends DiferenciasVinculosChoferRequest {
+  choferId: string;
+}
+
+/** Ayuda genérica (bug real del 2026-10-26: RenombrarInline mandaba `{ nombreNuevo }` sin `id`, y
+ * el servidor lo aceptaba como `unknown` sin que tsc lo marcara): la forma "todavía sin validar"
+ * de un cuerpo de petición -- cada campo llega como `unknown` hasta que el Route Handler lo
+ * confirma de verdad (esUuid, typeof, etc.), pero sus NOMBRES de campo se derivan del tipo ya
+ * validado -- si ese tipo gana o pierde un campo, el parseo tiene que actualizarse en el mismo
+ * lugar, nunca puede quedar atrás. */
+export type CuerpoSinValidar<T> = { [K in keyof T]?: unknown };
+
+/** Cuerpo de POST /api/empresas y /api/empresas/renombrar|renombrar/previsualizar (comparten
+ * forma con rutas). */
+export interface RenombrarRequest {
+  id: string;
+  nombreNuevo: string;
+}
+
+/** Cuerpo de POST /api/empresas|rutas/fusionar y su .../previsualizar. */
+export interface FusionarRequest {
+  origenId: string;
+  destinoId: string;
+}
+
+/** Cuerpo de POST /api/empresas|rutas/activar. */
+export interface ActivarRequest {
+  id: string;
+  activo: boolean;
+}
+
+/** Cuerpo de POST /api/empresas|rutas/revisar. */
+export interface RevisarRequest {
+  id: string;
+}
+
+/** Cuerpo de POST /api/empresas (alta). */
+export interface CrearEmpresaRequest {
+  nombre: string;
+}
+
+/** Cuerpo de POST /api/rutas (alta). */
+export interface CrearRutaRequest {
+  empresaId: string;
+  nombre: string;
+}
+
 /** Vínculo con el nombre ya resuelto -- lo que necesita la UI para mostrar la lista sin una
  * segunda consulta. */
 export interface VinculoEmpresaConNombre {

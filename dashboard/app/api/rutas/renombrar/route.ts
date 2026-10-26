@@ -4,7 +4,7 @@ import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { ColisionRenombrarError, verificarColisionRenombrarRuta } from "@/lib/catalogo-gestion";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import { esUuid } from "@/lib/utils";
-import type { RenombrarResponse } from "@/lib/types";
+import type { CuerpoSinValidar, RenombrarRequest, RenombrarResponse } from "@/lib/types";
 
 // POST /api/rutas/renombrar — envuelve la RPC renombrar_ruta() (solo service_role). Revalida la
 // colisión de nombre ANTES de llamar a la base, mismo criterio que /api/empresas/renombrar
@@ -16,9 +16,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: "Sesión inválida o expirada." }, { status: 401 });
   }
 
-  let cuerpo: { id?: unknown; nombreNuevo?: unknown };
+  let cuerpo: CuerpoSinValidar<RenombrarRequest>;
   try {
-    cuerpo = (await request.json()) as { id?: unknown; nombreNuevo?: unknown };
+    cuerpo = (await request.json()) as CuerpoSinValidar<RenombrarRequest>;
   } catch {
     return NextResponse.json({ mensaje: "Cuerpo de la petición inválido." }, { status: 400 });
   }

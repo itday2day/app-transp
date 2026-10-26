@@ -4,6 +4,7 @@ import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { FusionInvalidaError, previsualizarFusionarEmpresas } from "@/lib/catalogo-gestion";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import { esUuid } from "@/lib/utils";
+import type { CuerpoSinValidar, FusionarRequest } from "@/lib/types";
 
 // POST /api/empresas/fusionar/previsualizar — rutas que se combinan/mueven, choferes vinculados y
 // jornadas afectadas (decisión D5), mismo criterio de texto exacto que fusionar_empresas() real.
@@ -14,9 +15,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: "Sesión inválida o expirada." }, { status: 401 });
   }
 
-  let cuerpo: { origenId?: unknown; destinoId?: unknown };
+  let cuerpo: CuerpoSinValidar<FusionarRequest>;
   try {
-    cuerpo = (await request.json()) as { origenId?: unknown; destinoId?: unknown };
+    cuerpo = (await request.json()) as CuerpoSinValidar<FusionarRequest>;
   } catch {
     return NextResponse.json({ mensaje: "Cuerpo de la petición inválido." }, { status: 400 });
   }

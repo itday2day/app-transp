@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import { esUuid } from "@/lib/utils";
-import type { RutaRow } from "@/lib/types";
+import type { CuerpoSinValidar, RevisarRequest, RutaRow } from "@/lib/types";
 
 // POST /api/rutas/revisar — "Marcar como revisada", mismo patrón que /api/empresas/revisar.
 export async function POST(request: Request) {
@@ -13,9 +13,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: "Sesión inválida o expirada." }, { status: 401 });
   }
 
-  let cuerpo: { id?: unknown };
+  let cuerpo: CuerpoSinValidar<RevisarRequest>;
   try {
-    cuerpo = (await request.json()) as { id?: unknown };
+    cuerpo = (await request.json()) as CuerpoSinValidar<RevisarRequest>;
   } catch {
     return NextResponse.json({ mensaje: "Cuerpo de la petición inválido." }, { status: 400 });
   }

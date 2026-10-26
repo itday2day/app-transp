@@ -4,6 +4,7 @@ import { NOMBRE_COOKIE_SESION, obtenerAdminSesion } from "@/lib/auth";
 import { ColisionRenombrarError, previsualizarRenombrarEmpresa } from "@/lib/catalogo-gestion";
 import { crearClienteSupabaseAdmin } from "@/lib/supabase/server";
 import { esUuid } from "@/lib/utils";
+import type { CuerpoSinValidar, RenombrarRequest } from "@/lib/types";
 
 // POST /api/empresas/renombrar/previsualizar — decisión D5: número previsto de jornadas antes de
 // confirmar, con la nota de "coincidencia exacta" siempre presente. 409 si el nombre nuevo
@@ -16,9 +17,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ mensaje: "Sesión inválida o expirada." }, { status: 401 });
   }
 
-  let cuerpo: { id?: unknown; nombreNuevo?: unknown };
+  let cuerpo: CuerpoSinValidar<RenombrarRequest>;
   try {
-    cuerpo = (await request.json()) as { id?: unknown; nombreNuevo?: unknown };
+    cuerpo = (await request.json()) as CuerpoSinValidar<RenombrarRequest>;
   } catch {
     return NextResponse.json({ mensaje: "Cuerpo de la petición inválido." }, { status: 400 });
   }

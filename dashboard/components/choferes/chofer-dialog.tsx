@@ -13,6 +13,7 @@ import { normalizarDni, TELEFONO_VALIDO_REGEX } from "@/lib/choferes";
 import { useEstadoChoferes } from "@/lib/hooks/use-estado-choferes";
 import { useRutas } from "@/lib/hooks/use-rutas";
 import { useVinculosChofer } from "@/lib/hooks/use-vinculos-chofer";
+import { construirCuerpoVinculosChofer } from "@/lib/peticiones-catalogo";
 import { combinarTelefono, separarTelefono } from "@/lib/telefono-pais";
 import { formatFecha } from "@/lib/utils";
 import type {
@@ -350,10 +351,11 @@ export function ChoferDialog({ chofer, onClose, onGuardado }: ChoferDialogProps)
     }
     setEnviando(true);
     try {
+      const cuerpoPeticion = construirCuerpoVinculosChofer(chofer.id, diferencias);
       const respuesta = await fetch("/api/choferes/vinculos", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ choferId: chofer.id, ...diferencias }),
+        body: JSON.stringify(cuerpoPeticion),
       });
       const cuerpo: unknown = await respuesta.json().catch(() => null);
       if (!respuesta.ok) {
