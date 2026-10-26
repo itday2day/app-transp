@@ -145,11 +145,10 @@ un SMTP real como el fallback de Ethereal en producción (ambos hablan SMTP puro
 
 - Si está configurada `RESEND_API_KEY`, se envía vía la **API HTTPS de Resend**
   (`POST https://api.resend.com/emails`, puerto 443 — no bloqueado). Es el camino que usa
-  producción. ⚠️ **Sin dominio propio verificado en Resend** (no se configuró — la empresa no tenía
-  uno disponible), el remitente queda fijo en `onboarding@resend.dev` y Resend solo entrega al mismo
-  correo con el que se creó la cuenta — cualquier otro destinatario en el campo "Correo de destino"
-  del Dashboard devuelve 403. Verificar un dominio propio (registros DNS) levantaría esa
-  restricción; `RESEND_FROM_EMAIL` permite fijar un remitente propio una vez que eso pase.
+  producción. **Dominio `day2day.es` verificado en Resend (2026-09-15)**: el remitente es
+  `reportes@day2day.es` (`RESEND_FROM_EMAIL`, cargada en el servicio `app-transp-mock-server` —
+  no en el del Dashboard, son dos servicios con id casi idéntico) y ya entrega a cualquier
+  destinatario real en el campo "Correo de destino" del Dashboard, no solo al correo de la cuenta.
 - Si no, cae al camino anterior con `nodemailer`: SMTP real si existen `SMTP_HOST`/`SMTP_USER`/
   `SMTP_PASS`, o si no, una cuenta de prueba Ethereal (sin credenciales, genera un link de
   previsualización). Este camino solo se usa en desarrollo local, donde SMTP no está bloqueado.
@@ -2817,9 +2816,9 @@ string, ...): Q, ...}`, sin ningún cast) compiló limpio — el error "excessiv
   `server/mock/`, que sí corre en producción — ver §2.)
 - El reporte Excel muestra como máximo 3 fotos de respaldo por incidencia (columnas fijas); el
   Dashboard sí las muestra todas sin límite en el modal de detalle.
-- Sin dominio propio verificado en Resend, el export solo puede mandar el reporte al mismo correo
-  de la cuenta de Resend (o a las direcciones de testing oficiales) — no a cualquier destinatario
-  que el admin escriba (ver §2).
+- ✅ **Resuelto (2026-09-15)**: dominio `day2day.es` verificado en Resend; el export manda el
+  reporte desde `reportes@day2day.es` a cualquier destinatario real que el admin escriba, no solo
+  al correo de la cuenta de Resend (ver §2).
 - Pendiente confirmar que la cuenta de Resend usada pertenezca a `it@day2day.es` (el `projectId` de
   EAS ya se confirmó, ver "Alineación corporativa y cuentas" en §2).
 - ✅ **Resuelto (2026-09-10)**: durante toda la sesión previa el desarrollo corrió vía Expo Go /
