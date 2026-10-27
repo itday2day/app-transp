@@ -2723,6 +2723,14 @@ modificó). `metadataBase` se definió en `app/layout.tsx` (`https://app.day2day
 `openGraph`/`twitter` de `app/invitacion/[token]/page.tsx` necesitan URLs absolutas para que
 WhatsApp las resuelva bien; el resto del layout raíz (title, description, icons) no cambió.
 
+**Icono de la pestaña del navegador (`spec_favicon_day2day_dashboard.md`, opción B, 2026-10-27)**:
+el isotipo D2D en blanco sobre fondo negro opaco (invertido desde `assets/isotipo-d2d.png`, que no
+se modifica) vive en tres archivos, detectados por Next.js por convención de nombre (sin tocar
+`layout.tsx`): `app/favicon.ico` (16/32/48 px, el ícono de la pestaña de siempre), `app/icon.png`
+(512×512, el ícono general que usan navegadores y sistemas que lo necesiten en alta resolución) y
+`app/apple-icon.png` (180×180, el ícono al agregar el Dashboard a la pantalla de inicio de un
+iPhone). Aplica a todo el Dashboard, no solo a la página de invitación del hallazgo anterior.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos
