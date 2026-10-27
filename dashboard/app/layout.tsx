@@ -29,9 +29,15 @@ const bigShouldersDisplay = Big_Shoulders({
   weight: ["700"],
 });
 
+// metadataBase (spec_imagen_enlace_invitacion.md): base para resolver las URLs ABSOLUTAS que
+// necesita openGraph/twitter en app/invitacion/[token]/page.tsx -- sin esto, Next resolvería
+// og:image como relativa al origin de la petición (no siempre app.day2day.es si hay otro dominio
+// de por medio). Único cambio de este layout para esa spec -- title/description/icons del resto
+// del Dashboard no se tocan.
 export const metadata: Metadata = {
   title: "app-transp | Dashboard",
   description: "Control de jornadas y flotas de transporte",
+  metadataBase: new URL("https://app.day2day.es"),
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

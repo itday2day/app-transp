@@ -2715,6 +2715,14 @@ número por número que nada cambió ahí). Toda pantalla nueva con un campo de 
 estrecho se prueba en un iPhone real, en vertical y en horizontal — Chromium no es suficiente para
 este control.
 
+**Vista previa de WhatsApp del enlace de invitación (`spec_imagen_enlace_invitacion.md`, opción B,
+2026-10-27)**: la imagen que ve WhatsApp al compartir `https://app.day2day.es/invitacion/<token>`
+vive en `dashboard/public/og-invitacion.png` (1200×630, PNG RGB sin transparencia, fondo blanco
+opaco, isotipo D2D centrado al 65% del ancho — derivada de `assets/isotipo-d2d.png`, que no se
+modificó). `metadataBase` se definió en `app/layout.tsx` (`https://app.day2day.es`) porque
+`openGraph`/`twitter` de `app/invitacion/[token]/page.tsx` necesitan URLs absolutas para que
+WhatsApp las resuelva bien; el resto del layout raíz (title, description, icons) no cambió.
+
 ## 5. Estándares de calidad y reglas de código
 
 - **TypeScript estricto, sin `any`**: cumplido en la app móvil (los 6 usos que quedaban, todos

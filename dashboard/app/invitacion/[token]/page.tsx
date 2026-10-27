@@ -3,12 +3,57 @@ import { headers } from "next/headers";
 import { enlaceInvitacion } from "@/lib/invitaciones";
 import { BotonDescargarApp } from "@/components/invitacion/boton-descargar-app";
 
-// Segunda capa junto con el header real (next.config.ts: Referrer-Policy, X-Robots-Tag) -- este
-// <meta name="robots"> cubre a cualquier rastreador o navegador que mire la metadata de la
-// página en vez del header HTTP.
-export const metadata: Metadata = {
-  robots: { index: false, follow: false },
-};
+// spec_imagen_enlace_invitacion.md (Opción B): vista previa de WhatsApp/redes -- Isotipo D2D en
+// vez del ícono genérico, con título/descripción propios. SOLO esta página cambia; el resto del
+// Dashboard sigue con el title/description del layout raíz. La URL de la imagen es SIEMPRE la
+// misma (nunca lleva el token) -- generada una vez a partir de public/isotipo-d2d.png, 1200x630,
+// fondo blanco opaco (ver contexto_proyecto.md para cómo se generó). `generateMetadata` (no un
+// `metadata` estático) porque `openGraph.url` sí necesita el token de ESTA invitación -- la
+// metadata entera sigue saliendo en el HTML del servidor (esta ruta ya es un server component,
+// sin "use client").
+const TITULO_INVITACION = "Day2Day · Invitación";
+const DESCRIPCION_INVITACION =
+  "Te invitaron a registrarte como chofer. Abre el enlace para crear tu cuenta.";
+const IMAGEN_OG = "https://app.day2day.es/og-invitacion.png";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}): Promise<Metadata> {
+  const { token } = await params;
+  const imagenOg = {
+    url: IMAGEN_OG,
+    width: 1200,
+    height: 630,
+    type: "image/png",
+    alt: "Day2Day",
+  };
+
+  return {
+    // Segunda capa junto con el header real (next.config.ts: Referrer-Policy, X-Robots-Tag) --
+    // este <meta name="robots"> cubre a cualquier rastreador o navegador que mire la metadata de
+    // la página en vez del header HTTP.
+    robots: { index: false, follow: false },
+    title: TITULO_INVITACION,
+    description: DESCRIPCION_INVITACION,
+    openGraph: {
+      title: TITULO_INVITACION,
+      description: DESCRIPCION_INVITACION,
+      url: enlaceInvitacion(token),
+      siteName: "Day2Day",
+      type: "website",
+      locale: "es_ES",
+      images: [imagenOg],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: TITULO_INVITACION,
+      description: DESCRIPCION_INVITACION,
+      images: [IMAGEN_OG],
+    },
+  };
+}
 
 // El token decide qué enlaces se arman -- sin esto, Next.js podría servir una versión
 // cacheada/pre-renderizada de esta ruta dinámica (misma clase de problema que el
