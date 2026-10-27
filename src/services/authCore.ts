@@ -169,6 +169,18 @@ export type ResultadoConstruirUsuario =
  * causa. Ver la tabla de pruebas: ambos casos (red caída y .single() sin fila) llegan al mismo
  * `usuarioMinimo`.
  */
+/** Select mínimo para el reintento sin embeds (Fase 2.2, opción 3, 2026-10-27, decisión del
+ * usuario): ni un solo embed -- `nombre`/`debe_cambiar_contrasena` nunca dependen de que
+ * PostgREST resuelva una relación hacia empresas/rutas. Se piden igual `empresa_defecto_id`/
+ * `ruta_defecto_id` (sin usarlos en este camino) porque el usuario los pidió explícitos en el
+ * select, no por necesidad de esta función. */
+const SELECT_CHOFER_SIN_EMBEDS = "nombre, debe_cambiar_contrasena, empresa_defecto_id, ruta_defecto_id";
+
+interface FilaChoferSinEmbeds {
+  nombre: string;
+  debe_cambiar_contrasena: boolean;
+}
+
 export async function construirUsuarioDesdeChofer(
   idAuth: string,
   cliente: ClienteAuthCore
@@ -179,47 +191,66 @@ export async function construirUsuarioDesdeChofer(
     .eq("id", idAuth)
     .single();
 
-  if (error || !data) {
-    // ⚠️ Corrección (2026-10-27): antes este fallo era TOTALMENTE silencioso -- el usuario mínimo
-    // se devolvía sin dejar ningún rastro, así que un problema sistémico (como la ambigüedad de
-    // embeds de schema_v26 de más arriba, que fallaba en el 100% de los logins, no de forma
-    // transitoria) pasó inadvertido hasta que un chofer real lo reportó. Nunca datos personales
-    // acá -- solo el id corto (8 caracteres, mismo criterio que el resto del proyecto) y lo que ya
-    // trae el error de Postgrest (code/message: texto de esquema, p.ej. "PGRST201", nunca un valor
-    // de la fila).
-    // TODO (decisión pendiente del usuario, sin implementar todavía): el problema de fondo sigue
-    // siendo que un fallo de ESTE select (con o sin pista de FK) borra también el `nombre`, que no
-    // depende de ningún embed. Tres opciones con costo distinto, ninguna elegida: (1) dos consultas
-    // siempre, nombre simple primero y defectos después; (2) una consulta de identidad sin embeds +
-    // un segundo llamado best-effort/fire-and-forget solo para los defectos; (3) mantener esta única
-    // consulta, pero reintentar SIN los embeds antes de resignarse al mínimo, solo en el camino de
-    // error (nunca en el camino feliz).
-    console.error(
-      `construirUsuarioDesdeChofer: no se pudo leer choferes para id ${idAuth.slice(0, 8)} -- se devuelve el usuario mínimo. code=${error?.code ?? "(sin fila)"} message=${error?.message ?? ""}`
-    );
+  if (!error && data) {
+    const fila = data as unknown as FilaChoferConDefectos;
+    const empresa = normalizarEmbedUno(fila.empresas, "empresas");
+    const ruta = normalizarEmbedUno(fila.rutas, "rutas");
     return {
-      ok: false,
-      usuarioMinimo: {
+      ok: true,
+      usuario: {
         id: idAuth,
-        nombre: "",
-        empresaDefecto: null,
-        rutaDefecto: null,
-        debeCambiarContrasena: false,
+        nombre: fila.nombre,
+        empresaDefecto: empresa?.nombre ?? null,
+        rutaDefecto: ruta?.nombre ?? null,
+        debeCambiarContrasena: fila.debe_cambiar_contrasena,
       },
     };
   }
 
-  const fila = data as unknown as FilaChoferConDefectos;
-  const empresa = normalizarEmbedUno(fila.empresas, "empresas");
-  const ruta = normalizarEmbedUno(fila.rutas, "rutas");
+  // Reintento SIN embeds (Fase 2.2, opción 3): el select de arriba falló -- antes de resignarse
+  // al usuario mínimo, reintenta con SELECT_CHOFER_SIN_EMBEDS. Si ESTE funciona, nombre y
+  // debeCambiarContrasena quedan reales -- solo empresaDefecto/rutaDefecto quedan en null (el
+  // reintento normal que ya hace recargaUsuario.ts los corrige después; no se duplica acá).
+  // Nunca lanza: un error de red real en ESTE segundo intento cae igual al mínimo de siempre.
+  const { data: dataSinEmbeds, error: errorSinEmbeds } = await cliente
+    .from("choferes")
+    .select(SELECT_CHOFER_SIN_EMBEDS)
+    .eq("id", idAuth)
+    .single();
+
+  if (!errorSinEmbeds && dataSinEmbeds) {
+    const filaSinEmbeds = dataSinEmbeds as unknown as FilaChoferSinEmbeds;
+    return {
+      ok: true,
+      usuario: {
+        id: idAuth,
+        nombre: filaSinEmbeds.nombre,
+        empresaDefecto: null,
+        rutaDefecto: null,
+        debeCambiarContrasena: filaSinEmbeds.debe_cambiar_contrasena,
+      },
+    };
+  }
+
+  // ⚠️ Corrección (2026-10-27): antes este fallo era TOTALMENTE silencioso -- el usuario mínimo
+  // se devolvía sin dejar ningún rastro, así que un problema sistémico (como la ambigüedad de
+  // embeds de schema_v26, que fallaba en el 100% de los logins, no de forma transitoria) pasó
+  // inadvertido hasta que un chofer real lo reportó. Nunca datos personales acá -- solo el id
+  // corto (8 caracteres, mismo criterio que el resto del proyecto) y lo que ya trae el error de
+  // Postgrest (code/message: texto de esquema, p.ej. "PGRST201", nunca un valor de la fila). El
+  // error que se reporta es el del PRIMER intento (con embeds) -- es la causa real; si ese
+  // reintento sin embeds también falló, es casi siempre el mismo problema de fondo (red/permiso).
+  console.error(
+    `construirUsuarioDesdeChofer: no se pudo leer choferes para id ${idAuth.slice(0, 8)} -- se devuelve el usuario mínimo. code=${error?.code ?? "(sin fila)"} message=${error?.message ?? ""}`
+  );
   return {
-    ok: true,
-    usuario: {
+    ok: false,
+    usuarioMinimo: {
       id: idAuth,
-      nombre: fila.nombre,
-      empresaDefecto: empresa?.nombre ?? null,
-      rutaDefecto: ruta?.nombre ?? null,
-      debeCambiarContrasena: fila.debe_cambiar_contrasena,
+      nombre: "",
+      empresaDefecto: null,
+      rutaDefecto: null,
+      debeCambiarContrasena: false,
     },
   };
 }
