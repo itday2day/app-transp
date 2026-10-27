@@ -74,11 +74,25 @@ export function identificadorACorreo(identificador: string): string {
 
 /** Select LITERAL de specs\ensayos_registro\registro.mjs:679 (modo m4, ya ejecutado contra
  * producción en la Fase 1b) para la parte de embeds -- `empresas(nombre)`/`rutas(nombre)` sobre
- * `choferes.empresa_defecto_id`/`ruta_defecto_id` (confirmado en supabase/schema.sql:406-407: son
- * las ÚNICAS dos FK de choferes hacia empresas/rutas, así que el embed no es ambiguo). Se agrega
- * `debe_cambiar_contrasena` (que m4 no necesitaba, pero hace falta para armar el Usuario completo)
- * -- `empresa_defecto_id`/`ruta_defecto_id` quedan en el select, igual que en m4, aunque esta
- * función solo usa los nombres embebidos, no los ids.
+ * `choferes.empresa_defecto_id`/`ruta_defecto_id`.
+ *
+ * ⚠️ CORRECCIÓN (2026-10-27, bug real de producción tras aplicar schema_v26_catalogo_por_chofer.sql,
+ * 2026-10-26): el comentario anterior decía que estas eran "las ÚNICAS dos FK de choferes hacia
+ * empresas/rutas, así que el embed no es ambiguo" -- eso dejó de ser cierto con schema_v26: ahora
+ * también existen `empresas_creada_por_chofer_id_fkey` (empresas -> choferes, inversa) y la M:N
+ * `chofer_empresas` (igual para rutas: `rutas_creada_por_chofer_id_fkey` y `chofer_rutas`).
+ * Reproducido contra PostgREST real (REST, sin sesión): el `select` SIN pista de FK devolvía
+ * `PGRST201` ("Could not embed because more than one relationship was found for 'choferes' and
+ * 'empresas'", HTTP 300) -- `construirUsuarioDesdeChofer()` caía al usuario mínimo (`nombre: ""`)
+ * en CADA login/verificación/recarga, nunca de forma transitoria. Las pistas `!choferes_empresa_
+ * defecto_id_fkey`/`!choferes_ruta_defecto_id_fkey` de abajo eliminan la ambigüedad -- confirmado
+ * contra la misma API real: con la pista, el 300/PGRST201 desaparece (el siguiente error que se
+ * ve, 401/42501 "permission denied", es el esperado para el rol `anon` sin sesión -- un chofer
+ * autenticado real sí tiene SELECT vía RLS).
+ *
+ * Se agrega `debe_cambiar_contrasena` (que m4 no necesitaba, pero hace falta para armar el Usuario
+ * completo) -- `empresa_defecto_id`/`ruta_defecto_id` quedan en el select, igual que en m4, aunque
+ * esta función solo usa los nombres embebidos, no los ids.
  *
  * Corrección C3: `FilaChoferConDefectos` (abajo) tipa `empresas`/`rutas` como OBJETO **o
  * ARREGLO** -- por la misma regla de PostgREST (many-to-one, ver el razonamiento que seguía acá
@@ -88,7 +102,7 @@ export function identificadorACorreo(identificador: string): string {
  * arreglo, avisa con `console.warn` (solo en desarrollo) para que se note en la prueba real del
  * iPhone, pero no rompe. */
 const SELECT_CHOFER_CON_DEFECTOS =
-  "nombre, debe_cambiar_contrasena, empresa_defecto_id, ruta_defecto_id, empresas(nombre), rutas(nombre)";
+  "nombre, debe_cambiar_contrasena, empresa_defecto_id, ruta_defecto_id, empresas!choferes_empresa_defecto_id_fkey(nombre), rutas!choferes_ruta_defecto_id_fkey(nombre)";
 
 type EmbedUnoOArreglo<T> = T | T[] | null;
 
@@ -166,6 +180,23 @@ export async function construirUsuarioDesdeChofer(
     .single();
 
   if (error || !data) {
+    // ⚠️ Corrección (2026-10-27): antes este fallo era TOTALMENTE silencioso -- el usuario mínimo
+    // se devolvía sin dejar ningún rastro, así que un problema sistémico (como la ambigüedad de
+    // embeds de schema_v26 de más arriba, que fallaba en el 100% de los logins, no de forma
+    // transitoria) pasó inadvertido hasta que un chofer real lo reportó. Nunca datos personales
+    // acá -- solo el id corto (8 caracteres, mismo criterio que el resto del proyecto) y lo que ya
+    // trae el error de Postgrest (code/message: texto de esquema, p.ej. "PGRST201", nunca un valor
+    // de la fila).
+    // TODO (decisión pendiente del usuario, sin implementar todavía): el problema de fondo sigue
+    // siendo que un fallo de ESTE select (con o sin pista de FK) borra también el `nombre`, que no
+    // depende de ningún embed. Tres opciones con costo distinto, ninguna elegida: (1) dos consultas
+    // siempre, nombre simple primero y defectos después; (2) una consulta de identidad sin embeds +
+    // un segundo llamado best-effort/fire-and-forget solo para los defectos; (3) mantener esta única
+    // consulta, pero reintentar SIN los embeds antes de resignarse al mínimo, solo en el camino de
+    // error (nunca en el camino feliz).
+    console.error(
+      `construirUsuarioDesdeChofer: no se pudo leer choferes para id ${idAuth.slice(0, 8)} -- se devuelve el usuario mínimo. code=${error?.code ?? "(sin fila)"} message=${error?.message ?? ""}`
+    );
     return {
       ok: false,
       usuarioMinimo: {
