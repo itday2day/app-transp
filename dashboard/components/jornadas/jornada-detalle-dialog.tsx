@@ -9,8 +9,26 @@ import { Dialog } from "@/components/ui/dialog";
 import { RutaJornadaDialog } from "@/components/mapa/ruta-jornada-dialog";
 import { dniChoferDeJornada, nombreApellidosChoferDeJornada } from "@/lib/choferes";
 import { useDireccion } from "@/lib/hooks/use-direccion";
+import { useFotosMetadata, type MetadatoFotoStorage } from "@/lib/hooks/use-fotos-metadata";
 import { formatFechaHora } from "@/lib/utils";
 import type { JornadaRow } from "@/lib/types";
+
+// spec_adjuntar_foto_galeria.md, criterio 7: formato literal dd/mm/aaaa hh:mm, sin conversión de
+// zona horaria -- `fechaOriginal` llega como "YYYY:MM:DD HH:MM:SS" (mismo formato que EXIF
+// DateTimeOriginal, ver src/utils/fotoOrigenMetadata.ts del lado de la app), reordenado con un
+// regex puro, nunca con `new Date()` (que aplicaría la zona horaria del navegador/servidor).
+function formatearFechaOriginal(fechaOriginal: string): string | null {
+  const match = fechaOriginal.match(/^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2})/);
+  if (!match) return null;
+  const [, anio, mes, dia, hora, minuto] = match;
+  return `${dia}/${mes}/${anio} ${hora}:${minuto}`;
+}
+
+function etiquetaGaleria(metadato: MetadatoFotoStorage | null | undefined): string | null {
+  if (!metadato || metadato.origen !== "galeria") return null;
+  const fecha = metadato.fechaOriginal ? formatearFechaOriginal(metadato.fechaOriginal) : null;
+  return fecha ? `Galería · tomada el ${fecha}` : "Galería · sin fecha";
+}
 
 interface JornadaDetalleDialogProps {
   jornada: JornadaRow | null;
@@ -73,36 +91,44 @@ function Ubicacion({
 function Foto({
   titulo,
   url,
+  metadato,
   onAmpliar,
 }: {
   titulo: string;
   url: string | null;
+  /** spec_adjuntar_foto_galeria.md -- `undefined` mientras la consulta de metadata todavía no
+   * respondió, o si falló: en los dos casos la foto se muestra igual, sin etiqueta. */
+  metadato?: MetadatoFotoStorage | null;
   onAmpliar: (foto: { url: string; titulo: string }) => void;
 }) {
+  const etiqueta = etiquetaGaleria(metadato);
   return (
     <div>
       <p className="mb-1 text-xs text-muted-foreground">{titulo}</p>
       {url ? (
-        // spec_lightbox_detalle_jornada.md: click en la miniatura amplía la foto sobre el resto
-        // de la pantalla (Lightbox más abajo) — el ícono queda SIEMPRE visible, no solo al pasar
-        // el mouse, porque en el navegador de un teléfono (Hallazgos #11-#16) no existe "hover"
-        // y un cursor:pointer solo no se ve nunca ahí.
-        <button
-          type="button"
-          onClick={() => onAmpliar({ url, titulo })}
-          className="group relative block h-40 w-full overflow-hidden rounded-md border border-border"
-        >
-          {/* Los buckets de Storage son de lectura pública: la URL sirve directo en <img>. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={url}
-            alt={titulo}
-            className="h-full w-full object-cover transition-transform group-hover:scale-105"
-          />
-          <span className="absolute bottom-1.5 right-1.5 rounded-full bg-black/60 p-1 text-white">
-            <ZoomIn className="h-3.5 w-3.5" />
-          </span>
-        </button>
+        <>
+          {/* spec_lightbox_detalle_jornada.md: click en la miniatura amplía la foto sobre el
+              resto de la pantalla (Lightbox más abajo) — el ícono queda SIEMPRE visible, no solo
+              al pasar el mouse, porque en el navegador de un teléfono (Hallazgos #11-#16) no
+              existe "hover" y un cursor:pointer solo no se ve nunca ahí. */}
+          <button
+            type="button"
+            onClick={() => onAmpliar({ url, titulo })}
+            className="group relative block h-40 w-full overflow-hidden rounded-md border border-border"
+          >
+            {/* Los buckets de Storage son de lectura pública: la URL sirve directo en <img>. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt={titulo}
+              className="h-full w-full object-cover transition-transform group-hover:scale-105"
+            />
+            <span className="absolute bottom-1.5 right-1.5 rounded-full bg-black/60 p-1 text-white">
+              <ZoomIn className="h-3.5 w-3.5" />
+            </span>
+          </button>
+          {etiqueta && <p className="mt-1 text-xs text-muted-foreground">{etiqueta}</p>}
+        </>
       ) : (
         <div className="flex h-40 w-full items-center justify-center rounded-md border border-dashed border-border text-muted-foreground">
           <ImageOff className="h-6 w-6" />
@@ -156,6 +182,16 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
   const [verRutaAbierto, setVerRutaAbierto] = useState(false);
   const [fotoAmpliada, setFotoAmpliada] = useState<FotoAmpliada | null>(null);
   const [jornadaIdAnterior, setJornadaIdAnterior] = useState<string | null>(null);
+
+  // spec_adjuntar_foto_galeria.md: una sola consulta para las (hasta ~10) fotos de esta jornada,
+  // nunca una por <Foto> -- ver el Route Handler nuevo (info() en paralelo, service_role).
+  const { data: metadatosFotos } = useFotosMetadata([
+    jornada?.foto_tacometro_inicial_url,
+    jornada?.foto_ruta_url,
+    jornada?.foto_tacometro_final_url,
+    ...(jornada?.fotos_incidencia_checkin ?? []),
+    ...(jornada?.fotos_incidencia ?? []),
+  ]);
 
   // Si cambia la jornada (se cierra el detalle, o se selecciona otra
   // directamente sin cerrar) el modal de ruta no debe quedar abierto
@@ -285,6 +321,7 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
                     key={url}
                     titulo={`Foto ${indice + 1}`}
                     url={url}
+                    metadato={metadatosFotos?.[url]}
                     onAmpliar={setFotoAmpliada}
                   />
                 ))}
@@ -320,6 +357,7 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
                     key={url}
                     titulo={`Foto ${indice + 1}`}
                     url={url}
+                    metadato={metadatosFotos?.[url]}
                     onAmpliar={setFotoAmpliada}
                   />
                 ))}
@@ -331,12 +369,27 @@ export function JornadaDetalleDialog({ jornada, onClose, onEditar }: JornadaDeta
             <Foto
               titulo="Tacómetro inicial"
               url={jornada.foto_tacometro_inicial_url}
+              metadato={
+                jornada.foto_tacometro_inicial_url
+                  ? metadatosFotos?.[jornada.foto_tacometro_inicial_url]
+                  : null
+              }
               onAmpliar={setFotoAmpliada}
             />
-            <Foto titulo="Hoja de ruta" url={jornada.foto_ruta_url} onAmpliar={setFotoAmpliada} />
+            <Foto
+              titulo="Hoja de ruta"
+              url={jornada.foto_ruta_url}
+              metadato={jornada.foto_ruta_url ? metadatosFotos?.[jornada.foto_ruta_url] : null}
+              onAmpliar={setFotoAmpliada}
+            />
             <Foto
               titulo="Tacómetro final"
               url={jornada.foto_tacometro_final_url}
+              metadato={
+                jornada.foto_tacometro_final_url
+                  ? metadatosFotos?.[jornada.foto_tacometro_final_url]
+                  : null
+              }
               onAmpliar={setFotoAmpliada}
             />
           </div>
