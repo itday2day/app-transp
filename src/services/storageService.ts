@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { envolverErrorConCampos } from "./erroresSync";
+import { MetadatoFoto } from "@/types";
 
 const BUCKET = "evidencias";
 
@@ -17,7 +18,13 @@ export function obtenerUrlPublicaEvidencia(ruta: string): string {
 // suma un módulo nativo nuevo (expo-file-system exigiría reconstruir el dev
 // client) — las fotos ya llegan comprimidas por imageService, así que el
 // tamaño no es un problema para este approach.
-export async function subirEvidencia(uri: string, ruta: string): Promise<string> {
+// spec_adjuntar_foto_galeria.md: `metadata` viaja SIEMPRE que la foto la tenga guardada
+// localmente -- incluyendo cada reintento de subida (#29), nunca solo la primera vez. Confirmado
+// en la prueba de humo real (Fase 1b de la spec, ya hecha y limpiada): un upsert que omite
+// `metadata` sobre un objeto que YA tenía uno lo BORRA entero (reemplaza, nunca mezcla). Para una
+// jornada del formato antiguo (sin metadatosFotos local) esto es siempre la primera subida de ese
+// objeto -- no hay nada que "borrar" todavía, así que omitir `metadata` ahí es inocuo.
+export async function subirEvidencia(uri: string, ruta: string, metadata?: MetadatoFoto): Promise<string> {
   const respuesta = await fetch(uri);
   const blob = await respuesta.blob();
 
@@ -28,6 +35,7 @@ export async function subirEvidencia(uri: string, ruta: string): Promise<string>
   const { error } = await supabase.storage.from(BUCKET).upload(ruta, blob, {
     contentType: "image/jpeg",
     upsert: true,
+    ...(metadata ? { metadata: { origen: metadata.origen, fechaOriginal: metadata.fechaOriginal } } : {}),
   });
   // Criterio 4 (spec_sync_sin_sesion_no_agota_intentos.md): antes `new Error(...)` a secas perdía
   // `code`/`status`/`statusCode` del StorageError original -- sin ellos, esErrorDeAutenticacion()

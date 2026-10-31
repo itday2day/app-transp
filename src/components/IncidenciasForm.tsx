@@ -3,7 +3,7 @@ import { View, Text, Pressable, StyleSheet, TextInput } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { GaleriaFotosIncidencia } from "@/components/GaleriaFotosIncidencia";
-import { IncidenciaData, TipoIncidencia, TipoIncidenciaCheckin } from "@/types";
+import { FotoConMetadata, IncidenciaData, TipoIncidencia, TipoIncidenciaCheckin } from "@/types";
 import { ClaveTraduccion } from "@/i18n";
 import { colores } from "@/theme/colors";
 import { tipografia } from "@/theme/typography";
@@ -88,7 +88,7 @@ export const IncidenciasForm = forwardRef<TextInput, Props>(function Incidencias
     onCambiar({ ...valor, detalle });
   }
 
-  function manejarFotos(fotos: string[]) {
+  function manejarFotos(fotos: FotoConMetadata[]) {
     onCambiar({ ...valor, fotos });
   }
 

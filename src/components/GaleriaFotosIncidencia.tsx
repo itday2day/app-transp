@@ -9,10 +9,12 @@ import { espaciado, radios } from "@/theme/spacing";
 import { comprimirImagen } from "@/services/imageService";
 import { guardarCopiaEnGaleria } from "@/services/galeriaService";
 import { VisorFotoAmpliada } from "@/components/VisorFotoAmpliada";
+import { formatearFechaOriginalLocal, leerFechaOriginalExif } from "@/utils/fotoOrigenMetadata";
+import { FotoConMetadata } from "@/types";
 
 interface Props {
-  fotos: string[];
-  onCambiar: (fotos: string[]) => void;
+  fotos: FotoConMetadata[];
+  onCambiar: (fotos: FotoConMetadata[]) => void;
 }
 
 // A diferencia de CapturaFoto (una sola uri, se reemplaza), este componente
@@ -37,10 +39,65 @@ export function GaleriaFotosIncidencia({ fotos, onCambiar }: Props) {
     // comprimirImagen(). Sin `await`: no retrasa la captura.
     void guardarCopiaEnGaleria(resultado.assets[0].uri);
 
+    const fechaOriginal = formatearFechaOriginalLocal(new Date());
     setProcesando(true);
     try {
       const uriComprimida = await comprimirImagen(resultado.assets[0].uri);
-      onCambiar([...fotos, uriComprimida]);
+      onCambiar([...fotos, { uri: uriComprimida, origen: "camara", fechaOriginal }]);
+    } finally {
+      setProcesando(false);
+    }
+  }
+
+  // spec_adjuntar_foto_galeria.md: no llama a guardarCopiaEnGaleria() -- la foto ya está en la
+  // galería del chofer, copiarla de nuevo sería un duplicado sin sentido.
+  async function agregarDeGaleria() {
+    const resultado = await ImagePicker.launchImageLibraryAsync({
+      selectionLimit: 1,
+      exif: true,
+      allowsEditing: false,
+      quality: 1,
+    });
+    if (resultado.canceled || !resultado.assets?.[0]) return;
+    const activo = resultado.assets[0];
+
+    let fechaOriginal: string | null = null;
+    try {
+      fechaOriginal = leerFechaOriginalExif(activo.exif);
+    } catch {
+      fechaOriginal = null;
+    }
+
+    setProcesando(true);
+    try {
+      const uriComprimida = await comprimirImagen(activo.uri);
+      onCambiar([...fotos, { uri: uriComprimida, origen: "galeria", fechaOriginal }]);
+    } finally {
+      setProcesando(false);
+    }
+  }
+
+  // spec_foto_reemplazar_quitar_antes_de_registrar.md: reemplaza la foto EN SU MISMA POSICIÓN de
+  // la lista -- a diferencia de "quitar" + "agregar", no la manda al final.
+  async function repetirFoto(indice: number) {
+    const permiso = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permiso.granted) {
+      Alert.alert(t("capturaFoto.permisoTitulo"), t("capturaFoto.permisoMensaje"));
+      return;
+    }
+
+    const resultado = await ImagePicker.launchCameraAsync({ quality: 0.8, allowsEditing: false });
+    if (resultado.canceled || !resultado.assets?.[0]) return;
+
+    void guardarCopiaEnGaleria(resultado.assets[0].uri);
+
+    const fechaOriginal = formatearFechaOriginalLocal(new Date());
+    setProcesando(true);
+    try {
+      const uriComprimida = await comprimirImagen(resultado.assets[0].uri);
+      const nuevasFotos = [...fotos];
+      nuevasFotos[indice] = { uri: uriComprimida, origen: "camara", fechaOriginal };
+      onCambiar(nuevasFotos);
     } finally {
       setProcesando(false);
     }
@@ -56,10 +113,18 @@ export function GaleriaFotosIncidencia({ fotos, onCambiar }: Props) {
       <Text style={estilos.ayuda}>{t("incidencias.fotosAyuda")}</Text>
 
       <View style={estilos.grilla}>
-        {fotos.map((uri, indice) => (
-          <View key={uri} style={estilos.miniaturaContenedor}>
+        {fotos.map((foto, indice) => (
+          <View key={foto.uri} style={estilos.miniaturaContenedor}>
             <Pressable accessibilityRole="button" onPress={() => setIndiceVisor(indice)}>
-              <Image source={{ uri }} style={estilos.miniatura} />
+              <Image source={{ uri: foto.uri }} style={estilos.miniatura} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("incidencias.fotoRepetir")}
+              onPress={() => repetirFoto(indice)}
+              style={estilos.botonRepetir}
+            >
+              <Ionicons name="refresh" size={14} color={colores.superficie} />
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -78,11 +143,18 @@ export function GaleriaFotosIncidencia({ fotos, onCambiar }: Props) {
             {procesando ? t("capturaFoto.procesando") : t("incidencias.fotoAgregar")}
           </Text>
         </Pressable>
+
+        <Pressable onPress={agregarDeGaleria} style={estilos.botonAgregar}>
+          <Ionicons name="images-outline" size={24} color={colores.textoSecundario} />
+          <Text style={estilos.textoBotonAgregar}>
+            {procesando ? t("capturaFoto.procesando") : t("capturaFoto.elegirDeGaleria")}
+          </Text>
+        </Pressable>
       </View>
 
       <VisorFotoAmpliada
         visible={indiceVisor != null}
-        fotos={fotos.map((uri) => ({ uri }))}
+        fotos={fotos.map((foto) => ({ uri: foto.uri }))}
         indiceInicial={indiceVisor ?? 0}
         onCerrar={() => setIndiceVisor(null)}
       />
@@ -126,6 +198,17 @@ const estilos = StyleSheet.create({
     height: 22,
     borderRadius: radios.full,
     backgroundColor: colores.peligro,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  botonRepetir: {
+    position: "absolute",
+    top: -espaciado.xs,
+    left: -espaciado.xs,
+    width: 22,
+    height: 22,
+    borderRadius: radios.full,
+    backgroundColor: colores.primario,
     alignItems: "center",
     justifyContent: "center",
   },

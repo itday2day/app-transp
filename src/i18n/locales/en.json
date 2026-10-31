@@ -216,7 +216,8 @@
     "fotosEtiqueta": "Backup photos (optional)",
     "fotosAyuda": "You can attach one or more photos as evidence.",
     "fotoAgregar": "Add photo",
-    "fotoEliminar": "Remove photo"
+    "fotoEliminar": "Remove photo",
+    "fotoRepetir": "Retake photo"
   },
   "detalleJornada": {
     "seccionCheckIn": "Check-in",
@@ -264,6 +265,8 @@
     "tocaParaTomar": "Tap to take the photo",
     "procesando": "Processing photo…",
     "tomarOtra": "Take another photo",
+    "quitarFoto": "Remove photo",
+    "elegirDeGaleria": "Choose from gallery",
     "permisoTitulo": "Camera permission required",
     "permisoMensaje": "Enable camera access in Settings to attach the photo."
   },

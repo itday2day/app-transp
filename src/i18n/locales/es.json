@@ -216,7 +216,8 @@
     "fotosEtiqueta": "Fotos de respaldo (opcional)",
     "fotosAyuda": "Puedes adjuntar una o más fotos como evidencia.",
     "fotoAgregar": "Agregar foto",
-    "fotoEliminar": "Eliminar foto"
+    "fotoEliminar": "Eliminar foto",
+    "fotoRepetir": "Repetir foto"
   },
   "detalleJornada": {
     "seccionCheckIn": "Check-in",
@@ -264,6 +265,8 @@
     "tocaParaTomar": "Toca para tomar la foto",
     "procesando": "Procesando foto…",
     "tomarOtra": "Tomar otra foto",
+    "quitarFoto": "Quitar foto",
+    "elegirDeGaleria": "Elegir de la galería",
     "permisoTitulo": "Permiso de cámara requerido",
     "permisoMensaje": "Activa el acceso a la cámara en Ajustes para poder adjuntar la foto."
   },

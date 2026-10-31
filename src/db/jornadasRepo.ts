@@ -1,4 +1,5 @@
 import { obtenerBaseDeDatos } from "./database";
+import { FilaJornadaSQLite, filaAJornada, parsearMetadatosFotos } from "./jornadasMapeo";
 import {
   Jornada,
   NuevoCheckIn,
@@ -12,61 +13,6 @@ import {
   EstadoSincronizacion,
 } from "@/types";
 
-// Forma cruda de una fila tal como la devuelve expo-sqlite (sin las
-// transformaciones de filaAJornada: nulls en vez de undefined, tuvoIncidencia
-// como 0/1 en vez de boolean). Reemplaza los getAllAsync<any>/getFirstAsync<any>
-// que había antes en este archivo.
-interface FilaJornadaSQLite {
-  id: string;
-  choferId: string;
-  choferNombre: string;
-  empresa: string;
-  matricula: string;
-  ruta: string;
-  incidencias: string | null;
-  kmInicial: number;
-  combustibleInicial: NivelCombustible | null;
-  fotoTacometroInicialUri: string | null;
-  fotoRutaUri: string;
-  latInicial: number | null;
-  lngInicial: number | null;
-  fechaCheckIn: string;
-  tuvoIncidenciaCheckin: number | null;
-  tipoIncidenciaCheckin: TipoIncidenciaCheckin | null;
-  detalleIncidenciaCheckin: string | null;
-  fotosIncidenciaCheckinUris: string | null; // JSON stringificado
-  fotosIncidenciaCheckin: string | null; // ídem, URLs remotas
-  kmFinal: number | null;
-  combustibleFinal: NivelCombustible | null;
-  fotoTacometroFinalUri: string | null;
-  latFinal: number | null;
-  lngFinal: number | null;
-  fechaCheckOut: string | null;
-  tuvoIncidencia: number | null;
-  tipoIncidencia: TipoIncidencia | null;
-  detalleIncidencia: string | null;
-  fotoCheckInUrl: string | null;
-  fotoRutaUrl: string | null;
-  fotoCheckOutUrl: string | null;
-  fotosIncidenciaUris: string | null; // JSON stringificado (SQLite no tiene arrays)
-  fotosIncidencia: string | null; // ídem
-  creadaPorAdmin: number;
-  creadaPor: string | null;
-  estado: EstadoJornada;
-  sincronizacion: EstadoSincronizacion;
-  intentosSincronizacion: number;
-}
-
-function parsearFotos(json: string | null): string[] {
-  if (!json) return [];
-  try {
-    const valor: unknown = JSON.parse(json);
-    return Array.isArray(valor) ? valor.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
 // react-native (Hermes) no implementa crypto.getRandomValues(), que uuid@9
 // necesita — por eso no se usa expo-crypto (requeriría reconstruir el
 // development build nativo) ni el paquete uuid. Estos IDs solo sirven para
@@ -78,50 +24,6 @@ function generarId(): string {
     const v = c === "x" ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
-}
-
-function filaAJornada(fila: FilaJornadaSQLite): Jornada {
-  return {
-    id: fila.id,
-    choferId: fila.choferId,
-    choferNombre: fila.choferNombre,
-    empresa: fila.empresa,
-    matricula: fila.matricula,
-    ruta: fila.ruta,
-    incidencias: fila.incidencias ?? undefined,
-    kmInicial: fila.kmInicial,
-    combustibleInicial: fila.combustibleInicial,
-    fotoTacometroInicialUri: fila.fotoTacometroInicialUri ?? undefined,
-    fotoRutaUri: fila.fotoRutaUri || undefined,
-    latInicial: fila.latInicial ?? undefined,
-    lngInicial: fila.lngInicial ?? undefined,
-    fechaCheckIn: fila.fechaCheckIn,
-    tuvoIncidenciaCheckin:
-      fila.tuvoIncidenciaCheckin == null ? undefined : Boolean(fila.tuvoIncidenciaCheckin),
-    tipoIncidenciaCheckin: fila.tipoIncidenciaCheckin ?? undefined,
-    detalleIncidenciaCheckin: fila.detalleIncidenciaCheckin ?? undefined,
-    fotosIncidenciaCheckinUris: parsearFotos(fila.fotosIncidenciaCheckinUris),
-    fotosIncidenciaCheckin: parsearFotos(fila.fotosIncidenciaCheckin),
-    kmFinal: fila.kmFinal ?? undefined,
-    combustibleFinal: fila.combustibleFinal,
-    fotoTacometroFinalUri: fila.fotoTacometroFinalUri ?? undefined,
-    latFinal: fila.latFinal ?? undefined,
-    lngFinal: fila.lngFinal ?? undefined,
-    fechaCheckOut: fila.fechaCheckOut ?? undefined,
-    tuvoIncidencia: fila.tuvoIncidencia == null ? undefined : Boolean(fila.tuvoIncidencia),
-    tipoIncidencia: fila.tipoIncidencia ?? undefined,
-    detalleIncidencia: fila.detalleIncidencia ?? undefined,
-    fotoCheckInUrl: fila.fotoCheckInUrl ?? undefined,
-    fotoRutaUrl: fila.fotoRutaUrl ?? undefined,
-    fotoCheckOutUrl: fila.fotoCheckOutUrl ?? undefined,
-    fotosIncidenciaUris: parsearFotos(fila.fotosIncidenciaUris),
-    fotosIncidencia: parsearFotos(fila.fotosIncidencia),
-    creadaPorAdmin: Boolean(fila.creadaPorAdmin),
-    creadaPor: fila.creadaPor ?? undefined,
-    estado: fila.estado,
-    sincronizacion: fila.sincronizacion,
-    intentosSincronizacion: fila.intentosSincronizacion,
-  };
 }
 
 export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promise<Jornada> {
@@ -147,13 +49,18 @@ export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promis
     intentosSincronizacion: 0,
   };
 
+  const metadatosFotosJson =
+    jornada.metadatosFotos && Object.keys(jornada.metadatosFotos).length > 0
+      ? JSON.stringify(jornada.metadatosFotos)
+      : null;
+
   await db.runAsync(
     `INSERT INTO jornadas (
       id, choferId, choferNombre, empresa, matricula, ruta, kmInicial, combustibleInicial,
       fotoTacometroInicialUri, fotoRutaUri, latInicial, lngInicial, fechaCheckIn,
       tuvoIncidenciaCheckin, tipoIncidenciaCheckin, detalleIncidenciaCheckin, fotosIncidenciaCheckinUris,
-      estado, sincronizacion, intentosSincronizacion
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      metadatosFotos, estado, sincronizacion, intentosSincronizacion
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       jornada.id,
       jornada.choferId,
@@ -174,6 +81,7 @@ export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promis
       jornada.fotosIncidenciaCheckinUris && jornada.fotosIncidenciaCheckinUris.length > 0
         ? JSON.stringify(jornada.fotosIncidenciaCheckinUris)
         : null,
+      metadatosFotosJson,
       jornada.estado,
       jornada.sincronizacion,
       jornada.intentosSincronizacion,
@@ -185,11 +93,24 @@ export async function crearCheckIn(datos: NuevoCheckIn, chofer: Usuario): Promis
 
 export async function registrarCheckOut(datos: DatosCheckOut): Promise<void> {
   const db = await obtenerBaseDeDatos();
+
+  // El check-out es un UPDATE sobre una fila que ya puede tener metadatosFotos del check-in
+  // (tacómetro inicial, ruta, incidencia de check-in) -- hay que MEZCLAR lo nuevo del cierre
+  // (tacómetro final, incidencia de check-out) con lo que ya había, nunca pisarlo entero.
+  const filaActual = await db.getFirstAsync<{ metadatosFotos: string | null }>(
+    `SELECT metadatosFotos FROM jornadas WHERE id = ?`,
+    [datos.id]
+  );
+  const metadatosExistente = parsearMetadatosFotos(filaActual?.metadatosFotos ?? null) ?? {};
+  const metadatosFinal = { ...metadatosExistente, ...(datos.metadatosFotos ?? {}) };
+  const metadatosFotosJson = Object.keys(metadatosFinal).length > 0 ? JSON.stringify(metadatosFinal) : null;
+
   await db.runAsync(
     `UPDATE jornadas SET
       kmFinal = ?, combustibleFinal = ?, fotoTacometroFinalUri = ?,
       latFinal = ?, lngFinal = ?, fechaCheckOut = ?,
       tuvoIncidencia = ?, tipoIncidencia = ?, detalleIncidencia = ?, fotosIncidenciaUris = ?,
+      metadatosFotos = ?,
       estado = 'cerrada', sincronizacion = 'pendiente'
     WHERE id = ?`,
     [
@@ -205,6 +126,7 @@ export async function registrarCheckOut(datos: DatosCheckOut): Promise<void> {
       datos.fotosIncidenciaUris && datos.fotosIncidenciaUris.length > 0
         ? JSON.stringify(datos.fotosIncidenciaUris)
         : null,
+      metadatosFotosJson,
       datos.id,
     ]
   );

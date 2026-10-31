@@ -3,14 +3,21 @@ import { View, Text, StyleSheet, TextInput, Keyboard, ScrollView, Alert } from "
 import { useTranslation } from "react-i18next";
 import { CampoTexto } from "@/components/CampoTexto";
 import { SelectorCombustible } from "@/components/SelectorCombustible";
-import { CapturaFoto } from "@/components/CapturaFoto";
+import { CapturaFoto, ResultadoCaptura } from "@/components/CapturaFoto";
 import {
   IncidenciasForm,
   TIPOS_INCIDENCIA_CHECKOUT,
   CLAVE_TIPO_INCIDENCIA_CHECKOUT,
 } from "@/components/IncidenciasForm";
 import { BotonPrimario } from "@/components/BotonPrimario";
-import { IncidenciaData, Jornada, NivelCombustible, TipoIncidencia } from "@/types";
+import {
+  IncidenciaData,
+  Jornada,
+  MetadatoFoto,
+  MetadatosFotosJornada,
+  NivelCombustible,
+  TipoIncidencia,
+} from "@/types";
 import { scrollAlCampo } from "@/utils/scrollAlCampo";
 import { tipografia } from "@/theme/typography";
 import { espaciado } from "@/theme/spacing";
@@ -23,6 +30,7 @@ export interface ValoresCheckOutForm {
   tipoIncidencia: TipoIncidencia | null;
   detalleIncidencia: string;
   fotosIncidenciaUris: string[];
+  metadatosFotos: MetadatosFotosJornada;
 }
 
 interface Props {
@@ -53,8 +61,14 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
   const [kmFinal, setKmFinal] = useState("");
   const [combustible, setCombustible] = useState<NivelCombustible | null>(null);
   const [fotoTacometro, setFotoTacometro] = useState<string | null>(null);
+  const [fotoTacometroMeta, setFotoTacometroMeta] = useState<MetadatoFoto | null>(null);
   const [incidencia, setIncidencia] = useState<IncidenciaData>(INCIDENCIA_INICIAL);
   const [mostrarErrores, setMostrarErrores] = useState(false);
+
+  function manejarFotoTacometroCapturada(resultado: ResultadoCaptura) {
+    setFotoTacometro(resultado.uriComprimida);
+    setFotoTacometroMeta({ origen: resultado.origen, fechaOriginal: resultado.fechaOriginal });
+  }
 
   // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): mismos objetivos de scroll/foco
   // que CheckInForm.tsx, en el orden de pantalla. `refKmFinalInterno` fusiona el ref externo (el
@@ -123,7 +137,18 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
       // el valor real nunca puede ser uno de los 4 nuevos del check-in.
       tipoIncidencia: incidencia.tuvoIncidencia ? (incidencia.tipo as TipoIncidencia | null) : null,
       detalleIncidencia: incidencia.tuvoIncidencia ? incidencia.detalle.trim() : "",
-      fotosIncidenciaUris: incidencia.tuvoIncidencia ? incidencia.fotos : [],
+      fotosIncidenciaUris: incidencia.tuvoIncidencia ? incidencia.fotos.map((foto) => foto.uri) : [],
+      metadatosFotos: {
+        ...(fotoTacometroMeta ? { fotoTacometroFinalUri: fotoTacometroMeta } : {}),
+        ...(incidencia.tuvoIncidencia && incidencia.fotos.length > 0
+          ? {
+              fotosIncidenciaUris: incidencia.fotos.map((foto) => ({
+                origen: foto.origen,
+                fechaOriginal: foto.fechaOriginal,
+              })),
+            }
+          : {}),
+      },
     });
   }
 
@@ -168,7 +193,7 @@ export const CheckOutForm = forwardRef<TextInput, Props>(function CheckOutForm(
           ayuda={t("checkOutForm.fotoTacometroAyuda")}
           icono="speedometer-outline"
           uri={fotoTacometro}
-          onCapturada={setFotoTacometro}
+          onCapturada={manejarFotoTacometroCapturada}
           error={mostrarErrores && fotoTacometro === null ? t("comun.campoObligatorio") : undefined}
         />
       </View>

@@ -6,7 +6,7 @@ import { SelectorBuscable } from "@/components/SelectorBuscable";
 import { SelectorDesplegable } from "@/components/SelectorDesplegable";
 import { SelectorMatricula } from "@/components/SelectorMatricula";
 import { SelectorCombustible } from "@/components/SelectorCombustible";
-import { CapturaFoto } from "@/components/CapturaFoto";
+import { CapturaFoto, ResultadoCaptura } from "@/components/CapturaFoto";
 import {
   IncidenciasForm,
   TIPOS_INCIDENCIA_CHECKIN,
@@ -21,7 +21,13 @@ import {
 } from "@/db/catalogoRepo";
 import { listaConDefecto } from "@/utils/catalogoConDefecto";
 import { aplicarDefectosCheckIn } from "@/utils/aplicarDefectosCheckIn";
-import { IncidenciaData, NivelCombustible, TipoIncidenciaCheckin } from "@/types";
+import {
+  IncidenciaData,
+  MetadatoFoto,
+  MetadatosFotosJornada,
+  NivelCombustible,
+  TipoIncidenciaCheckin,
+} from "@/types";
 import { scrollAlCampo } from "@/utils/scrollAlCampo";
 import { colores } from "@/theme/colors";
 import { espaciado } from "@/theme/spacing";
@@ -40,6 +46,7 @@ export interface ValoresCheckInForm {
   tipoIncidenciaCheckin: TipoIncidenciaCheckin | null;
   detalleIncidenciaCheckin: string;
   fotosIncidenciaCheckinUris: string[];
+  metadatosFotos: MetadatosFotosJornada;
 }
 
 interface Props {
@@ -106,8 +113,25 @@ export function CheckInForm({
   const [kmInicial, setKmInicial] = useState("");
   const [combustible, setCombustible] = useState<NivelCombustible | null>(null);
   const [fotoTacometro, setFotoTacometro] = useState<string | null>(null);
+  const [fotoTacometroMeta, setFotoTacometroMeta] = useState<MetadatoFoto | null>(null);
   const [fotoRuta, setFotoRuta] = useState<string | null>(null);
+  const [fotoRutaMeta, setFotoRutaMeta] = useState<MetadatoFoto | null>(null);
   const [incidencia, setIncidencia] = useState<IncidenciaData>(INCIDENCIA_INICIAL);
+
+  function manejarFotoTacometroCapturada(resultado: ResultadoCaptura) {
+    setFotoTacometro(resultado.uriComprimida);
+    setFotoTacometroMeta({ origen: resultado.origen, fechaOriginal: resultado.fechaOriginal });
+  }
+
+  function manejarFotoRutaCapturada(resultado: ResultadoCaptura) {
+    setFotoRuta(resultado.uriComprimida);
+    setFotoRutaMeta({ origen: resultado.origen, fechaOriginal: resultado.fechaOriginal });
+  }
+
+  function manejarQuitarFotoRuta() {
+    setFotoRuta(null);
+    setFotoRutaMeta(null);
+  }
 
   // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): un objetivo de scroll/foco por
   // campo obligatorio, en el mismo orden en que aparecen en pantalla -- usado solo al tocar
@@ -333,7 +357,19 @@ export function CheckInForm({
       tuvoIncidenciaCheckin: incidencia.tuvoIncidencia,
       tipoIncidenciaCheckin: incidencia.tuvoIncidencia ? incidencia.tipo : null,
       detalleIncidenciaCheckin: incidencia.tuvoIncidencia ? incidencia.detalle.trim() : "",
-      fotosIncidenciaCheckinUris: incidencia.tuvoIncidencia ? incidencia.fotos : [],
+      fotosIncidenciaCheckinUris: incidencia.tuvoIncidencia ? incidencia.fotos.map((foto) => foto.uri) : [],
+      metadatosFotos: {
+        ...(fotoTacometroMeta ? { fotoTacometroInicialUri: fotoTacometroMeta } : {}),
+        ...(fotoRutaMeta ? { fotoRutaUri: fotoRutaMeta } : {}),
+        ...(incidencia.tuvoIncidencia && incidencia.fotos.length > 0
+          ? {
+              fotosIncidenciaCheckinUris: incidencia.fotos.map((foto) => ({
+                origen: foto.origen,
+                fechaOriginal: foto.fechaOriginal,
+              })),
+            }
+          : {}),
+      },
     });
   }
 
@@ -430,7 +466,7 @@ export function CheckInForm({
             ayuda={t("checkInForm.fotoTableroAyuda")}
             icono="speedometer-outline"
             uri={fotoTacometro}
-            onCapturada={setFotoTacometro}
+            onCapturada={manejarFotoTacometroCapturada}
             error={mostrarErrores && fotoTacometro === null ? t("comun.campoObligatorio") : undefined}
           />
         </View>
@@ -439,7 +475,9 @@ export function CheckInForm({
           etiqueta={t("checkInForm.fotoHojaRuta")}
           ayuda={t("checkInForm.fotoHojaRutaAyuda")}
           uri={fotoRuta}
-          onCapturada={setFotoRuta}
+          onCapturada={manejarFotoRutaCapturada}
+          permiteQuitar
+          onQuitar={manejarQuitarFotoRuta}
         />
       </View>
 

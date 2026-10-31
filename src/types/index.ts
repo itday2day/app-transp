@@ -54,7 +54,36 @@ export interface IncidenciaData {
   tuvoIncidencia: boolean;
   tipo: TipoIncidenciaCheckin | null;
   detalle: string;
-  fotos: string[]; // uris locales mientras se llena el formulario
+  fotos: FotoConMetadata[]; // uris locales mientras se llena el formulario
+}
+
+// spec_adjuntar_foto_galeria.md: de dónde viene cada foto -- decide si el Dashboard muestra la
+// etiqueta "Galería · ..." (nunca para "camara").
+export type OrigenFoto = "camara" | "galeria";
+
+/** `fechaOriginal` en el mismo formato que EXIF DateTimeOriginal ("YYYY:MM:DD HH:MM:SS", sin zona
+ * horaria) -- la hora tal cual la marcó el dispositivo (cámara o teléfono), sin convertir. `null`
+ * si no se pudo leer (foto de galería sin EXIF: captura de pantalla, reenvío de WhatsApp). Ver
+ * src/utils/fotoOrigenMetadata.ts. */
+export interface MetadatoFoto {
+  origen: OrigenFoto;
+  fechaOriginal: string | null;
+}
+
+export interface FotoConMetadata extends MetadatoFoto {
+  uri: string;
+}
+
+/** Metadata local de cada foto de una jornada, guardada en SQLite (columna `metadatosFotos`,
+ * JSON) -- nunca viaja a Supabase como columna propia, solo como `user_metadata` del objeto en
+ * Storage (ver storageService.ts). Las dos listas de incidencia son paralelas por índice a
+ * `fotosIncidenciaCheckinUris`/`fotosIncidenciaUris` de `Jornada`. */
+export interface MetadatosFotosJornada {
+  fotoTacometroInicialUri?: MetadatoFoto;
+  fotoRutaUri?: MetadatoFoto;
+  fotoTacometroFinalUri?: MetadatoFoto;
+  fotosIncidenciaCheckinUris?: MetadatoFoto[];
+  fotosIncidenciaUris?: MetadatoFoto[];
 }
 
 export interface Jornada {
@@ -101,6 +130,13 @@ export interface Jornada {
   detalleIncidencia?: string;
   fotosIncidenciaUris?: string[]; // local, se muestran en DetalleJornadaScreen
 
+  // spec_adjuntar_foto_galeria.md / spec_foto_reemplazar_quitar_antes_de_registrar.md: origen
+  // (cámara/galería) y fecha original de cada foto -- nunca viaja a Supabase como columna de
+  // `jornadas` (solo como metadata del objeto en Storage, ver storageService.ts). Ausente en
+  // jornadas creadas antes de este campo o recuperadas del servidor -- degradación aceptada: sin
+  // metadata, sin etiqueta, nunca un error.
+  metadatosFotos?: MetadatosFotosJornada;
+
   // URLs públicas en el servidor (se llenan tras sincronizar; antes de eso
   // solo existen las *Uri locales de arriba).
   fotoCheckInUrl?: string;
@@ -133,6 +169,7 @@ export type NuevoCheckIn = Pick<
   | "tuvoIncidenciaCheckin"
   | "detalleIncidenciaCheckin"
   | "fotosIncidenciaCheckinUris"
+  | "metadatosFotos"
 > & { tipoIncidenciaCheckin: TipoIncidenciaCheckin | null };
 
 export type DatosCheckOut = Pick<
@@ -145,6 +182,7 @@ export type DatosCheckOut = Pick<
   | "tuvoIncidencia"
   | "detalleIncidencia"
   | "fotosIncidenciaUris"
+  | "metadatosFotos"
 > & { id: string; tipoIncidencia: TipoIncidencia | null };
 
 export interface UrlsFotosJornada {

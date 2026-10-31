@@ -60,6 +60,10 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
       fotoCheckOutUrl TEXT,
       fotosIncidenciaUris TEXT,
       fotosIncidencia TEXT,
+      -- spec_adjuntar_foto_galeria.md / spec_foto_reemplazar_quitar_antes_de_registrar.md: origen
+      -- (cámara/galería) y fecha original de cada foto, JSON de MetadatosFotosJornada -- nunca
+      -- viaja a Supabase como columna propia (ver src/types/index.ts).
+      metadatosFotos TEXT,
       estado TEXT NOT NULL DEFAULT 'abierta',
       sincronizacion TEXT NOT NULL DEFAULT 'pendiente',
       intentosSincronizacion INTEGER NOT NULL DEFAULT 0,
@@ -158,6 +162,7 @@ async function relajarNotNullCheckIn(db: SQLite.SQLiteDatabase): Promise<void> {
       fotoCheckOutUrl TEXT,
       fotosIncidenciaUris TEXT,
       fotosIncidencia TEXT,
+      metadatosFotos TEXT,
       estado TEXT NOT NULL DEFAULT 'abierta',
       sincronizacion TEXT NOT NULL DEFAULT 'pendiente',
       intentosSincronizacion INTEGER NOT NULL DEFAULT 0,
@@ -172,7 +177,8 @@ async function relajarNotNullCheckIn(db: SQLite.SQLiteDatabase): Promise<void> {
       fotosIncidenciaCheckinUris, fotosIncidenciaCheckin, kmFinal, combustibleFinal,
       fotoTacometroFinalUri, latFinal, lngFinal, fechaCheckOut, tuvoIncidencia, tipoIncidencia,
       detalleIncidencia, fotoCheckInUrl, fotoRutaUrl, fotoCheckOutUrl, fotosIncidenciaUris,
-      fotosIncidencia, estado, sincronizacion, intentosSincronizacion, creadaPorAdmin, creadaPor
+      fotosIncidencia, metadatosFotos, estado, sincronizacion, intentosSincronizacion,
+      creadaPorAdmin, creadaPor
     )
     SELECT
       id, choferId, choferNombre, empresa, matricula, ruta, incidencias, kmInicial,
@@ -181,7 +187,8 @@ async function relajarNotNullCheckIn(db: SQLite.SQLiteDatabase): Promise<void> {
       fotosIncidenciaCheckinUris, fotosIncidenciaCheckin, kmFinal, combustibleFinal,
       fotoTacometroFinalUri, latFinal, lngFinal, fechaCheckOut, tuvoIncidencia, tipoIncidencia,
       detalleIncidencia, fotoCheckInUrl, fotoRutaUrl, fotoCheckOutUrl, fotosIncidenciaUris,
-      fotosIncidencia, estado, sincronizacion, intentosSincronizacion, creadaPorAdmin, creadaPor
+      fotosIncidencia, metadatosFotos, estado, sincronizacion, intentosSincronizacion,
+      creadaPorAdmin, creadaPor
     FROM jornadas;
 
     DROP TABLE jornadas;
@@ -272,6 +279,9 @@ const COLUMNAS_JORNADA: Record<string, string> = {
   fotoCheckOutUrl: "TEXT",
   fotosIncidenciaUris: "TEXT",
   fotosIncidencia: "TEXT",
+  // spec_adjuntar_foto_galeria.md / spec_foto_reemplazar_quitar_antes_de_registrar.md -- debe
+  // existir ANTES de relajarNotNullCheckIn() más abajo, mismo motivo que creadaPorAdmin/creadaPor.
+  metadatosFotos: "TEXT",
   // spec_rutas_asignadas_admin.md — jornada cargada por Administración desde el Dashboard, nunca
   // por el propio chofer. relajarNotNullCheckIn() de abajo depende de que estas dos ya existan
   // antes de reconstruir la tabla, por eso agregarColumnasFaltantes() corre primero.
