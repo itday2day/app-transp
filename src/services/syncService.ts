@@ -38,21 +38,27 @@ async function subirJornada(jornada: Jornada): Promise<void> {
     urlsNuevas.fotoCheckInUrl = await subirEvidencia(
       jornada.fotoTacometroInicialUri,
       `${jornada.choferId}/${jornada.id}-inicial.jpg`,
-      jornada.metadatosFotos?.fotoTacometroInicialUri
+      jornada.metadatosFotos?.fotoTacometroInicialUri,
+      supabase,
+      fetch
     );
   }
   if (jornada.fotoRutaUri && !jornada.fotoRutaUrl) {
     urlsNuevas.fotoRutaUrl = await subirEvidencia(
       jornada.fotoRutaUri,
       `${jornada.choferId}/${jornada.id}-ruta.jpg`,
-      jornada.metadatosFotos?.fotoRutaUri
+      jornada.metadatosFotos?.fotoRutaUri,
+      supabase,
+      fetch
     );
   }
   if (jornada.estado === "cerrada" && jornada.fotoTacometroFinalUri && !jornada.fotoCheckOutUrl) {
     urlsNuevas.fotoCheckOutUrl = await subirEvidencia(
       jornada.fotoTacometroFinalUri,
       `${jornada.choferId}/${jornada.id}-final.jpg`,
-      jornada.metadatosFotos?.fotoTacometroFinalUri
+      jornada.metadatosFotos?.fotoTacometroFinalUri,
+      supabase,
+      fetch
     );
   }
 
@@ -70,10 +76,10 @@ async function subirJornada(jornada: Jornada): Promise<void> {
     fotosIncidenciaSubidas = await Promise.all(
       fotosIncidenciaLocales.map((uri, indice) => {
         const ruta = `${jornada.choferId}/${jornada.id}-incidencia-${indice}.jpg`;
-        const urlEsperada = obtenerUrlPublicaEvidencia(ruta);
+        const urlEsperada = obtenerUrlPublicaEvidencia(ruta, supabase);
         return yaConfirmadas.has(urlEsperada)
           ? urlEsperada
-          : subirEvidencia(uri, ruta, jornada.metadatosFotos?.fotosIncidenciaUris?.[indice]);
+          : subirEvidencia(uri, ruta, jornada.metadatosFotos?.fotosIncidenciaUris?.[indice], supabase, fetch);
       })
     );
   }
@@ -100,10 +106,16 @@ async function subirJornada(jornada: Jornada): Promise<void> {
     fotosIncidenciaCheckinSubidas = await Promise.all(
       fotosIncidenciaCheckinLocales.map((uri, indice) => {
         const ruta = `${jornada.choferId}/${jornada.id}-incidencia-checkin-${indice}.jpg`;
-        const urlEsperada = obtenerUrlPublicaEvidencia(ruta);
+        const urlEsperada = obtenerUrlPublicaEvidencia(ruta, supabase);
         return yaConfirmadas.has(urlEsperada)
           ? urlEsperada
-          : subirEvidencia(uri, ruta, jornada.metadatosFotos?.fotosIncidenciaCheckinUris?.[indice]);
+          : subirEvidencia(
+              uri,
+              ruta,
+              jornada.metadatosFotos?.fotosIncidenciaCheckinUris?.[indice],
+              supabase,
+              fetch
+            );
       })
     );
   }
