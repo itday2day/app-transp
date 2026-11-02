@@ -1,7 +1,7 @@
 import { Alert, Platform } from "react-native";
-import * as MediaLibrary from "expo-media-library";
 import i18next from "@/i18n";
 import { guardarValor, obtenerValor } from "./almacenamientoSeguro";
+import { cargarMediaLibrary } from "./mediaLibraryLoader";
 
 // Clave fija (spec_copia_fotos_en_galeria.md, Fase 1 punto 6) -- SIN choferId a propósito: es una
 // marca del TELÉFONO ("¿ya vio el aviso de la galería alguna vez?"), no del chofer que esté
@@ -42,6 +42,12 @@ export async function guardarCopiaEnGaleria(uri: string): Promise<void> {
     // existiendo para desarrollo) -- evita una excepción segura pero ruidosa en cada captura.
     if (Platform.OS === "web") return;
     if (permisoDenegadoEnEstaSesion) return;
+
+    // spec_import_diferido_expo_media_library.md: si el módulo no está disponible (ej. el
+    // binario de Expo Go no lo trae todavía), se omite la copia y el flujo sigue -- no tiene
+    // sentido mostrar el aviso de "se va a guardar en tu galería" si nunca va a pasar.
+    const MediaLibrary = cargarMediaLibrary();
+    if (!MediaLibrary) return;
 
     const avisoYaVisto = await obtenerValor(CLAVE_AVISO_VISTO);
     if (!avisoYaVisto) {
