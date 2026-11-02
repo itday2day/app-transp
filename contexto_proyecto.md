@@ -647,6 +647,17 @@ Sin `keyboardVerticalOffset` en ningún lado — las pantallas con header nativo
 funcionan sin él, agregar un número fijo sin poder verlo en un dispositivo real sería un valor
 inventado.
 
+**Validación de evidencia antes de subir (2026-11-02, `spec_validar_archivo_antes_de_subir_foto.md`)**
+— medido en Expo Go que `fetch(uri)` sobre un `file://` puede devolver 404 "File not found" (14
+bytes) aunque el archivo exista y sea válido (el `fetch` propio de Expo leyendo `file://`, no el
+archivo); `subirEvidencia()` (`storageService.ts`) nunca comprobaba `respuesta.ok`, así que esos 14
+bytes se subían igual y Supabase respondía 200. Ahora valida `respuesta.ok` y un tamaño mínimo (2
+KB) antes de subir, y lanza `EvidenciaInvalidaError` en vez de subir si no se cumple — `syncService`
+la trata como un fallo de subida normal (reintenta, cuenta intento, tope `MAX_INTENTOS`, sin
+pantallas nuevas). Pendiente, condicionado a si el error se presenta de verdad fuera de Expo Go:
+una pantalla para que el chofer repita la foto, y la opción de subir la jornada marcando la foto
+como "faltante" (requeriría `schema_v27`) — ninguna de las dos se implementó.
+
 ## 4. Módulo Dashboard web (`dashboard/`)
 
 Proyecto Next.js **independiente y autocontenido** (su propio `package.json`/`node_modules`),
