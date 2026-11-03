@@ -658,6 +658,14 @@ pantallas nuevas). Pendiente, condicionado a si el error se presenta de verdad f
 una pantalla para que el chofer repita la foto, y la opción de subir la jornada marcando la foto
 como "faltante" (requeriría `schema_v27`) — ninguna de las dos se implementó.
 
+**Reclamo atómico al sincronizar (Hallazgo #81, 2026-11-03, `spec_reclamo_atomico_sincronizacion.md`)**
+— `sincronizarPendientes` reclama cada jornada con un único `UPDATE` (`src/db/sincronizacionSql.ts`)
+y solo la sube si `changes === 1`; la reserva guarda su hora en la columna local
+`sincronizandoDesde` (ms) y vence a los **5 minutos**, tras los cuales (o si no tiene hora, las
+huérfanas previas) vuelve a contar como pendiente sin sumar intento. Los cierres (`sincronizado`,
+`error`, `pendiente` sin contar) solo actúan si la fila sigue reservada con esa misma hora, así que
+una ejecución lenta nunca pisa a otra. Pruebas: `node --test pruebas/reclamoSincronizacion.test.mjs`.
+
 ## 4. Módulo Dashboard web (`dashboard/`)
 
 Proyecto Next.js **independiente y autocontenido** (su propio `package.json`/`node_modules`),

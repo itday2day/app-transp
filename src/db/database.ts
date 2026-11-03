@@ -68,7 +68,10 @@ async function abrirBaseDeDatos(): Promise<SQLite.SQLiteDatabase> {
       sincronizacion TEXT NOT NULL DEFAULT 'pendiente',
       intentosSincronizacion INTEGER NOT NULL DEFAULT 0,
       creadaPorAdmin INTEGER NOT NULL DEFAULT 0,
-      creadaPor TEXT
+      creadaPor TEXT,
+      -- spec_reclamo_atomico_sincronizacion.md: hora (ms) de la reserva 'sincronizando', ver
+      -- sincronizacionSql.ts.
+      sincronizandoDesde INTEGER
     );
 
     CREATE INDEX IF NOT EXISTS idx_jornadas_chofer ON jornadas (choferId);
@@ -167,7 +170,8 @@ async function relajarNotNullCheckIn(db: SQLite.SQLiteDatabase): Promise<void> {
       sincronizacion TEXT NOT NULL DEFAULT 'pendiente',
       intentosSincronizacion INTEGER NOT NULL DEFAULT 0,
       creadaPorAdmin INTEGER NOT NULL DEFAULT 0,
-      creadaPor TEXT
+      creadaPor TEXT,
+      sincronizandoDesde INTEGER
     );
 
     INSERT INTO jornadas_nueva (
@@ -178,7 +182,7 @@ async function relajarNotNullCheckIn(db: SQLite.SQLiteDatabase): Promise<void> {
       fotoTacometroFinalUri, latFinal, lngFinal, fechaCheckOut, tuvoIncidencia, tipoIncidencia,
       detalleIncidencia, fotoCheckInUrl, fotoRutaUrl, fotoCheckOutUrl, fotosIncidenciaUris,
       fotosIncidencia, metadatosFotos, estado, sincronizacion, intentosSincronizacion,
-      creadaPorAdmin, creadaPor
+      creadaPorAdmin, creadaPor, sincronizandoDesde
     )
     SELECT
       id, choferId, choferNombre, empresa, matricula, ruta, incidencias, kmInicial,
@@ -188,7 +192,7 @@ async function relajarNotNullCheckIn(db: SQLite.SQLiteDatabase): Promise<void> {
       fotoTacometroFinalUri, latFinal, lngFinal, fechaCheckOut, tuvoIncidencia, tipoIncidencia,
       detalleIncidencia, fotoCheckInUrl, fotoRutaUrl, fotoCheckOutUrl, fotosIncidenciaUris,
       fotosIncidencia, metadatosFotos, estado, sincronizacion, intentosSincronizacion,
-      creadaPorAdmin, creadaPor
+      creadaPorAdmin, creadaPor, sincronizandoDesde
     FROM jornadas;
 
     DROP TABLE jornadas;
@@ -287,6 +291,10 @@ const COLUMNAS_JORNADA: Record<string, string> = {
   // antes de reconstruir la tabla, por eso agregarColumnasFaltantes() corre primero.
   creadaPorAdmin: "INTEGER NOT NULL DEFAULT 0",
   creadaPor: "TEXT",
+  // spec_reclamo_atomico_sincronizacion.md (Hallazgo #81) -- nullable: una 'sincronizando' que ya
+  // existía sin hora queda NULL y se trata como reserva vencida. Mismo motivo que metadatosFotos
+  // para existir antes de relajarNotNullCheckIn(), que la copia en su lista escrita a mano.
+  sincronizandoDesde: "INTEGER",
 };
 
 async function agregarColumnasFaltantes(db: SQLite.SQLiteDatabase): Promise<void> {

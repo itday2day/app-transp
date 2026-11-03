@@ -10,7 +10,7 @@ import {
   marcarComoSincronizado,
   marcarErrorSincronizacion,
   marcarPendienteSinContar,
-  marcarSincronizando,
+  reclamarParaSincronizar,
   actualizarUrlsFotos,
   idsJornadasExistentes,
   insertarJornadaRecuperada,
@@ -217,10 +217,15 @@ export async function sincronizarPendientes(
   for (const jornada of pendientes) {
     if (!forzarReintento && jornada.intentosSincronizacion >= MAX_INTENTOS) continue;
 
+    // Hallazgo #81 (spec_reclamo_atomico_sincronizacion.md): reclamo atómico. Si otra ejecución
+    // (la app abierta y la tarea en segundo plano no comparten sincronizandoRef) ya la tiene
+    // reservada o la subió entre la lectura de arriba y ahora, se salta sin contar intento. Los
+    // tres cierres de abajo solo actúan si la reserva de `reservadaDesde` sigue siendo la vigente.
+    const reservadaDesde = Date.now();
     try {
-      await marcarSincronizando(jornada.id);
+      if (!(await reclamarParaSincronizar(jornada.id, reservadaDesde))) continue;
       await subirJornada(jornada);
-      await marcarComoSincronizado(jornada.id);
+      await marcarComoSincronizado(jornada.id, reservadaDesde);
       exitosas += 1;
     } catch (err) {
       // Antes se descartaba el error sin loguearlo — imposible diagnosticar
@@ -239,7 +244,7 @@ export async function sincronizarPendientes(
       // ya en curso). Se comprueba ANTES del chequeo de red de abajo -- ese es para el caso
       // contrario, sin señal en absoluto, nunca llegó ninguna respuesta del servidor.
       if (esErrorDeAutenticacion(err)) {
-        await marcarPendienteSinContar(jornada.id);
+        await marcarPendienteSinContar(jornada.id, reservadaDesde);
         fallidas += 1;
         continue;
       }
@@ -253,9 +258,9 @@ export async function sincronizarPendientes(
       const estadoRed = await Network.getNetworkStateAsync();
       const huboSenal = Boolean(estadoRed.isConnected && estadoRed.isInternetReachable);
       if (huboSenal) {
-        await marcarErrorSincronizacion(jornada.id);
+        await marcarErrorSincronizacion(jornada.id, reservadaDesde);
       } else {
-        await marcarPendienteSinContar(jornada.id);
+        await marcarPendienteSinContar(jornada.id, reservadaDesde);
       }
       fallidas += 1;
     }

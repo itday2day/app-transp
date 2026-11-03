@@ -1,6 +1,14 @@
 import { obtenerBaseDeDatos } from "./database";
 import { FilaJornadaSQLite, filaAJornada, parsearMetadatosFotos } from "./jornadasMapeo";
 import {
+  SQL_MARCAR_ERROR,
+  SQL_MARCAR_PENDIENTE_SIN_CONTAR,
+  SQL_MARCAR_SINCRONIZADO,
+  SQL_PENDIENTES_SINCRONIZACION,
+  SQL_RECLAMAR_JORNADA,
+  limiteReserva,
+} from "./sincronizacionSql";
+import {
   Jornada,
   NuevoCheckIn,
   DatosCheckOut,
@@ -508,30 +516,36 @@ export async function listarHistorial(choferId: string, limite = 20): Promise<Jo
   return filas.map(filaAJornada);
 }
 
-export async function obtenerPendientesSincronizacion(): Promise<Jornada[]> {
+/** Pendientes, con error, y reservas 'sincronizando' vencidas o sin hora (Hallazgo #81): una
+ * jornada cuyo proceso murió a mitad de la subida vuelve a entrar al ciclo pasado el plazo. */
+export async function obtenerPendientesSincronizacion(ahora = Date.now()): Promise<Jornada[]> {
   const db = await obtenerBaseDeDatos();
-  const filas = await db.getAllAsync<FilaJornadaSQLite>(
-    `SELECT * FROM jornadas WHERE sincronizacion IN ('pendiente', 'error') ORDER BY fechaCheckIn ASC`
-  );
+  const filas = await db.getAllAsync<FilaJornadaSQLite>(SQL_PENDIENTES_SINCRONIZACION, [
+    limiteReserva(ahora),
+  ]);
   return filas.map(filaAJornada);
 }
 
-export async function marcarComoSincronizado(id: string): Promise<void> {
+/** Reclamo atómico (spec_reclamo_atomico_sincronizacion.md, criterio 1): true solo si ESTA
+ * ejecución se quedó con la jornada (`changes === 1`). false = otra ejecución la tiene reservada o
+ * ya la subió; el llamador la salta sin contar intento. `ahora` es la hora de la reserva que hay
+ * que pasar después al cierre. */
+export async function reclamarParaSincronizar(id: string, ahora: number): Promise<boolean> {
   const db = await obtenerBaseDeDatos();
-  await db.runAsync(`UPDATE jornadas SET sincronizacion = 'sincronizado' WHERE id = ?`, [id]);
+  const resultado = await db.runAsync(SQL_RECLAMAR_JORNADA, [ahora, id, limiteReserva(ahora)]);
+  return resultado.changes === 1;
 }
 
-export async function marcarErrorSincronizacion(id: string): Promise<void> {
+// Los tres cierres son condicionales (criterio 3): no hacen nada si la fila ya no está reservada
+// por la ejecución que reclamó en `reservadaDesde` -- ver CONDICION_RESERVA_PROPIA.
+export async function marcarComoSincronizado(id: string, reservadaDesde: number): Promise<void> {
   const db = await obtenerBaseDeDatos();
-  await db.runAsync(
-    `UPDATE jornadas SET sincronizacion = 'error', intentosSincronizacion = intentosSincronizacion + 1 WHERE id = ?`,
-    [id]
-  );
+  await db.runAsync(SQL_MARCAR_SINCRONIZADO, [id, reservadaDesde]);
 }
 
-export async function marcarSincronizando(id: string): Promise<void> {
+export async function marcarErrorSincronizacion(id: string, reservadaDesde: number): Promise<void> {
   const db = await obtenerBaseDeDatos();
-  await db.runAsync(`UPDATE jornadas SET sincronizacion = 'sincronizando' WHERE id = ?`, [id]);
+  await db.runAsync(SQL_MARCAR_ERROR, [id, reservadaDesde]);
 }
 
 /** Reinicia (Opción 1, spec_sync_sin_sesion_no_agota_intentos.md, criterio 5, Hallazgo #56) los
@@ -562,9 +576,9 @@ export async function reiniciarIntentosAgotadosDeChofer(
  * cortó a mitad de la subida, no porque la subida en sí esté mal. Un intento sin red no puede
  * gastar el tope de MAX_INTENTOS: si lo gastara, un chofer que entra a un túnel quemaría los 5
  * intentos automáticos en minutos, y ya con señal de vuelta la app dejaría de reintentar sola. */
-export async function marcarPendienteSinContar(id: string): Promise<void> {
+export async function marcarPendienteSinContar(id: string, reservadaDesde: number): Promise<void> {
   const db = await obtenerBaseDeDatos();
-  await db.runAsync(`UPDATE jornadas SET sincronizacion = 'pendiente' WHERE id = ?`, [id]);
+  await db.runAsync(SQL_MARCAR_PENDIENTE_SIN_CONTAR, [id, reservadaDesde]);
 }
 
 // Guarda las URLs públicas devueltas por el servidor tras subir las fotos de
