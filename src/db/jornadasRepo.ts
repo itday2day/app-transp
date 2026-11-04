@@ -151,6 +151,23 @@ export async function obtenerJornadasAbiertas(choferId: string): Promise<Jornada
   return filas.map(filaAJornada);
 }
 
+/** spec_enviado_visible_y_aviso_al_salir.md (Hallazgo #82, criterio 12): lectura nueva y mínima,
+ * separada de obtenerPendientesSincronizacion() (la del reclamo atómico, #81) a propósito -- esa
+ * usa la condición "reclamable" (sincronizacionSql.ts:17-18), que EXCLUYE una fila 'sincronizando'
+ * con reserva vigente (se está subiendo en este momento). Para la franja de "Enviando..." es justo
+ * lo contrario de lo que hace falta: una jornada que se está subiendo ahora mismo tiene que seguir
+ * contando como pendiente, o la franja diría "Enviado" mientras todavía sube. Cuenta las tres
+ * puntas -- pendiente, sincronizando (con o sin reserva vigente) y error -- del chofer dado. */
+export async function obtenerNoSincronizadasDeChofer(choferId: string): Promise<Jornada[]> {
+  const db = await obtenerBaseDeDatos();
+  const filas = await db.getAllAsync<FilaJornadaSQLite>(
+    `SELECT * FROM jornadas WHERE choferId = ? AND sincronizacion IN ('pendiente', 'sincronizando', 'error')
+      ORDER BY fechaCheckIn ASC`,
+    [choferId]
+  );
+  return filas.map(filaAJornada);
+}
+
 /** Una jornada corregida por el administrador, tal como viene de Supabase (Hallazgo #28,
  * spec_correccion_gana_dashboard.md) — `syncService.sincronizarCambiosDelServidor` ya la trae en
  * camelCase. `camposCorregidos` son las claves REALES de columna (snake_case, tal como las

@@ -137,7 +137,7 @@
     "errorUbicacionTitulo": "We couldn't get your location",
     "errorUbicacionMensaje": "Check-in needs to record your current location. Please try again.",
     "exitoTitulo": "Shift started",
-    "exitoMensaje": "Your check-in was recorded. Have a good trip!",
+    "exitoMensajePendiente": "Your check-in was saved. It still needs to be sent to the server. Don't close the app until you see «Sent».",
     "errorRegistroTitulo": "We couldn't record the check-in",
     "errorGenerico": "An unexpected error occurred. Please try again."
   },
@@ -186,7 +186,7 @@
     "notaUbicacion": "When you confirm, your current GPS location will be captured automatically as the closing point.",
     "botonEnviar": "Submit check-out",
     "exitoTitulo": "Shift closed",
-    "exitoMensaje": "Your check-out was recorded. Rest well!",
+    "exitoMensajePendiente": "Your check-out was saved. It still needs to be sent to the server. Don't close the app until you see «Sent».",
     "exitoMensajeOffline": "Your check-out was saved on the device and will be sent automatically once you're back online.",
     "exitoMensajeSinUbicacion": "Your check-out was recorded, but we couldn't capture your location (check your GPS).",
     "errorRegistroTitulo": "We couldn't record the check-out"
@@ -288,6 +288,14 @@
     "cuerpo": "Update whenever you can: it's quick and you won't lose your data. First, check that you don't have anything pending to send.",
     "botonActualizar": "Update",
     "botonMasTarde": "Later"
+  },
+  "franjaEnvio": {
+    "enviando": "Sending your shift… don't close the app",
+    "enviado": "Sent. You can close the app now.",
+    "avisoSalirTitulo": "There's a pending upload",
+    "avisoSalirCuerpo": "Exit anyway?",
+    "avisoSalirQuedarme": "Stay",
+    "avisoSalirSalir": "Exit"
   },
   "selectorFecha": {
     "dia": "Day",

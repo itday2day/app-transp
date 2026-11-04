@@ -167,7 +167,7 @@ export default function DetalleJornadaScreen() {
   const [enviando, setEnviando] = useState(false);
   const [visor, setVisor] = useState<{ fotos: FotoPar[]; indice: number } | null>(null);
   const { capturarUbicacion, obteniendo: obteniendoUbicacion } = useUbicacion();
-  const { conectado, jornadasCorregidas } = useNetwork();
+  const { conectado, jornadasCorregidas, sincronizarAhora } = useNetwork();
   const refScroll = useRef<ScrollView>(null);
   const refKmFinal = useRef<TextInput>(null);
   const ySeccionCheckOut = useRef(0);
@@ -232,11 +232,15 @@ export default function DetalleJornadaScreen() {
         lngFinal: ubicacion?.lng,
       });
 
+      // Hallazgo #82 (spec_enviado_visible_y_aviso_al_salir.md), criterio 11: igual que en
+      // NuevoCheckInScreen.tsx -- dispara el envío YA, sin esperar, sin tocar syncService.ts.
+      void sincronizarAhora();
+
       const mensajeExito = !conectado
         ? t("checkOutForm.exitoMensajeOffline")
         : !ubicacion
           ? t("checkOutForm.exitoMensajeSinUbicacion")
-          : t("checkOutForm.exitoMensaje");
+          : t("checkOutForm.exitoMensajePendiente");
       Alert.alert(t("checkOutForm.exitoTitulo"), mensajeExito);
       navigation.goBack();
     } catch (err) {

@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, Alert, KeyboardAvoidingView, Platform } f
 import { useNavigation } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
+import { useNetwork } from "@/context/NetworkContext";
 import { ProveedorEnfoqueTeclado } from "@/context/EnfoqueTecladoContext";
 import { useUbicacion } from "@/hooks/useUbicacion";
 import { useMatriculasFrecuentes } from "@/hooks/useMatriculasFrecuentes";
@@ -28,6 +29,7 @@ export default function NuevoCheckInScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { t } = useTranslation();
   const { usuario } = useAuth();
+  const { sincronizarAhora } = useNetwork();
   const { matriculas: matriculasFrecuentes } = useMatriculasFrecuentes();
   const { capturarUbicacion, obteniendo: obteniendoUbicacion } = useUbicacion();
   const [enviando, setEnviando] = useState(false);
@@ -55,7 +57,13 @@ export default function NuevoCheckInScreen() {
         usuario
       );
 
-      Alert.alert(t("checkIn.exitoTitulo"), t("checkIn.exitoMensaje"));
+      // Hallazgo #82 (spec_enviado_visible_y_aviso_al_salir.md), criterio 11: dispara el envío YA
+      // -- sin esto, el ciclo de NetworkContext (cada 15 s) podía tardar hasta 15 s en enterarse.
+      // `sincronizarAhora()` ya existe (no se toca syncService.ts), se llama SIN esperar (`void`)
+      // para no retrasar el Alert ni la navegación; sin conexión no hace nada (igual que hoy).
+      void sincronizarAhora();
+
+      Alert.alert(t("checkIn.exitoTitulo"), t("checkIn.exitoMensajePendiente"));
       // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): después de un check-in
       // exitoso, el chofer queda en Check-out (ya ve ahí su tarjeta nueva) en vez de volver a
       // Check-in -- `{ screen: "CheckOut" }` enfoca esa pestaña del tab navigator anidado y de

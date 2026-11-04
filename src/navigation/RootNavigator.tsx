@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/context/AuthContext";
 import { TextoEnlace } from "@/components/TextoEnlace";
 import { AvisoVersionFranja } from "@/components/AvisoVersionFranja";
+import { FranjaEnvio } from "@/components/FranjaEnvio";
 import { ClaveTraduccion } from "@/i18n";
 import { colores } from "@/theme/colors";
 import { espaciado } from "@/theme/spacing";
@@ -76,7 +77,13 @@ function PrincipalTabs() {
     // ARRIBA de las tres pestañas, nunca en Login -- envuelta en un View flex:1 (CLAUDE.md,
     // regresión #49: un wrapper nuevo alrededor de un hijo flex necesita el mismo flex:1, si no la
     // barra de tabs de abajo pierde su alto).
+    // spec_enviado_visible_y_aviso_al_salir.md (Hallazgo #82): FranjaEnvio va PRIMERO (más arriba,
+    // pegada a la barra de estado) -- es urgente y transitoria ("no cierres la app, hay datos sin
+    // enviar"); AvisoVersionFranja es informativa y el chofer puede descartarla con "Más tarde". Son
+    // dos hermanos en la misma columna flex: cada una ocupa su propio alto cuando está visible, sin
+    // overlap posible por construcción (ninguna usa position:absolute).
     <View style={estilos.contenedorConAviso}>
+      <FranjaEnvio />
       <AvisoVersionFranja />
       <Tab.Navigator
         screenOptions={({ route }) => ({
