@@ -29,7 +29,7 @@ export default function NuevoCheckInScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
   const { t } = useTranslation();
   const { usuario } = useAuth();
-  const { sincronizarAhora } = useNetwork();
+  const { sincronizarAhora, conectado } = useNetwork();
   const { matriculas: matriculasFrecuentes } = useMatriculasFrecuentes();
   const { capturarUbicacion, obteniendo: obteniendoUbicacion } = useUbicacion();
   const [enviando, setEnviando] = useState(false);
@@ -63,7 +63,13 @@ export default function NuevoCheckInScreen() {
       // para no retrasar el Alert ni la navegación; sin conexión no hace nada (igual que hoy).
       void sincronizarAhora();
 
-      Alert.alert(t("checkIn.exitoTitulo"), t("checkIn.exitoMensajePendiente"));
+      // Revisión 2026-11-04 (sección 10, defecto 2): igual que DetalleJornadaScreen.tsx -- sin
+      // conexión no se puede prometer "no cierres la app hasta ver «Enviado»" (nada se está
+      // enviando todavía). exitoMensajeOffline no tiene esa frase.
+      Alert.alert(
+        t("checkIn.exitoTitulo"),
+        conectado ? t("checkIn.exitoMensajePendiente") : t("checkIn.exitoMensajeOffline")
+      );
       // spec_bloque_a_pantallas_checkin_checkout.md (Hallazgo #50): después de un check-in
       // exitoso, el chofer queda en Check-out (ya ve ahí su tarjeta nueva) en vez de volver a
       // Check-in -- `{ screen: "CheckOut" }` enfoca esa pestaña del tab navigator anidado y de

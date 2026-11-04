@@ -138,6 +138,7 @@
     "errorUbicacionMensaje": "El check-in necesita registrar tu ubicación actual. Intenta de nuevo.",
     "exitoTitulo": "Jornada iniciada",
     "exitoMensajePendiente": "Tu check-in quedó guardado. Falta enviarlo al servidor. No cierres la app hasta ver «Enviado».",
+    "exitoMensajeOffline": "Tu check-in quedó guardado en el teléfono y se enviará automáticamente cuando haya señal.",
     "errorRegistroTitulo": "No pudimos registrar el check-in",
     "errorGenerico": "Ocurrió un error inesperado. Intenta de nuevo."
   },
@@ -188,7 +189,7 @@
     "exitoTitulo": "Jornada cerrada",
     "exitoMensajePendiente": "Tu check-out quedó guardado. Falta enviarlo al servidor. No cierres la app hasta ver «Enviado».",
     "exitoMensajeOffline": "Tu check-out se guardó en el dispositivo y se enviará automáticamente al recuperar conexión.",
-    "exitoMensajeSinUbicacion": "Tu check-out quedó registrado, pero no pudimos capturar tu ubicación (revisa el GPS).",
+    "exitoMensajeSinUbicacion": "Tu check-out quedó guardado, pero no pudimos capturar tu ubicación (revisa el GPS). Además, falta enviarlo al servidor: no cierres la app hasta ver «Enviado».",
     "errorRegistroTitulo": "No pudimos registrar el check-out"
   },
   "incidencias": {
@@ -293,7 +294,7 @@
     "enviando": "Enviando tu jornada… no cierres la app",
     "enviado": "Enviado. Ya puedes cerrar la app.",
     "avisoSalirTitulo": "Hay un envío pendiente",
-    "avisoSalirCuerpo": "¿Salir de todos modos?",
+    "avisoSalirCuerpo": "Si sales ahora, se enviará cuando abras la app con señal. ¿Salir de todos modos?",
     "avisoSalirQuedarme": "Quedarme",
     "avisoSalirSalir": "Salir"
   },

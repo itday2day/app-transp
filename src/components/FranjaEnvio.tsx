@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { View, Text, StyleSheet, BackHandler, Alert } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { View, Text, StyleSheet, BackHandler, Alert, AppState } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/context/AuthContext";
@@ -29,7 +29,7 @@ const DURACION_ENVIADO_MS = 3000;
 export function FranjaEnvio() {
   const { t } = useTranslation();
   const { usuario } = useAuth();
-  const { sincronizando, ultimaSincronizacion } = useNetwork();
+  const { sincronizando, ultimaSincronizacion, conectado } = useNetwork();
   const [estado, setEstado] = useState<EstadoFranjaEnvio>("oculta");
   const estadoRef = useRef<EstadoFranjaEnvio>("oculta");
   // Criterio 5: el BackHandler lee esto, NUNCA `estado` (que puede estar demorado por el
@@ -42,39 +42,53 @@ export function FranjaEnvio() {
     setEstado(nuevo);
   }
 
-  // Criterio 13: se recalcula al montar (p. ej. recién registrada una jornada, cuando
-  // `sincronizarAhora()` ya puso `sincronizando` en true) y cada vez que `sincronizando` o
-  // `ultimaSincronizacion` cambian -- sin sondeo propio, nunca un setInterval acá: el ciclo real ya
-  // lo tiene NetworkContext (INTERVALO_REVISION_MS), esto solo reacciona a sus resultados.
-  useEffect(() => {
+  // Una sola función de recálculo, llamada desde tres disparadores distintos (abajo): el ciclo
+  // normal de NetworkContext, recuperar el foco de PrincipalTabs, y AppState volviendo a "active".
+  // Revisión 2026-11-04 (sección 10, defecto 3): una jornada registrada SIN conexión no cambia
+  // `sincronizando` ni `ultimaSincronizacion` (sincronizarAhora() no hace nada sin red) -- sin los
+  // otros dos disparadores, `hayPendientesRef` se quedaría en `false` y el aviso al salir nunca
+  // aparecería para ese caso. Siempre actualiza el ref (para el BackHandler); el `estado` visible
+  // solo cambia si corresponde (criterio 13: "si procede").
+  const recalcular = useCallback(async () => {
     if (!usuario) return;
-    let cancelado = false;
-    let temporizador: ReturnType<typeof setTimeout> | null = null;
+    const jornadas = await obtenerNoSincronizadasDeChofer(usuario.id);
 
-    (async () => {
-      const jornadas = await obtenerNoSincronizadasDeChofer(usuario.id);
-      if (cancelado) return;
+    hayPendientesRef.current = jornadas.length > 0;
 
-      hayPendientesRef.current = jornadas.length > 0;
+    const anterior = estadoRef.current;
+    const siguiente = siguienteEstadoFranjaEnvio(anterior, jornadas, MAX_INTENTOS, conectado);
+    if (siguiente === anterior) return;
 
-      const anterior = estadoRef.current;
-      const siguiente = siguienteEstadoFranjaEnvio(anterior, jornadas, MAX_INTENTOS);
-      if (siguiente === anterior) return;
+    if (anterior === "oculta" && siguiente !== "oculta") {
+      // Criterio 6 (sin parpadeos): demora la aparición -- si se resuelve antes de que venza el
+      // temporizador, el chequeo de abajo (estadoRef.current === "oculta") evita mostrarlo igual.
+      setTimeout(() => {
+        if (estadoRef.current === "oculta") actualizarEstado(siguiente);
+      }, RETRASO_MOSTRAR_MS);
+    } else {
+      actualizarEstado(siguiente);
+    }
+  }, [usuario, conectado]);
 
-      if (anterior === "oculta" && siguiente !== "oculta") {
-        temporizador = setTimeout(() => {
-          if (!cancelado) actualizarEstado(siguiente);
-        }, RETRASO_MOSTRAR_MS);
-      } else {
-        actualizarEstado(siguiente);
-      }
-    })();
+  // Criterio 13: se recalcula al montar (p. ej. recién registrada una jornada, cuando
+  // `sincronizarAhora()` ya puso `sincronizando` en true) y cada vez que `sincronizando`,
+  // `ultimaSincronizacion` o `conectado` cambian -- sin sondeo propio, nunca un setInterval acá: el
+  // ciclo real ya lo tiene NetworkContext (INTERVALO_REVISION_MS), esto solo reacciona a sus
+  // resultados. `conectado` en las dependencias (defecto 1): al volver la red, recalcula enseguida
+  // y pasa de "oculta" a "enviando" sin esperar al próximo ciclo de 15 s.
+  useEffect(() => {
+    void recalcular();
+  }, [recalcular, sincronizando, ultimaSincronizacion]);
 
-    return () => {
-      cancelado = true;
-      if (temporizador) clearTimeout(temporizador);
-    };
-  }, [usuario, sincronizando, ultimaSincronizacion]);
+  // Defecto 3 (sección 10): AppState "active" es el segundo disparador que falta -- volver del
+  // selector de apps/pantalla bloqueada sin que `sincronizando`/`ultimaSincronizacion` hayan
+  // cambiado (p. ej. se registró una jornada sin conexión mientras la app estaba en segundo plano).
+  useEffect(() => {
+    const suscripcion = AppState.addEventListener("change", (estado) => {
+      if (estado === "active") void recalcular();
+    });
+    return () => suscripcion.remove();
+  }, [recalcular]);
 
   // Auto-ocultar "Enviado" a los pocos segundos (criterio 3 original) -- si entretanto aparece una
   // jornada nueva, el efecto de arriba ya cambió `estado` a "enviando" y este temporizador, al
@@ -93,8 +107,14 @@ export function FranjaEnvio() {
   // el "atrás" entre pantallas (y entre pantallas sin pendientes) sigue exactamente igual. En iOS,
   // BackHandler.addEventListener es un no-op de la propia librería (BackHandler.ios.js) -- no hace
   // falta ningún `Platform.OS === "android"` acá.
+  //
+  // Defecto 3 (sección 10): recalcula también al RECUPERAR el foco -- el caso típico es volver de
+  // NuevoCheckInScreen/DetalleJornadaScreen (`goBack()`) justo después de registrar una jornada sin
+  // conexión, que no cambia `sincronizando` ni `ultimaSincronizacion`.
   useFocusEffect(
     React.useCallback(() => {
+      void recalcular();
+
       const suscripcion = BackHandler.addEventListener("hardwareBackPress", () => {
         if (!hayPendientesRef.current) return false;
 
@@ -110,7 +130,7 @@ export function FranjaEnvio() {
       });
 
       return () => suscripcion.remove();
-    }, [t])
+    }, [t, recalcular])
   );
 
   if (estado === "oculta") return null;

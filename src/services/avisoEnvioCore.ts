@@ -25,25 +25,33 @@ function hayErrorAgotado(jornadas: JornadaParaFranja[], maxIntentos: number): bo
   return jornadas.some((j) => j.sincronizacion === "error" && j.intentosSincronizacion >= maxIntentos);
 }
 
-/** Reductor puro: dado el estado que el chofer está viendo AHORA MISMO y la lista de jornadas no
- * sincronizadas, decide el PRÓXIMO estado. Determinista, sin variables de módulo ni temporizadores
- * -- el "retraso mínimo" (criterio 6) y el auto-ocultado de "enviado" (criterio 3, "desaparece
- * sola a los pocos segundos") son responsabilidad del componente (temporizadores reales), no de
- * esta función.
+/** Reductor puro: dado el estado que el chofer está viendo AHORA MISMO, la lista de jornadas no
+ * sincronizadas y si hay conexión, decide el PRÓXIMO estado. Determinista, sin variables de
+ * módulo ni temporizadores -- el "retraso mínimo" (criterio 6) y el auto-ocultado de "enviado"
+ * (criterio 3, "desaparece sola a los pocos segundos") son responsabilidad del componente
+ * (temporizadores reales), no de esta función.
+ *
+ * Revisión 2026-11-04 (sección 10, defecto 1): sin conexión, la franja NO dice "enviando" -- no
+ * hay nada que subir sin red, y los banners de "Sin conexión" que ya existen (BannerConexion)
+ * cubren ese caso; decirlo acá también sería redundante y, peor, "enviando" sin que nada esté
+ * pasando es la clase exacta de mentira que esta spec existe para evitar. El error con intentos
+ * agotados es la EXCEPCIÓN: ya pasó, es un hecho del pasado, no depende de si hay red ahora mismo
+ * -- por eso ese chequeo va primero y no mira `conectado`.
  *
  * Criterio 15 ("Enviado" solo si la franja ya estuvo visible este arranque): acá "ya estuvo
  * visible" se expresa como `estadoActual === "enviando" || estadoActual === "error"` -- la ÚNICA
  * forma de llegar a "enviado" es viniendo de un estado en el que el chofer ya vio la franja. Si
  * `estadoActual` es "oculta" (nunca hubo nada pendiente este arranque, o ya se auto-ocultó un
- * "enviado" anterior) y ahora no hay nada pendiente, el resultado es "oculta" -- nunca aparece un
- * "Enviado" de la nada. */
+ * "enviado" anterior, o se ocultó por quedarse sin conexión) y ahora no hay nada pendiente, el
+ * resultado es "oculta" -- nunca aparece un "Enviado" de la nada. */
 export function siguienteEstadoFranjaEnvio(
   estadoActual: EstadoFranjaEnvio,
   jornadas: JornadaParaFranja[],
-  maxIntentos: number
+  maxIntentos: number,
+  conectado: boolean
 ): EstadoFranjaEnvio {
   if (hayErrorAgotado(jornadas, maxIntentos)) return "error";
-  if (jornadas.length > 0) return "enviando";
+  if (jornadas.length > 0) return conectado ? "enviando" : "oculta";
 
   // Nada pendiente ahora mismo (ni con error agotado).
   if (estadoActual === "enviando" || estadoActual === "error") return "enviado";

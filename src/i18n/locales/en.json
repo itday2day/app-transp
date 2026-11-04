@@ -138,6 +138,7 @@
     "errorUbicacionMensaje": "Check-in needs to record your current location. Please try again.",
     "exitoTitulo": "Shift started",
     "exitoMensajePendiente": "Your check-in was saved. It still needs to be sent to the server. Don't close the app until you see «Sent».",
+    "exitoMensajeOffline": "Your check-in was saved on the device and will be sent automatically once you're back online.",
     "errorRegistroTitulo": "We couldn't record the check-in",
     "errorGenerico": "An unexpected error occurred. Please try again."
   },
@@ -188,7 +189,7 @@
     "exitoTitulo": "Shift closed",
     "exitoMensajePendiente": "Your check-out was saved. It still needs to be sent to the server. Don't close the app until you see «Sent».",
     "exitoMensajeOffline": "Your check-out was saved on the device and will be sent automatically once you're back online.",
-    "exitoMensajeSinUbicacion": "Your check-out was recorded, but we couldn't capture your location (check your GPS).",
+    "exitoMensajeSinUbicacion": "Your check-out was saved, but we couldn't capture your location (check your GPS). It also still needs to be sent to the server: don't close the app until you see «Sent».",
     "errorRegistroTitulo": "We couldn't record the check-out"
   },
   "incidencias": {
@@ -293,7 +294,7 @@
     "enviando": "Sending your shift… don't close the app",
     "enviado": "Sent. You can close the app now.",
     "avisoSalirTitulo": "There's a pending upload",
-    "avisoSalirCuerpo": "Exit anyway?",
+    "avisoSalirCuerpo": "If you exit now, it will be sent once you open the app with a signal. Exit anyway?",
     "avisoSalirQuedarme": "Stay",
     "avisoSalirSalir": "Exit"
   },
