@@ -283,6 +283,12 @@
     "sincronizando": "Sincronizando registros pendientes…",
     "sinConexion": "Sin conexión. Tus registros se guardan en el dispositivo y se enviarán al recuperar señal."
   },
+  "avisoVersion": {
+    "titulo": "Hay una versión nueva de la app",
+    "cuerpo": "Actualiza cuando puedas: es rápido y no pierdes tus datos. Antes, comprueba que no te quede nada pendiente de enviar.",
+    "botonActualizar": "Actualizar",
+    "botonMasTarde": "Más tarde"
+  },
   "selectorFecha": {
     "dia": "Día",
     "mes": "Mes",

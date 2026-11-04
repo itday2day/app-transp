@@ -283,6 +283,12 @@
     "sincronizando": "Syncing pending records…",
     "sinConexion": "No connection. Your records are saved on the device and will be sent once you're back online."
   },
+  "avisoVersion": {
+    "titulo": "There's a new version of the app",
+    "cuerpo": "Update whenever you can: it's quick and you won't lose your data. First, check that you don't have anything pending to send.",
+    "botonActualizar": "Update",
+    "botonMasTarde": "Later"
+  },
   "selectorFecha": {
     "dia": "Day",
     "mes": "Month",

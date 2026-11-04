@@ -138,8 +138,11 @@ export default async function PaginaInvitacion({ params }: { params: Promise<{ t
         <div id="paso-1" className="flex flex-col gap-2 text-left">
           <h2 className="text-base font-semibold text-foreground">1. Descargar la app</h2>
           <p className="text-base text-muted-foreground">
-            Pulsa el botón y espera a que termine la descarga. Si el teléfono pregunta, permite
-            instalar desde este navegador.
+            Pulsa el botón. El teléfono mostrará avisos normales: pulsa{" "}
+            <strong className="font-semibold text-foreground">«Descargar de todos modos»</strong>,
+            luego <strong className="font-semibold text-foreground">«Instalar»</strong> y, si
+            aparece Play Protect, pulsa el enlace pequeño{" "}
+            <strong className="font-semibold text-foreground">«Instalar sin analizar»</strong>.
           </p>
           <BotonDescargarApp href={enlaceDescarga} token={token} />
         </div>

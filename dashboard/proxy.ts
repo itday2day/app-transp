@@ -37,7 +37,11 @@ export const config = {
   // quedado público, no solo "/invitacion/{token}". Con el `$`, solo matchea si "invitacion/" +
   // un único segmento sin más barras es TODO lo que queda del path -- ni un `/invitacion` suelto
   // (sin token) ni nada con un segmento de más.
+  // /actualizar (spec_aviso_version_y_pagina_actualizar.md, criterio 11): misma lógica -- página
+  // pública sin sesión, un chofer con una versión vieja la abre sin estar logueado como admin.
+  // `actualizar$` (con el `$`): solo matchea el segmento exacto, no un futuro
+  // "/actualizar/algo-mas" que sí debiera quedar protegido.
   matcher: [
-    "/((?!login|invitacion/[^/]+$|api/auth|_next/static|_next/image|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|woff2?|ttf|otf)$).*)",
+    "/((?!login|invitacion/[^/]+$|actualizar$|api/auth|_next/static|_next/image|.*\\.(?:ico|png|jpg|jpeg|gif|svg|webp|avif|woff2?|ttf|otf)$).*)",
   ],
 };

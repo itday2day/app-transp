@@ -7,6 +7,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@/context/AuthContext";
 import { TextoEnlace } from "@/components/TextoEnlace";
+import { AvisoVersionFranja } from "@/components/AvisoVersionFranja";
 import { ClaveTraduccion } from "@/i18n";
 import { colores } from "@/theme/colors";
 import { espaciado } from "@/theme/spacing";
@@ -71,30 +72,37 @@ function PrincipalTabs() {
   // elemento de una lista no quede tapado por la barra de tabs — ver
   // `useBottomTabBarHeight()` en CheckInScreen.tsx/HistorialScreen.tsx.
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        title: t(CLAVE_TITULO_TAB[route.name as keyof TabsParamList]),
-        tabBarIcon: ({ color, size }) => (
-          <Ionicons name={ICONOS_TAB[route.name as keyof TabsParamList]} size={size} color={color} />
-        ),
-        tabBarActiveTintColor: colores.primario,
-        tabBarInactiveTintColor: colores.textoSecundario,
-        // spec_cambio_contrasena_login.md: el botón "Contraseña" que vivía acá se retiró — el
-        // cambio voluntario ahora se hace desde Login (sin sesión), única vía para esa acción.
-        headerRight: () => (
-          <View style={estilos.filaHeader}>
-            {/* spec_bloque_a_pantallas_checkin_checkout.md (ampliación, E3): mismo componente y
-                color de enlace que ya usa "Ver en mapa" (Hallazgo #49) -- un solo patrón de
-                enlace en toda la app, nunca un estilo aparte para este botón. */}
-            <TextoEnlace texto={t("navegacion.salir")} onPress={cerrarSesion} />
-          </View>
-        ),
-      })}
-    >
-      <Tab.Screen name="CheckIn" component={CheckInScreen} />
-      <Tab.Screen name="CheckOut" component={CheckOutScreen} />
-      <Tab.Screen name="Historial" component={HistorialScreen} />
-    </Tab.Navigator>
+    // spec_aviso_version_y_pagina_actualizar.md (decisión de César, 2026-11-03): la franja va
+    // ARRIBA de las tres pestañas, nunca en Login -- envuelta en un View flex:1 (CLAUDE.md,
+    // regresión #49: un wrapper nuevo alrededor de un hijo flex necesita el mismo flex:1, si no la
+    // barra de tabs de abajo pierde su alto).
+    <View style={estilos.contenedorConAviso}>
+      <AvisoVersionFranja />
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          title: t(CLAVE_TITULO_TAB[route.name as keyof TabsParamList]),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={ICONOS_TAB[route.name as keyof TabsParamList]} size={size} color={color} />
+          ),
+          tabBarActiveTintColor: colores.primario,
+          tabBarInactiveTintColor: colores.textoSecundario,
+          // spec_cambio_contrasena_login.md: el botón "Contraseña" que vivía acá se retiró — el
+          // cambio voluntario ahora se hace desde Login (sin sesión), única vía para esa acción.
+          headerRight: () => (
+            <View style={estilos.filaHeader}>
+              {/* spec_bloque_a_pantallas_checkin_checkout.md (ampliación, E3): mismo componente y
+                  color de enlace que ya usa "Ver en mapa" (Hallazgo #49) -- un solo patrón de
+                  enlace en toda la app, nunca un estilo aparte para este botón. */}
+              <TextoEnlace texto={t("navegacion.salir")} onPress={cerrarSesion} />
+            </View>
+          ),
+        })}
+      >
+        <Tab.Screen name="CheckIn" component={CheckInScreen} />
+        <Tab.Screen name="CheckOut" component={CheckOutScreen} />
+        <Tab.Screen name="Historial" component={HistorialScreen} />
+      </Tab.Navigator>
+    </View>
   );
 }
 
@@ -170,6 +178,9 @@ export function RootNavigator() {
 }
 
 const estilos = StyleSheet.create({
+  contenedorConAviso: {
+    flex: 1,
+  },
   filaHeader: {
     flexDirection: "row",
     alignItems: "center",
